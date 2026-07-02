@@ -54,6 +54,13 @@ func (e *Engine) Discover() (Inventory, error) {
 			inv.Assets = append(inv.Assets, e.placeholder(filepath.Join(base, en.Name()), AssetType(d.typ), ScopeGlobal, en.Name()))
 		}
 	}
+
+	// ~/.claude.json 顶层 mcpServers(机器管理文件,只读)。文件可能不存在,
+	// parseClaudeJSONMCP 在缺失时返回 nil, nil,故可无条件调用;损坏文件会
+	// 产出带 parse_error 的占位资产,不被静默吞掉。
+	if mcpAssets, err := parseClaudeJSONMCP(e.ClaudeJSON, ScopeGlobal); err == nil {
+		inv.Assets = append(inv.Assets, mcpAssets...)
+	}
 	return inv, nil
 }
 
