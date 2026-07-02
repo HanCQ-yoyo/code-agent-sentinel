@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -38,14 +39,31 @@ func (s *Server) Router() *gin.Engine {
 
 	api := r.Group("/api")
 	s.registerRoutes(api)
+
+	// SPA: 非 /api 路径回退 index.html
+	r.NoRoute(func(c *gin.Context) {
+		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
+			c.JSON(http.StatusNotFound, errorBody("not_found", c.Request.URL.Path))
+			return
+		}
+		f, err := webFS.Open("web_dist/index.html")
+		if err != nil {
+			c.String(http.StatusNotFound, "frontend not built; run `make web`")
+			return
+		}
+		defer f.Close()
+		c.Header("Content-Type", "text/html; charset=utf-8")
+		c.DataFromReader(http.StatusOK, -1, "text/html", f, nil)
+	})
+
 	return r
 }
 
 func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	api.GET("/assets", s.getAssets)
 	api.GET("/assets/:id", s.getAsset)
-	api.POST("/scan", s.notImplemented)
-	api.GET("/scan/result", s.notImplemented)
+	api.POST("/scan", s.postScan)
+	api.GET("/scan/result", s.getScanResult)
 	api.GET("/findings", s.getFindings)
 	api.GET("/health", s.getHealth)
 	api.GET("/dashboard", s.getDashboard)
