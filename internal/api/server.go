@@ -31,6 +31,9 @@ func (s *Server) Router() *gin.Engine {
 		allowedHosts = append(allowedHosts, s.Config.Bind)
 	}
 	r.Use(hostMiddleware(allowedHosts))
+	if !isLoopback(s.Config.Bind) {
+		r.Use(clientIPGuard(s.Config.AllowedCIDRs))
+	}
 	r.Use(authMiddleware(s.Token))
 
 	api := r.Group("/api")
