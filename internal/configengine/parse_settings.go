@@ -66,13 +66,16 @@ func parseSettings(path string, scope Scope) ([]Asset, error) {
 	fillHash(&perm)
 	out = append(out, perm)
 
-	// 每个 hook 一条资产。Name 带内层索引:同一 matcher 下可挂多个 hook,
-	// 若只用 event/matcher 会导致 scope:type:name:source_path 相同 → ID 重复,
-	// 下游去重/聚合会悄悄丢弃重复 hook。event/matcher 仍保留在 Fields 里供查询。
+	// 每个 hook 一条资产。Name 带上 entry 索引(ei)与 hook 索引(hi):
+	// - 同一 matcher 下可挂多个 hook(within-entry,hi 区分);
+	// - 同一 event 下多条 entry 的 matcher 字符串可能相同(cross-entry,ei 区分)。
+	// 否则 scope:type:name:source_path 相同 → ID 重复,下游去重/聚合会悄悄丢弃重复 hook。
+	// event/matcher 仍保留在 Fields 里供查询。slice 顺序在 json.Unmarshal 下确定,
+	// 故 ID 跨运行可复现。
 	for event, entries := range rs.Hooks {
-		for _, e := range entries {
-			for idx, h := range e.Hooks {
-				hk := Asset{Type: AssetHook, Scope: scope, SourcePath: path, Name: fmt.Sprintf("%s/%s/%d", event, e.Matcher, idx)}
+		for ei, e := range entries {
+			for hi, h := range e.Hooks {
+				hk := Asset{Type: AssetHook, Scope: scope, SourcePath: path, Name: fmt.Sprintf("%s/%s/%d/%d", event, e.Matcher, ei, hi)}
 				hk.Fields = map[string]any{
 					"event":   event,
 					"matcher": e.Matcher,

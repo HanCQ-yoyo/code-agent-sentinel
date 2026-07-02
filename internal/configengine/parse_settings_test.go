@@ -117,6 +117,46 @@ func TestParseSettingsMultipleHooksSameMatcher(t *testing.T) {
 	}
 }
 
+// TestParseSettingsMultipleHooksSameMatcherAcrossEntries 验证:同一 event 下
+// 两条 entry 的 matcher 字符串相同时(复制粘贴/插件合并常见),两条 hook 资产
+// 仍需 ID 唯一——否则第二个命令被静默丢弃。within-entry 索引不足以区分此形态
+// (两条 entry 各 1 个 hook,idx 都是 0),需同时带 entry 索引。
+func TestParseSettingsMultipleHooksSameMatcherAcrossEntries(t *testing.T) {
+	f := newFixture(t)
+	f.write("settings.json", `{
+		"hooks": {"PreToolUse": [
+			{"matcher": "Bash", "hooks": [{"type": "command", "command": "cmd1"}]},
+			{"matcher": "Bash", "hooks": [{"type": "command", "command": "cmd2"}]}
+		]}
+	}`)
+	assets, err := parseSettings(f.claudePath("settings.json"), ScopeGlobal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var hooks []Asset
+	for _, a := range assets {
+		if a.Type == AssetHook {
+			hooks = append(hooks, a)
+		}
+	}
+	if len(hooks) != 2 {
+		t.Fatalf("want 2 hooks, got %d", len(hooks))
+	}
+	ids := map[string]bool{}
+	commands := map[string]bool{}
+	for _, h := range hooks {
+		ids[h.ID] = true
+		cmd, _ := h.Fields["command"].(string)
+		commands[cmd] = true
+	}
+	if len(ids) != 2 {
+		t.Errorf("want 2 个不同的 hook ID(跨 entry 同 matcher), got %d: %v", len(ids), ids)
+	}
+	if !commands["cmd1"] || !commands["cmd2"] {
+		t.Errorf("两条 command 都应被解析, got %v", commands)
+	}
+}
+
 // TestParseSettingsCorrupted 验证:损坏的 JSON 不致全盘失败,而是产出一条
 // 带 parse_error 的 settings 占位资产(有 ID,可被上层当作 Finding 暴露)。
 // 文件可读,故 hash 也应填充(与 placeholder 行为一致)。
