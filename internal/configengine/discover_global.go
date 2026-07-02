@@ -7,12 +7,15 @@ import (
 	"path/filepath"
 )
 
-// Discover 发现全局 + 当前项目的资产(本任务仅全局枚举占位)。
+// Discover 发现全局资产:settings/keybindings 单文件 + skills/commands/agents
+// markdown 目录 + ~/.claude.json 的 mcpServers + memory(CLAUDE.md + memory/)。
+// 项目级发现在 discover_project.go(Task 8)。
 func (e *Engine) Discover() (Inventory, error) {
 	inv := Inventory{Project: e.Project}
 	claude := filepath.Join(e.HomeDir, ".claude")
 
-	// 单文件资产(占位:仅记录存在性 + hash,解析在后续任务)。
+	// 单文件资产:settings.json 真实解析;keybindings.json 占位。
+	// CLAUDE.md 不在此处处理,改由 parseMemory 在末尾覆盖(含 memory/ 目录)。
 	single := []struct {
 		rel  string
 		typ  AssetType
@@ -20,7 +23,6 @@ func (e *Engine) Discover() (Inventory, error) {
 	}{
 		{"settings.json", AssetSettings, "settings"},
 		{"keybindings.json", AssetKeybinding, "keybindings"},
-		{"CLAUDE.md", AssetMemory, "CLAUDE.md"},
 	}
 	for _, s := range single {
 		p := filepath.Join(claude, s.rel)
@@ -36,22 +38,17 @@ func (e *Engine) Discover() (Inventory, error) {
 		inv.Assets = append(inv.Assets, e.placeholder(p, s.typ, ScopeGlobal, s.name))
 	}
 
-	// 目录资产:skills/commands/agents(占位,每个顶层条目一条)。
-	for _, d := range []struct{ rel, typ string }{
-		{"skills", string(AssetSkill)},
-		{"commands", string(AssetCommand)},
-		{"agents", string(AssetAgent)},
+	// 目录资产:skills/commands/agents,每个含 .md 的顶层条目产出一条资产。
+	for _, d := range []struct {
+		rel string
+		typ AssetType
+	}{
+		{"skills", AssetSkill},
+		{"commands", AssetCommand},
+		{"agents", AssetAgent},
 	} {
-		base := filepath.Join(claude, d.rel)
-		entries, err := os.ReadDir(base)
-		if err != nil {
-			continue
-		}
-		for _, en := range entries {
-			if !en.IsDir() {
-				continue
-			}
-			inv.Assets = append(inv.Assets, e.placeholder(filepath.Join(base, en.Name()), AssetType(d.typ), ScopeGlobal, en.Name()))
+		if assets, _ := parseMarkdownDir(filepath.Join(claude, d.rel), d.typ, ScopeGlobal); assets != nil {
+			inv.Assets = append(inv.Assets, assets...)
 		}
 	}
 
@@ -60,6 +57,11 @@ func (e *Engine) Discover() (Inventory, error) {
 	// 产出带 parse_error 的占位资产,不被静默吞掉。
 	if mcpAssets, err := parseClaudeJSONMCP(e.ClaudeJSON, ScopeGlobal); err == nil {
 		inv.Assets = append(inv.Assets, mcpAssets...)
+	}
+
+	// memory:CLAUDE.md + memory/ 目录(覆盖旧占位,含真实内容 hash)。
+	if mem, _ := parseMemory(claude, ScopeGlobal); mem != nil {
+		inv.Assets = append(inv.Assets, mem...)
 	}
 	return inv, nil
 }
