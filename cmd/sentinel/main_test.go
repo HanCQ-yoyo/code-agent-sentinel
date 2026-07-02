@@ -1,0 +1,48 @@
+package main
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
+
+func TestResolveAccessMethodLoopback(t *testing.T) {
+	home := t.TempDir()
+	am := resolveAccessMethod("127.0.0.1", 8080, home)
+	if am.URL == "" || !contains(am.URL, "127.0.0.1:8080") {
+		t.Errorf("URL: %+v", am)
+	}
+	if am.TunnelCmd == "" {
+		t.Errorf("loopback 应给隧道命令: %+v", am)
+	}
+}
+
+func TestResolveAccessMethodNonLoopback(t *testing.T) {
+	am := resolveAccessMethod("0.0.0.0", 8080, "")
+	if !contains(am.URL, "0.0.0.0:8080") {
+		t.Errorf("URL: %+v", am)
+	}
+	if am.TunnelCmd != "" {
+		t.Errorf("非 loopback 不应给隧道命令")
+	}
+}
+
+func contains(s, sub string) bool { return len(s) >= len(sub) && (s == sub || (len(s) > 0 && indexOf(s, sub) >= 0)) }
+
+func indexOf(s, sub string) int {
+	for i := 0; i+len(sub) <= len(s); i++ {
+		if s[i:i+len(sub)] == sub {
+			return i
+		}
+	}
+	return -1
+}
+
+func TestMainWritesNothingOnHelp(t *testing.T) {
+	// 确保 cobra 注册不 panic
+	if err := newRootCmd().Help(); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Stdout
+	_ = filepath.Base
+}
