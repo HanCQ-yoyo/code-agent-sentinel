@@ -41,6 +41,7 @@ func (o *Orchestrator) Scan(ctx context.Context, assets []configengine.Asset, de
 		res.Findings = append(res.Findings, findings...)
 		res.Detectors = append(res.Detectors, st)
 	}
+	res.HealthScore = ComputeHealth(assets, res.Findings)
 	res.Duration = time.Since(res.StartedAt)
 	return res, nil
 }
