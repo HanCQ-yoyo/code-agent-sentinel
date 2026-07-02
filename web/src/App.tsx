@@ -1,5 +1,8 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
+import Assets from './pages/Assets'
+import Findings from './pages/Findings'
+import Settings from './pages/Settings'
 
 export default function App() {
   return (
@@ -12,6 +15,9 @@ export default function App() {
       <main className="flex-1 p-6"><Routes>
         <Route path="/" element={<Dashboard />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/assets" element={<Assets />} />
+        <Route path="/findings" element={<Findings />} />
+        <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<div className="text-slate-400">P1 骨架就绪</div>} />
       </Routes></main>
     </div>
