@@ -3,6 +3,8 @@ package security
 import (
 	"context"
 	"encoding/json"
+	"fmt"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
@@ -62,8 +64,47 @@ func (d *DependencyDetector) Scan(ctx context.Context, assets []configengine.Ass
 			if r.TimedOut {
 				continue
 			}
+			// 偏差(brief 原文静默吞掉 npm 扫描器错误):
+			// npm audit 退出码 0=无漏洞、1=有漏洞,均正常;其它退出码或非 ExitError 的 Err
+			// 表示 npm 自身故障(.npmrc 配置错误、网络失败、lock 文件损坏等)。此时不能静默
+			// continue,否则只读看板显示零发现而掩盖扫描器问题。镜像 Task 14 的
+			// secret.scanner-error 修复;经人工确认同意偏离。
+			scannerFailed := r.ExitCode != 0 && r.ExitCode != 1
+			if r.Err != nil {
+				if _, ok := r.Err.(*exec.ExitError); !ok {
+					scannerFailed = true // 非 ExitError:二进制启动失败等
+				}
+			}
+			if scannerFailed {
+				out = append(out, Finding{
+					DetectorID:  d.ID(),
+					RuleID:      "dep.scanner-error",
+					Severity:    SeverityLow,
+					AssetID:     a.ID,
+					AssetType:   a.Type,
+					AssetName:   a.Name,
+					Message:     "npm audit 扫描失败",
+					Evidence:    scannerEvidence(r.Stderr, r.Err, r.ExitCode),
+					Remediation: "检查 npm 配置/网络后重试",
+				})
+				continue
+			}
 			var aud npmAudit
 			if err := json.Unmarshal(r.Stdout, &aud); err != nil {
+				// exit 0 + 空 stdout 属正常(无漏洞);非空 stdout 解析失败 = 扫描器输出异常
+				if len(r.Stdout) > 0 {
+					out = append(out, Finding{
+						DetectorID:  d.ID(),
+						RuleID:      "dep.scanner-error",
+						Severity:    SeverityLow,
+						AssetID:     a.ID,
+						AssetType:   a.Type,
+						AssetName:   a.Name,
+						Message:     "npm audit 输出解析失败",
+						Evidence:    truncate(string(r.Stdout), 200),
+						Remediation: "检查 npm 版本与输出格式",
+					})
+				}
 				continue
 			}
 			for pkg, v := range aud.Vulnerabilities {
@@ -82,6 +123,36 @@ func (d *DependencyDetector) Scan(ctx context.Context, assets []configengine.Ass
 		}
 		if commandExists(d.govulncheck) && hasGoMod(dir) {
 			r := runSubprocess(ctx, d.govulncheck, []string{"-json", "./..."}, dir, 120*time.Second)
+			if r.TimedOut {
+				// 偏差(brief 原文缺此守卫):120s 超时会截断 NDJSON,解析不完整。
+				// 镜像 Task 14 + npm 分支的一致性处理;经人工确认同意偏离。
+				continue
+			}
+			// 偏差(brief 原文静默吞掉 govulncheck 扫描器错误):
+			// govulncheck 退出码 0=无漏洞、1=有漏洞,均正常;其它退出码或非 ExitError 的 Err
+			// 表示 govulncheck 自身故障(安装损坏、go.mod 无效、崩溃等)。此时不能静默 continue,
+			// 否则只读看板显示零发现而掩盖扫描器问题。镜像 Task 14 的 secret.scanner-error 修复;
+			// 经人工确认同意偏离。
+			scannerFailed := r.ExitCode != 0 && r.ExitCode != 1
+			if r.Err != nil {
+				if _, ok := r.Err.(*exec.ExitError); !ok {
+					scannerFailed = true // 非 ExitError:二进制启动失败等
+				}
+			}
+			if scannerFailed {
+				out = append(out, Finding{
+					DetectorID:  d.ID(),
+					RuleID:      "dep.scanner-error",
+					Severity:    SeverityLow,
+					AssetID:     a.ID,
+					AssetType:   a.Type,
+					AssetName:   a.Name,
+					Message:     "govulncheck 扫描失败",
+					Evidence:    scannerEvidence(r.Stderr, r.Err, r.ExitCode),
+					Remediation: "检查 govulncheck 安装与 go.mod 后重试",
+				})
+				continue
+			}
 			out = append(out, parseGovulncheck(d.ID(), r.Stdout, a)...)
 		}
 	}
@@ -109,6 +180,17 @@ func toSeverity(s string) Severity {
 	default:
 		return SeverityLow
 	}
+}
+
+// scannerEvidence 生成扫描器错误的证据字符串:优先 stderr,其次 Err,最后退回退出码。
+func scannerEvidence(stderr []byte, err error, exitCode int) string {
+	if len(stderr) > 0 {
+		return truncate(string(stderr), 200)
+	}
+	if err != nil {
+		return truncate(err.Error(), 200)
+	}
+	return fmt.Sprintf("exit code %d", exitCode)
 }
 
 // 偏差(brief 的 parseGovulncheck 引用了未定义的接收者 d 并附带无用的 IDName() 垫片):
