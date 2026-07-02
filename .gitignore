@@ -216,3 +216,13 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+references
+# SDD scratch
+.superpowers/
+
+# sentinel
+bin/
+web/dist/
+web/node_modules/
+*.coverprofile
