@@ -60,8 +60,9 @@ type Project struct {
 
 // Inventory 是一次发现的全部资产。
 type Inventory struct {
-	Assets  []Asset  `json:"assets"`
-	Project *Project `json:"project,omitempty"`
+	Assets     []Asset     `json:"assets"`
+	Project    *Project    `json:"project,omitempty"`
+	Duplicates []Duplicate `json:"duplicates,omitempty"`
 }
 
 // Filter 按类型/范围过滤。

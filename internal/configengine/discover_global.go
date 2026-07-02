@@ -60,6 +60,14 @@ func (e *Engine) Discover() (Inventory, error) {
 
 	// scripts:在所有解析完成后,从 hook/command 资产的 command 字段抽取引用脚本。
 	inv.Assets = append(inv.Assets, parseScripts(inv.Assets, claude)...)
+
+	// 项目级发现:合并选中项目的 settings/mcp/memory/skills/commands/agents/scripts。
+	// discoverProject 内部对项目 scope 的 hook/command 单独跑 parseScripts,避免与
+	// 上面的全局 parseScripts 重复(见 discover_project.go 偏差注释)。
+	e.discoverProject(&inv)
+
+	// 重复检测:跨 scope / 跨 source_path 的同类型同名资产。
+	inv.Duplicates = detectDuplicates(inv.Assets)
 	return inv, nil
 }
 
@@ -72,8 +80,8 @@ func (e *Engine) Discover() (Inventory, error) {
 // 不修改 Task 2 的 HashAndMTime。
 //
 // 保留:Task 7 起 Discover 不再调用此方法(settings/keybindings/CLAUDE.md 均已
-// 真实解析),但 Task 8 项目级发现可能复用此占位逻辑,故暂不移除。Go 不对未使用的
-// 方法报错,留着无害。
+// 真实解析),Task 8 项目级发现也直接用 parse* 函数而非此占位。保留方法本身
+// 供后续可能的目录资产占位场景复用;Go 不对未使用的方法报错,留着无害。
 func (e *Engine) placeholder(path string, typ AssetType, scope Scope, name string) Asset {
 	a := Asset{Type: typ, Scope: scope, SourcePath: path, Name: name}
 	if h, mt, err := HashAndMTime(path); err == nil {
@@ -89,6 +97,3 @@ func (e *Engine) placeholder(path string, typ AssetType, scope Scope, name strin
 	a.ID = makeAssetID(a)
 	return a
 }
-
-// readProjectList 占位,Task 8 在 discover_project.go 实现真实版本并删除此 stub。
-func readProjectList(claudeJSON string) ([]Project, error) { return nil, nil }
