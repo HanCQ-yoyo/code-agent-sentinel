@@ -42,17 +42,16 @@ func (s *Server) Router() *gin.Engine {
 }
 
 func (s *Server) registerRoutes(api *gin.RouterGroup) {
-	// 各 handler 任务实现,先占位 404
-	api.GET("/assets", s.notImplemented)
-	api.GET("/assets/:id", s.notImplemented)
+	api.GET("/assets", s.getAssets)
+	api.GET("/assets/:id", s.getAsset)
 	api.POST("/scan", s.notImplemented)
 	api.GET("/scan/result", s.notImplemented)
-	api.GET("/findings", s.notImplemented)
-	api.GET("/health", s.notImplemented)
-	api.GET("/dashboard", s.notImplemented)
-	api.GET("/detectors", s.notImplemented)
-	api.GET("/project", s.notImplemented)
-	api.POST("/project", s.notImplemented)
+	api.GET("/findings", s.getFindings)
+	api.GET("/health", s.getHealth)
+	api.GET("/dashboard", s.getDashboard)
+	api.GET("/detectors", s.getDetectors)
+	api.GET("/project", s.getProject)
+	api.POST("/project", s.postProject)
 }
 
 func (s *Server) notImplemented(c *gin.Context) {
