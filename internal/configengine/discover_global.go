@@ -27,6 +27,12 @@ func (e *Engine) Discover() (Inventory, error) {
 		if _, err := os.Stat(p); err != nil {
 			continue
 		}
+		if s.typ == AssetSettings {
+			// 真实解析:settings.json 拆成 settings + permissions + 每个 hook 一条。
+			parsed, _ := parseSettings(p, ScopeGlobal)
+			inv.Assets = append(inv.Assets, parsed...)
+			continue
+		}
 		inv.Assets = append(inv.Assets, e.placeholder(p, s.typ, ScopeGlobal, s.name))
 	}
 

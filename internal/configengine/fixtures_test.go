@@ -42,6 +42,12 @@ func (f *fixtureBuilder) writeClaudeJSON(content string) {
 	}
 }
 
+// claudePath 返回 fixture 内 ~/.claude 下的绝对路径,供需要直接传路径给
+// 解析函数(而非走 Engine.Discover)的测试使用。
+func (f *fixtureBuilder) claudePath(rel string) string {
+	return filepath.Join(f.claude, rel)
+}
+
 func (f *fixtureBuilder) writeProject(rel string, content string) {
 	f.t.Helper()
 	p := filepath.Join(f.home, rel)
