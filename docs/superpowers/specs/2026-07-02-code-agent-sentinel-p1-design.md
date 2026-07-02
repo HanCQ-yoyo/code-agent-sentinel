@@ -1,214 +1,214 @@
-# Code Agent Sentinel — P1 Design Spec
+# Code Agent Sentinel — P1 设计规格
 
-**Date:** 2026-07-02
-**Status:** Approved direction; pending implementation plan
-**Scope:** Phase 1 (P1) only — see Phasing below for what is deferred
+**日期:** 2026-07-02
+**状态:** 方向已确认;待编写实现计划
+**范围:** 仅 Phase 1(P1)——延后的内容见下文「分阶段」
 
-## Problem & Positioning
+## 问题与定位
 
-Vibe coding harnesses (Claude Code first) are configured through scattered files and directories under `~/.claude/` (and per-project `.claude/`). These assets — `settings.json` permissions, hooks, MCP server tool descriptions, skills, commands, agents, plugins, CLAUDE.md, scripts — directly steer what the agent can do and what enters its prompt. A single risky permission, a poisoned MCP tool description, or a hook that exfiltrates data can compromise the developer's machine and codebase. There is no local, single-pane view that treats these assets as **security-governed surface** and detects risk across them.
+Vibe coding 类工具(以 Claude Code 为先)的配置分散在 `~/.claude/`(以及各项目的 `.claude/`)下的文件和目录中。这些资产——`settings.json` 权限、hooks、MCP server 的 tool 描述、skills、commands、agents、plugins、CLAUDE.md、scripts——直接决定了 agent 能做什么、什么内容会进入它的 prompt。一条危险权限、一段被投毒的 MCP tool 描述,或一个外发数据的 hook,都可能让开发者的机器和代码库沦陷。目前没有一个本地的、单页面的视图,把这些资产当作**安全管控面**来统一看待和跨资产检测风险。
 
-**Positioning:** Claude Code CLI's configuration / plugins / data are the **security assets to govern**. The core capability is **security detection**; configuration browsing is both the entry point and a productivity aid. The project is also an explicit learning vehicle for Claude Code's design philosophy and AI-security productization. Claude Code is chosen because it is the harness the author uses most; AI security is the long-term direction; lightweight R&D-productivity features accompany the security core.
+**定位:** Claude Code CLI 的配置 / 插件 / 数据是**要治理的安全资产**。核心能力是**安全检测**;配置浏览既是入口,也是研发提效手段。本项目同时也是一个明确的学习载体——学习 Claude Code 的设计思想,以及 AI 安全产品的产品化。选 Claude Code 是因为它是作者日常用得最多的 harness;AI 安全是长期方向;在安全核心之外附带少量好用的研发提效功能。
 
-**Differentiation from references:**
-- *Cross-Code Organizer (CCO)* and *Claude Code Studio* both already do "config management + security scan" well. Sentinel does **not** try to match their full breadth. It leads with **security posture as a first-class, quantified, explainable concept** (health score + weighted deductions + baseline governance), keeps config management to the minimum needed for security visibility plus a few productivity aids, and is built on a Go single-binary stack rather than Node.
-- UI is **deliberately independent** of both references (SOC-style, high-density, semantic-color — see Frontend).
+**与参考项目的差异:**
+- *Cross-Code Organizer (CCO)* 和 *Claude Code Studio* 都已经把「配置管理 + 安全扫描」做得很完整。Sentinel **不**追求对齐它们的广度。它以**安全态势作为一等公民、可量化、可解释的概念**(健康分 + 加权扣分 + 基线治理)为核心,配置管理只做到安全可见性所需的最小集外加少量提效功能,技术栈用 Go 单二进制而非 Node。
+- UI **刻意独立**于两个参考项目(SOC 风格、高信息密度、语义色编码——见「前端」)。
 
-## Goal (P1)
+## 目标(P1)
 
-A local, single-binary tool `sentinel` that discovers and parses Claude Code's config assets (global + one selected project), runs static security detection across them (baseline + prompt-injection + secret/dependency), computes an explainable health score, and presents a read-only security-posture dashboard. P1 is **read-only** — no config editing.
+一个本地、单二进制工具 `sentinel`:发现并解析 Claude Code 的配置资产(全局 + 一个选中的项目),对这些资产跑静态安全检测(基线 + 提示注入 + 密钥/依赖),计算一个可解释的健康分,并呈现一个只读的安全态势看板。P1 **只读**——不做配置编辑。
 
-## Non-Goals (P1)
+## 非目标(P1)
 
-- Config editing / writes (P2)
-- Backup and migration (P2)
-- Embedded agent for CLAUDE.md memory updates / Q&A (P3)
-- Session history management (P3)
-- Dynamic detection: live MCP connection, hash baselining, rug-pull / change monitoring (P4)
-- Team / baseline rule externalization (P4)
-- Multi-harness support (Codex, Cursor, …) — Claude Code only for now
-- LLM-judge detection (calling an LLM to judge maliciousness) — static only
+- 配置编辑 / 写入(P2)
+- 备份与迁移(P2)
+- 内嵌 agent(更新 CLAUDE.md 记忆 / 问答)(P3)
+- 会话历史管理(P3)
+- 动态检测:实时连接 MCP、hash 基线、rug-pull / 变更监控(P4)
+- 团队 / 基线规则外部化(P4)
+- 多 harness 支持(Codex、Cursor……)——目前只做 Claude Code
+- LLM-judge 检测(调用 LLM 判断恶意性)——P1 只做静态
 
-## Phasing
+## 分阶段
 
-| Phase | Scope | Status |
+| 阶段 | 范围 | 状态 |
 |---|---|---|
-| **P1 (this spec)** | Foundation (config discovery + asset model) + security detection v1 (baseline + static injection + secret/dependency) + read-only dashboard skeleton + read-only config browsing | ← now |
-| P2 | Surgical config editing (diff preview + auto-backup) + backup/migration | future |
-| P3 | Embedded agent (CLAUDE.md memory updates + Q&A) + session history | future |
-| P4 | Dynamic security: live MCP tool-definition fetch + hash baseline + rug-pull/change monitoring + team baseline rule externalization | future |
+| **P1(本规格)** | 地基(配置发现 + 资产模型)+ 安全检测 v1(基线 + 静态注入 + 密钥/依赖)+ 只读看板骨架 + 只读配置浏览 | ← 现在 |
+| P2 | 外科手术式配置编辑(diff 预览 + 自动备份)+ 备份/迁移 | 后续 |
+| P3 | 内嵌 agent(CLAUDE.md 记忆更新 + 问答)+ 会话历史 | 后续 |
+| P4 | 动态安全:实时取 MCP tool 定义 + hash 基线 + rug-pull/变更监控 + 团队基线规则外部化 | 后续 |
 
-Each phase gets its own spec → plan → implementation cycle.
+每个阶段各自走 spec → plan → 实现 的循环。
 
-## Tech Stack
+## 技术栈
 
-- **Backend:** Go single binary. Gin (HTTP API) + cobra (CLI) + `tidwall/sjson`/`gjson` (surgical JSON access) + `embed` (frontend assets). (fsnotify is a P4 dependency for change monitoring, not used in P1.)
-- **Frontend:** React + Vite + TypeScript + Tailwind CSS + shadcn/ui + zustand. Built separately, bundled into the binary via `embed`.
-- **External scanners (subprocess):** gitleaks (secrets), govulncheck (Go deps), npm-audit (JS deps in skills/commands/plugins). semgrep optional for multi-language SAST on scripts.
-- **Distribution:** single binary; `sentinel` launches a local server and opens the browser. (vs. the references' `npx` model — single-binary is an asset for a security tool.)
+- **后端:** Go 单二进制。Gin(HTTP API)+ cobra(CLI)+ `tidwall/sjson`/`gjson`(外科手术式 JSON 读写)+ `embed`(内嵌前端产物)。(fsnotify 是 P4 变更监控的依赖,P1 不用。)
+- **前端:** React + Vite + TypeScript + Tailwind CSS + shadcn/ui + zustand。单独构建,通过 `embed` 打进二进制。
+- **外部扫描器(子进程):** gitleaks(密钥)、govulncheck(Go 依赖)、npm-audit(skill/command/plugin 里的 JS 依赖)。semgrep 可选,用于对 scripts 做多语言 SAST。
+- **分发:** 单二进制;`sentinel` 启动本地服务并打开浏览器。(对比参考项目的 `npx` 模式——单二进制对安全工具是优势。)
 
-Python is **not** required: the detection here is pattern/rule/baseline/static-analysis driven, not ML inference. OSS scanners run as subprocesses regardless of their own language.
+**不需要 Python:** 这里的检测是模式/规则/基线/静态分析驱动,不是 ML 推理。OSS 扫描器以子进程方式运行,与其自身语言无关。
 
-## Architecture
+## 架构
 
-Single Go binary `sentinel`. Startup: pick bind address + port per config, generate a per-session token, start Gin API, open browser to `http://<bind>:<port>/#token=<token>`.
+单个 Go 二进制 `sentinel`。启动:按配置选 bind 地址 + 端口、生成 per-session token、起 Gin API、打开浏览器到 `http://<bind>:<port>/#token=<token>`。
 
-Layered, dependencies point downward only (mirrors the Studio core/server/web split, with a security layer added):
+分层,依赖只向下不向上(镜像 Studio 的 core/server/web 分层,额外加一层 security):
 
 ```
-cmd/sentinel          ← cobra: launch / port / token / open browser (later: `scan --json` headless)
-internal/api          ← Gin HTTP+JSON, serves embedded SPA, token + Host validation + bind policy
-internal/security     ← Detector interface + registry, 4 detectors, Scan orchestrator, health score
-internal/configengine ← pure logic: discovery + parse + asset model + read-only queries (no side effects, fixture-testable)
-internal/web          ← embed.FS holding the built frontend
-web/                  ← React/Vite/TS source (built separately, output embedded)
+cmd/sentinel          ← cobra:启动 / 端口 / token / 开浏览器(后续可加 `scan --json` 无头模式)
+internal/api          ← Gin HTTP+JSON,服务内嵌 SPA,token + Host 校验 + bind 策略
+internal/security     ← Detector 接口 + 注册表,4 个检测器,Scan 编排器,健康分
+internal/configengine ← 纯逻辑:发现 + 解析 + 资产模型 + 只读查询(无副作用,可用 fixture 测)
+internal/web          ← embed.FS,持有构建好的前端产物
+web/                  ← React/Vite/TS 源码(单独构建,产物内嵌)
 ```
 
-`configengine ← security ← api`. `configengine` stays pure and reusable (P2 writes and P4 dynamic detection both build on it).
+`configengine ← security ← api`。`configengine` 保持纯净、可复用(P2 写编辑、P4 动态检测都建在它之上)。
 
-## Asset Model (configengine)
+## 资产模型(configengine)
 
-**Discovery scope (P1):**
-- **Global (user scope):** `~/.claude/settings.json`, `~/.claude.json` (MCP servers + per-project state; machine-managed, read-only), `~/.claude/CLAUDE.md` + memory, `agents/`, `skills/`, `commands/`, `plugins/` (+ marketplace), hooks (within settings), `keybindings.json`.
-- **Project (via project switcher):** `<proj>/.claude/settings.json`, `settings.local.json`, `.mcp.json`, `CLAUDE.md`, `agents/`, `skills/`, `commands/`.
-- **Managed / enterprise policy files:** displayed read-only when present (they win precedence; show, don't edit).
+**发现范围(P1):**
+- **全局(用户级):** `~/.claude/settings.json`、`~/.claude.json`(MCP server + 各项目状态;机器管理,只读)、`~/.claude/CLAUDE.md` + memory、`agents/`、`skills/`、`commands/`、`plugins/`(+ marketplace)、hooks(在 settings 内)、`keybindings.json`。
+- **项目级(通过项目切换器选中):** `<proj>/.claude/settings.json`、`settings.local.json`、`.mcp.json`、`CLAUDE.md`、`agents/`、`skills/`、`commands/`。
+- **托管 / 企业策略文件:** 存在时只读展示(它优先级最高;只看不改)。
 
-**Asset types (the security-governed objects):** Settings, Permissions (allow/deny/ask — broken out because security-critical), Hooks (event→command), MCP servers (name/scope/transport/command/url/env), Skills, Commands, Agents, Plugins, CLAUDE.md/memory, Keybindings, Scripts referenced by hooks/commands.
+**资产类型(安全管控对象):** Settings、Permissions(allow/deny/ask——因安全关键而单独列出)、Hooks(event→command)、MCP servers(name/scope/transport/command/url/env)、Skills、Commands、Agents、Plugins、CLAUDE.md/memory、Keybindings、被 hooks/commands 引用的 Scripts。
 
-Each asset carries: `id / type / scope (global·project·managed) / source_path / name / parsed fields / mtime / hash`.
+每个资产带:`id / type / scope(global·project·managed) / source_path / name / 解析字段 / mtime / hash`。
 
-**Precedence handling (P1):** discovery + parse + scope annotation + **duplicate detection** (same MCP installed in two places). Full effective-resolution (shadowed/conflict/ancestor + click-through) is deferred to P1.5/P2 — not required for security, higher complexity.
+**优先级处理(P1):** 发现 + 解析 + scope 标注 + **重复检测**(同一 MCP 装两处)。完整的 effective-resolution(shadowed/conflict/ancestor + 点击跳转)延后到 P1.5/P2——安全不需要、复杂度高。
 
-**configengine is read-only in P1.** All writes are P2.
+**configengine 在 P1 只读。** 所有写编辑在 P2。
 
-## Security Detection Engine (security)
+## 安全检测引擎(security)
 
-**Unified abstraction — `Detector` interface:**
+**统一抽象——`Detector` 接口:**
 ```go
 type Detector interface {
-    ID() string                  // e.g. "baseline.permissions"
-    Covers() []AssetType         // which assets it scans
+    ID() string                  // 如 "baseline.permissions"
+    Covers() []AssetType         // 扫描哪些资产
     Scan(ctx, []Asset) (*ScanResult, error)
 }
 ```
-Detectors register with a `Registry`; a `Scan` orchestrator runs all matching detectors over a batch of assets and aggregates results into `Finding` records (`severity / asset / rule_id / evidence / remediation`). Adding a detection = implement the interface + register; no API/UI change. This is the core extensibility point and the productization learning centerpiece.
+检测器向 `Registry` 注册;`Scan` 编排器对一批资产跑所有匹配的检测器,把结果聚合成 `Finding`(`severity / asset / rule_id / evidence / remediation`)。加检测 = 实现接口 + 注册;无需改 API/UI。这是核心可扩展点,也是产品化学习的重点。
 
-**Four P1 detectors:**
+**P1 四个检测器:**
 
-| Detector | Implementation | Data-driven? |
+| 检测器 | 实现方式 | 数据驱动? |
 |---|---|---|
-| **1. Config baseline** `baseline.*` | Go-native; reads settings.json + hooks + env | Yes — rule set YAML (dangerous-flag blacklist, over-broad permission patterns, dangerous env names) |
-| **2. Content / prompt-injection** `content.injection` | Go-native; scans MCP tool descriptions / skills / commands / agents / CLAUDE.md / scripts as text | Yes — injection-pattern rule set (hidden instructions, obfuscation: zero-width / base64 / leetspeak / HTML comments — derived from CCO's 9 deobfuscation categories) |
-| **3. Secret scan** `secret.*` | Subprocess: gitleaks | — |
-| **4. Dependency vulnerability** `dep.*` | Subprocess: govulncheck (Go) / npm-audit (JS in skills/commands/plugins) | — |
+| **1. 配置基线** `baseline.*` | Go 原生;读 settings.json + hooks + env | 是——规则集 YAML(危险标志黑名单、过宽权限模式、危险 env 名) |
+| **2. 内容 / 提示注入** `content.injection` | Go 原生;把 MCP tool 描述 / skills / commands / agents / CLAUDE.md / scripts 当文本扫 | 是——注入模式规则集(隐藏指令、混淆:zero-width / base64 / leetspeak / HTML 注释——源自 CCO 的 9 类反混淆思路) |
+| **3. 密钥扫描** `secret.*` | 子进程:gitleaks | — |
+| **4. 依赖漏洞** `dep.*` | 子进程:govulncheck(Go)/ npm-audit(skill/command/plugin 里的 JS) | — |
 
-**Rule sets (detectors 1 & 2)** are embedded YAML under `internal/security/rules/*.yaml`, bundled via `embed`. Each rule has `id / severity / description / pattern / deobfuscation[] / remediation`. Rules are **not user-editable in P1**; externalization is P4.
+**规则集(检测器 1、2)** 是 `internal/security/rules/*.yaml` 下的内嵌 YAML,通过 `embed` 打进二进制。每条规则带 `id / severity / description / pattern / deobfuscation[] / remediation`。规则在 **P1 不可由用户编辑**;外部化是 P4。
 
-**Subprocess detector adapter (3 & 4):** implement the same `Detector` interface; shell out, parse scanner JSON output, normalize into `Finding`. Graceful degradation when a scanner is missing — the detector marks itself `unavailable` with a reason, scan continues.
+**子进程检测器适配(3、4):** 实现同一个 `Detector` 接口;shell out、解析扫描器 JSON 输出、归一化成 `Finding`。扫描器缺失时优雅降级——检测器把自己标记为 `unavailable` 并附原因,扫描继续。
 
-**Baseline rule source:** self-authored P1 rule set, derived from Claude Code settings docs + CCO thinking. Claude Code's config semantics are harness-specific (`skipDangerousModePermissionPrompt`, `Bash(*)`, dangerous hook commands) and not expressible by generic scanners; authoring the rule set is itself part of the baseline-productization learning.
+**基线规则来源:** P1 自研规则集,从 Claude Code settings 文档 + CCO 思路提炼。Claude Code 的配置语义是 harness 专属的(`skipDangerousModePermissionPrompt`、`Bash(*)`、危险 hook 命令),通用扫描器表达不了;自研规则集本身就是基线产品化学习的一部分。
 
-**Injection detection depth (P1):** text-level static only (pattern match + deobfuscation). No LLM-judge.
+**注入检测深度(P1):** 仅文本级静态(模式匹配 + 反混淆)。不做 LLM-judge。
 
-**Scan trigger (P1):** manual (user clicks "scan") + an automatic baseline quick-scan at startup. File-watcher-triggered incremental scans are deferred (avoid v1 state-management complexity).
+**扫描触发(P1):** 手动(用户点"扫描")+ 启动时自动跑一次基线快扫。文件监听触发的增量扫描延后(避免 v1 状态管理复杂度)。
 
-## Health Score
+## 健康分
 
-A single aggregated metric compressing security posture into a comparable, explainable number. Three hard principles: **explainable** (every deduction traces to a concrete Finding), **monotonic** (fixing a Finding never lowers the score), **reproducible** (raw Findings recompute to the same score).
+一个聚合指标,把安全态势压成一个可比较、可解释的数字。三条硬原则:**可解释**(每个扣分点都能追溯到具体 Finding)、**单调**(修掉一个 Finding 分数只升不降)、**可还原**(给原始 Findings 能复算出同一分数)。
 
-**Model:**
-- **Asset base N** = count of in-scope assets. Each asset has a **base risk weight** `w(asset)` = the weight of its type `w_type` (MCP server and Hook highest, since they execute or inject into the prompt).
-- **Each Finding** has a **deduction coefficient** `p_sev` by severity (Critical / High / Medium / Low; Critical largest).
-- **Per-asset risk** `R(asset) = Σ(p_sev of that asset's Findings)`, capped at `Rmax`.
-- **Score** `= 100 × (1 − Σ_assets(R(asset)·w(asset)) / (Rmax · Σ_assets w(asset)))`. This is 100 when there are no Findings (numerator 0) and 0 when every asset is at max risk `Rmax` (numerator = denominator). Mapped to 5 labeled bands: Excellent / Good / Fair / At-Risk / Critical.
-- **Weighted deduction breakdown** shown: "MCP server 'xxx' · prompt-injection High · −6 pts". The user sees both the score and the why/what-to-fix.
+**模型:**
+- **资产基数 N** = 在范围内的资产数。每个资产有一个**基础风险权重** `w(asset)` = 其类型权重 `w_type`(MCP server 和 Hook 最高,因为它们直接执行或注入 prompt)。
+- **每个 Finding** 有按严重度(Critical / High / Medium / Low;Critical 最大)的**扣分系数** `p_sev`。
+- **单资产风险** `R(asset) = Σ(该资产上 Finding 的 p_sev)`,上限封顶 `Rmax`。
+- **健康分** `= 100 × (1 − Σ_assets(R(asset)·w(asset)) / (Rmax · Σ_assets w(asset)))`。无 Finding 时为 100(分子为 0),每个资产都到 `Rmax` 时为 0(分子 = 分母)。映射到 5 档:Excellent / Good / Fair / At-Risk / Critical。
+- **加权扣分明细** 展示:"MCP server 'xxx' · prompt-injection High · −6 分"。用户同时看到分数、为什么、改什么。
 
-**Weights (P1):** built-in default weight table (reasonable initial values per asset type / severity), adjustable in rule-set YAML but **not exposed in the UI for editing in P1** (deferred to P4 team baseline). Weights are explicit, auditable constants — not magic numbers.
+**权重(P1):** 内置默认权重表(对资产类型 / 严重度的合理初值),规则集 YAML 里可调,但 **P1 不在 UI 暴露编辑**(延后到 P4 团队基线)。权重是显式、可审计的常量——不是魔法数字。
 
-**Learning value:** this "asset × Finding × severity → explainable aggregate score" is a general posture-quantification paradigm for security products (analogous to CVSS explainability, lighter) — a complete AI-security-metric productization exercise.
+**学习价值:** 这套"资产 × Finding × 严重度 → 可解释聚合分"是安全产品通用的态势量化范式(对标 CVSS 的可解释性思路,更轻)——一次完整的 AI 安全指标产品化练习。
 
-## Dashboard (P1 skeleton)
+## 看板(P1 骨架)
 
-P1 dashboard is **read-only posture view only**, no writes. Content (layout mockups deferred to the UI implementation stage via the visual companion):
+P1 看板**只读态势视图**,不做写操作。内容(布局 mock 留到 UI 实现阶段用可视化伴侣做):
 
-- **Health score card:** big Score number + band + in-session delta vs. the previous scan this session (P1 keeps only the current and one prior scan in memory; no persisted history).
-- **Asset inventory:** counts by type, grouped Global/Project — plugin count, skill count, MCP server count, hook count, etc.
-- **Risk summary:** Findings stacked bar by severity; heatmap by asset type; Top-N high-risk assets list.
-- **Detector status:** each of the 4 detectors — enabled / available (subprocess present?) / last-scan finding count / last-scan duration.
-- **Recent scans:** timeline + one-click "rescan".
+- **健康分卡:** 大数字 Score + 档位 + 本会话内与上一次扫描的 delta(P1 只在内存保留当前和上一次扫描,不持久化历史)。
+- **资产盘点:** 按类型计数,Global/Project 分组——插件数、skill 数、MCP server 数、hook 数等。
+- **风险摘要:** Findings 按 severity 堆叠柱状图;按资产类型热力分布;Top N 高风险资产列表。
+- **检测器状态:** 4 个检测器各自:enabled / available(子进程在不在)/ 上次扫描 finding 数 / 上次耗时。
+- **最近扫描:** 时间线 + 一键"重新扫描"。
 
-**Health-score trend deferred to P1.5:** P1 does not persist scan history (each scan recomputes); trends need state storage, deferred to avoid v1 state complexity. All dashboard data comes from the in-memory current scan result.
+**健康分趋势延后到 P1.5:** P1 不持久化扫描历史(每次扫描重算);趋势需要状态存储,延后以避免 v1 状态复杂度。看板数据全部来自内存中的当次扫描结果。
 
-## API & Local-Server Security (P1, read-only)
+## API 与本地服务安全(P1,只读)
 
-Gin HTTP+JSON, serves embedded SPA. Per-session token. The local server can read sensitive data (`~/.claude.json` MCP credentials, settings env tokens, CLAUDE.md secrets), so unauthorized access = credential/secret exposure — access control is mandatory, not optional.
+Gin HTTP+JSON,服务内嵌 SPA。Per-session token。本地服务能读敏感数据(`~/.claude.json` 的 MCP 凭据、settings 里 env 的 token、CLAUDE.md 机密),所以未授权访问 = 凭据/机密泄露——访问控制是必需的,不是可选的。
 
-**Bind policy (hybrid):**
-- Config file `~/.claude-sentinel/config.yaml` sets `bind` (default `127.0.0.1`) and `port` (default random high). The config file lives **outside** `~/.claude/` to avoid sentinel scanning its own config / recursion.
-- **Default loopback → remote access via SSH port forwarding** (`ssh -L <port>:127.0.0.1:<port> dev`); the server stays zero-network-exposed, auth fully reuses SSH. Sentinel prints the matching access method (and tunnel command) at startup.
-- **When `bind` is non-loopback:** startup warning + **mandatory non-empty IP allowlist** (`allowed_cidrs`; empty → refuse to start unless `--i-know-its-risky`) + optional basic auth (password bcrypt-hashed, never plaintext).
-- Token always required, delivered via **URL fragment** (`#token=`, not query param — keeps it out of server logs and Referer headers), validated on every API request.
-- Strict CORS (no cross-origin) + `Host` header validation (DNS-rebinding defense).
-- No remote network calls except npm/marketplace metadata where a feature requires it.
+**Bind 策略(混合):**
+- 配置文件 `~/.claude-sentinel/config.yaml` 设 `bind`(默认 `127.0.0.1`)和 `port`(默认随机高端口)。配置文件放在 `~/.claude/` **之外**,避免 sentinel 扫描自己的配置 / 递归。
+- **默认 loopback → 远程访问走 SSH 端口转发**(`ssh -L <port>:127.0.0.1:<port> dev`);服务保持零网络暴露,身份认证完全复用 SSH。启动时打印对应的访问方式(和隧道命令)。
+- **当 `bind` 非 loopback 时:** 启动警告 + **强制非空 IP 白名单**(`allowed_cidrs`;为空则拒绝启动,除非 `--i-know-its-risky`)+ 可选 basic auth(密码 bcrypt 哈希,绝不存明文)。
+- Token 始终必需,通过 **URL fragment**(`#token=`,不是 query param——不进 server log、不进 Referer 头)传递,每个 API 请求校验。
+- 严格 CORS(拒绝跨域)+ `Host` 头校验(防 DNS rebinding)。
+- 除 npm/marketplace 元数据外无远程网络调用。
 
-**P1 resources (all read-only except POST /scan):**
+**P1 资源(除 POST /scan 外全只读):**
 
-| Method | Path | Description |
+| 方法 | 路径 | 说明 |
 |---|---|---|
-| GET | `/api/assets` | Asset inventory (`?type=` `?scope=` filters) |
-| GET | `/api/assets/:id` | Single asset detail (parsed fields + raw content preview) |
-| POST | `/api/scan` | Trigger scan (`?detectors=baseline,secret` selective) → ScanResult |
-| GET | `/api/scan/result` | Latest in-memory scan result (P1 not persisted) |
-| GET | `/api/findings` | Findings list (`?severity=` `?asset=` filters) |
-| GET | `/api/health` | Health score + weighted deduction breakdown |
-| GET | `/api/dashboard` | Aggregate: asset counts + risk summary + detector status (one call) |
-| GET | `/api/detectors` | Detector registry + availability status |
-| GET | `/api/project` | Current selected project + selectable project list |
-| POST | `/api/project` | Switch project |
+| GET | `/api/assets` | 资产盘点(支持 `?type=` `?scope=` 过滤) |
+| GET | `/api/assets/:id` | 单资产详情(解析字段 + 原始内容预览) |
+| POST | `/api/scan` | 触发扫描(可 `?detectors=baseline,secret` 选择)→ ScanResult |
+| GET | `/api/scan/result` | 取最近一次内存中的扫描结果(P1 不持久化) |
+| GET | `/api/findings` | Findings 列表(支持 `?severity=` `?asset=` 过滤) |
+| GET | `/api/health` | 健康分 + 加权扣分明细 |
+| GET | `/api/dashboard` | 聚合:资产计数 + 风险摘要 + 检测器状态(一次取全) |
+| GET | `/api/detectors` | 检测器注册表 + 可用性状态 |
+| GET | `/api/project` | 当前选中项目 + 可选项目列表 |
+| POST | `/api/project` | 切换项目 |
 
-**Scan concurrency:** `POST /api/scan` is synchronous (P1 asset scale is small); context timeout governs the whole scan so a hung subprocess can't stall it. Each subprocess detector's own timeout folds into the same context.
+**扫描并发:** `POST /api/scan` 同步返回(P1 资产规模小);context 超时控制整次扫描,避免某个子进程卡死。每个子进程检测器各自的超时归一化进同一 context。
 
-**Error convention:** JSON `{error: {code, message, details?}}`. A malformed asset file does not fail the whole scan — the asset is flagged `parse_error` and surfaced as a Finding; scan continues.
+**错误约定:** JSON `{error: {code, message, details?}}`。资产文件解析失败不致全盘失败——该资产标记 `parse_error` 作为 Finding 暴露,扫描继续。
 
-## Frontend (web/)
+## 前端(web/)
 
 ```
 web/src/
   pages/        Dashboard / Assets / Findings / Settings
   components/   HealthScoreCard / AssetList / FindingTable / SeverityChart / DetectorStatus / ProjectSwitcher
-  api/          API client (token injection, bind-aware base URL)
-  store/        zustand (scan-result cache, asset tree)
+  api/          API client(token 注入,感知 bind 的 base URL)
+  store/        zustand(扫描结果缓存,资产树)
 ```
-Routes: Dashboard / Assets / Findings / Settings (read-only: show detectors, rule versions, scan settings). No edit pages in P1 (fully read-only).
+路由:Dashboard / Assets / Findings / Settings(只读:展示检测器、规则版本、扫描设置)。P1 无编辑页面(全只读)。
 
-**UI style (deliberately independent of both references):**
-- shadcn/ui + Tailwind — copy-paste-owned, fully themeable, imposes no visual brand.
-- Style direction: **SOC (security-ops-center) aesthetic** — dark-first, high information density, semantic color for risk (Critical=red / High=orange / Medium=amber / Low=teal), monospace for config/rule text, card-based posture.
-- Deliberately unlike CCO's light web style and Studio's form-based settings style.
+**UI 风格(刻意独立于两个参考项目):**
+- shadcn/ui + Tailwind——组件 copy-paste 即归你所有、完全可主题、不自带视觉品牌。
+- 风格取向:**SOC(安全运营中心)审美**——深色优先、高信息密度、风险用语义色编码(Critical=红 / High=橙 / Medium=琥珀 / Low=蓝绿)、等宽字体显示配置/规则文本、卡片化态势。
+- 刻意不同于 CCO 的轻盈 web 风 和 Studio 的表单式设置风。
 
-**Layout mockups are deferred:** this spec fixes only the *style direction* (SOC dark high-density + semantic color); concrete wireframes/mockups are produced during UI implementation via the visual companion, where the user makes the call. This keeps the spec focused and unblocked by undecided visual detail.
+**布局 mock 延后:** 本规格只定*风格取向*(SOC 深色高密度 + 语义色);具体线框图/mock 在 UI 实现阶段用可视化伴侣产出,由你拍板。这样规格聚焦、不被未定的视觉细节拖住。
 
-## Error Handling
+## 错误处理
 
-- Malformed JSON in an existing file: surface the file with the parse error located; offer raw-preview; never write through a parse failure (P1 is read-only, so this is display-only).
-- Failed subprocess invocation: surface stdout/stderr verbatim with the exact command run; mark detector unavailable.
-- Missing scanner binary: detector reports `unavailable` + reason; overall scan succeeds with reduced coverage.
-- Bind-policy violation (non-loopback + empty allowlist): refuse to start with a clear message and the `--i-know-its-risky` override hint.
+- 现有文件里 JSON 损坏:展示文件并定位解析错误;提供 raw 预览;绝不穿过解析失败写入(P1 只读,所以仅展示)。
+- 子进程调用失败:原样展示 stdout/stderr 和确切命令;标记检测器 unavailable。
+- 扫描器二进制缺失:检测器报 `unavailable` + 原因;整体扫描成功但覆盖减少。
+- Bind 策略违规(非 loopback + 白名单空):拒绝启动并给清晰提示 + `--i-know-its-risky` 覆盖提示。
 
-## Testing
+## 测试
 
-- **configengine:** unit tests against fixture home directories in temp dirs — the bulk of test effort (discovery, parse, scope annotation, duplicate detection, malformed-file handling).
-- **security:** unit tests per detector with fixture assets (baseline rule matches, injection deobfuscation, score monotonicity/reproducibility); subprocess detectors tested with fixture scanner output (and an integration path that skips when the binary is absent).
-- **api:** integration tests over the engine with fixtures (read endpoints, scan trigger, error convention).
-- **Frontend:** a small number of Playwright e2e flows — load dashboard → trigger scan → see findings + score.
+- **configengine:** 用临时目录里的 fixture home 做单测——测试重心(发现、解析、scope 标注、重复检测、损坏文件处理)。
+- **security:** 每个检测器用 fixture 资产做单测(基线规则匹配、注入反混淆、分数单调性/可还原性);子进程检测器用 fixture 扫描器输出测(并有一条二进制缺失时跳过的集成路径)。
+- **api:** 在引擎之上用 fixture 做集成测试(只读端点、扫描触发、错误约定)。
+- **前端:** 少量 Playwright e2e 流——加载看板 → 触发扫描 → 看到 findings + 分数。
 
-## Distribution
+## 分发
 
-- Single binary; `sentinel` works without install. Frontend assets embedded (no build step at user's machine).
-- External scanners (gitleaks/govulncheck/npm-audit) are optional runtime dependencies — detected at startup; missing ones degrade gracefully.
+- 单二进制;`sentinel` 无需安装即可运行。前端产物内嵌(用户机器无构建步骤)。
+- 外部扫描器(gitleaks/govulncheck/npm-audit)是可选运行时依赖——启动时探测;缺失则优雅降级。
 
-## Future (explicitly out of P1)
+## 后续(明确不在 P1)
 
-- P2 surgical config editing + backup/migration.
-- P3 embedded agent + session history.
-- P4 dynamic detection (live MCP, hash baseline, rug-pull monitoring) + team baseline rule externalization + scan-history persistence / health-score trends + multi-harness.
+- P2 外科手术式配置编辑 + 备份/迁移。
+- P3 内嵌 agent + 会话历史。
+- P4 动态检测(实时 MCP、hash 基线、rug-pull 监控)+ 团队基线规则外部化 + 扫描历史持久化 / 健康分趋势 + 多 harness。
