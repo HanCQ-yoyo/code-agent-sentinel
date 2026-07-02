@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"time"
 
 	"code-agent-sentinel/internal/configengine"
@@ -61,12 +62,65 @@ func (d *SecretDetector) Scan(ctx context.Context, assets []configengine.Asset) 
 		if r.TimedOut {
 			continue
 		}
+		// 偏差(brief 原文静默吞掉 stderr/exit code):
+		// gitleaks 退出码 0=无泄露、1=有泄露,均正常;其它退出码或非 ExitError 的 Err
+		// 表示 gitleaks 自身故障(配置错误、--source 无效、崩溃等)。此时不能静默 continue,
+		// 否则只读看板显示零发现而掩盖扫描器问题。经人工确认同意偏离。
+		scannerFailed := r.ExitCode != 0 && r.ExitCode != 1
+		if r.Err != nil {
+			if _, ok := r.Err.(*exec.ExitError); !ok {
+				scannerFailed = true // 非 ExitError:二进制启动失败等
+			}
+		}
+		if scannerFailed {
+			evidence := truncate(string(r.Stderr), 200)
+			if evidence == "" && r.Err != nil {
+				evidence = truncate(r.Err.Error(), 200)
+			}
+			out = append(out, Finding{
+				DetectorID:  d.ID(),
+				RuleID:      "secret.scanner-error",
+				Severity:    SeverityLow,
+				AssetID:     a.ID,
+				AssetType:   a.Type,
+				AssetName:   a.Name,
+				Message:     "gitleaks 扫描器异常(退出码 " + strconv.Itoa(r.ExitCode) + ")",
+				Evidence:    evidence,
+				Remediation: "检查 gitleaks 配置与运行环境",
+			})
+			continue
+		}
 		var gf []gitleaksFinding
 		if err := json.Unmarshal(r.Stdout, &gf); err != nil {
+			// exit 0 + 空 stdout 属正常(无泄露);非空 stdout 解析失败 = 扫描器输出异常
+			if len(r.Stdout) > 0 {
+				out = append(out, Finding{
+					DetectorID:  d.ID(),
+					RuleID:      "secret.scanner-error",
+					Severity:    SeverityLow,
+					AssetID:     a.ID,
+					AssetType:   a.Type,
+					AssetName:   a.Name,
+					Message:     "gitleaks 输出解析失败",
+					Evidence:    truncate(string(r.Stdout), 200),
+					Remediation: "检查 gitleaks 版本与输出格式",
+				})
+			}
 			continue
 		}
 		for _, f := range gf {
-			if filepath.Base(f.File) != filepath.Base(path) {
+			// 偏差(brief 原文用 basename 匹配):
+			// gitleaks detect --source <dir> 递归扫描,File 字段是相对 --source 的路径。
+			// 不同子目录下同名文件会让 basename 误匹配,把别的文件的泄露归到本资产。
+			// 改为完整路径比对:用 filepath.Join(dir, f.File) 重构绝对路径,清洗后与
+			// 资产 SourcePath 比较。若 gitleaks 返回绝对路径则直接使用。经人工确认同意偏离。
+			var findingPath string
+			if filepath.IsAbs(f.File) {
+				findingPath = filepath.Clean(f.File)
+			} else {
+				findingPath = filepath.Clean(filepath.Join(dir, f.File))
+			}
+			if findingPath != filepath.Clean(path) {
 				continue
 			}
 			out = append(out, Finding{
@@ -84,6 +138,3 @@ func (d *SecretDetector) Scan(ctx context.Context, assets []configengine.Asset) 
 	}
 	return out, nil
 }
-
-// 占位避免 exec 未用 import 警告(实际 commandExists 用到 exec)
-var _ = exec.ErrNotFound

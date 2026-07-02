@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"code-agent-sentinel/internal/configengine"
@@ -43,5 +44,77 @@ func TestSecretDetectorParsesGitleaksJSON(t *testing.T) {
 	}
 	if len(findings) != 1 || findings[0].RuleID != "generic-api-key" {
 		t.Fatalf("got %+v", findings)
+	}
+}
+
+func TestSecretDetectorAttributionByFullPath(t *testing.T) {
+	base := t.TempDir()
+	// 两个同名文件在不同子目录:top/config.yaml 与 sub/config.yaml
+	topFile := filepath.Join(base, "top", "config.yaml")
+	subFile := filepath.Join(base, "sub", "config.yaml")
+	os.MkdirAll(filepath.Dir(topFile), 0o755)
+	os.MkdirAll(filepath.Dir(subFile), 0o755)
+	os.WriteFile(topFile, []byte("x"), 0o644)
+	os.WriteFile(subFile, []byte("x"), 0o644)
+
+	// 子测试 1:gitleaks 报告 File 为 "sub/config.yaml"(相对 --source)。
+	// 资产是 top/config.yaml:basename 都是 config.yaml,但完整路径不同 → 不应归因。
+	// 旧 basename 匹配会误归因,新完整路径匹配不会。
+	t.Run("no basename mis-attribution", func(t *testing.T) {
+		script := filepath.Join(base, "fake_no_match")
+		os.WriteFile(script, []byte("#!/bin/sh\necho '[{\"RuleID\":\"k\",\"Secret\":\"sk-leak\",\"File\":\"sub/config.yaml\",\"StartLine\":1}]'\n"), 0o755)
+		d := NewSecretDetector(script)
+		a := configengine.Asset{ID: "a1", Type: configengine.AssetMemory, Name: "config.yaml", SourcePath: topFile}
+		findings, err := d.Scan(context.Background(), []configengine.Asset{a})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(findings) != 0 {
+			t.Fatalf("expected 0 findings (full path mismatch), got %d: %+v", len(findings), findings)
+		}
+	})
+
+	// 子测试 2:gitleaks 报告 File 为 "config.yaml"(相对 --source,即资产本身)。
+	// 资产是 sub/config.yaml:完整路径一致 → 应归因。
+	t.Run("match by full path", func(t *testing.T) {
+		script := filepath.Join(base, "fake_match")
+		os.WriteFile(script, []byte("#!/bin/sh\necho '[{\"RuleID\":\"k\",\"Secret\":\"sk-leak\",\"File\":\"config.yaml\",\"StartLine\":1}]'\n"), 0o755)
+		d := NewSecretDetector(script)
+		a := configengine.Asset{ID: "a2", Type: configengine.AssetMemory, Name: "config.yaml", SourcePath: subFile}
+		findings, err := d.Scan(context.Background(), []configengine.Asset{a})
+		if err != nil {
+			t.Fatal(err)
+		}
+		if len(findings) != 1 {
+			t.Fatalf("expected 1 finding (full path match), got %d: %+v", len(findings), findings)
+		}
+	})
+}
+
+func TestSecretDetectorScannerErrorSurfaced(t *testing.T) {
+	dir := t.TempDir()
+	// fake gitleaks:写 stderr 并以退出码 2 退出(模拟 gitleaks 配置错误)
+	script := filepath.Join(dir, "fake_err")
+	os.WriteFile(script, []byte("#!/bin/sh\necho 'config error: bad source' >&2\nexit 2\n"), 0o755)
+	srcFile := filepath.Join(dir, "config.yaml")
+	os.WriteFile(srcFile, []byte("x"), 0o644)
+	d := NewSecretDetector(script)
+	a := configengine.Asset{ID: "a1", Type: configengine.AssetMemory, Name: "config.yaml", SourcePath: srcFile}
+	findings, err := d.Scan(context.Background(), []configengine.Asset{a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("expected 1 scanner-error finding, got %d: %+v", len(findings), findings)
+	}
+	f := findings[0]
+	if f.Severity != SeverityLow {
+		t.Errorf("expected SeverityLow, got %s", f.Severity)
+	}
+	if f.RuleID != "secret.scanner-error" {
+		t.Errorf("expected RuleID secret.scanner-error, got %s", f.RuleID)
+	}
+	if !strings.Contains(f.Evidence, "config error") {
+		t.Errorf("expected evidence to contain stderr text, got %q", f.Evidence)
 	}
 }
