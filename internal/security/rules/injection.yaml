@@ -1,0 +1,19 @@
+rules:
+  - id: injection.hidden-instruction
+    severity: high
+    description: "检测到隐藏指令模式(忽略上述/系统提示覆盖)"
+    pattern: "(?i)(ignore (the )?(above|previous|all) (instructions?|rules)|disregard prior)"
+    deobfuscation: [zero_width, html_comment]
+    remediation: "审查该文本中的可疑指令,确认来源可信"
+  - id: injection.exfiltration
+    severity: critical
+    description: "检测到数据外发指令(读取敏感文件并外传)"
+    pattern: "(?i)(curl|wget|fetch).+\\$\\(|(~?\\/\\.ssh|~?\\/\\.aws|\\/etc\\/passwd)"
+    deobfuscation: [base64, leetspeak]
+    remediation: "该指令疑似外发敏感数据,立即移除"
+  - id: injection.base64-payload
+    severity: medium
+    description: "文本含 base64 编码的可执行片段"
+    pattern: "(?:base64|atob)\\s+-d\\s+['\"][A-Za-z0-9+/=]{40,}"
+    deobfuscation: [base64]
+    remediation: "解码并审查 base64 载荷"
