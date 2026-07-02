@@ -1,4 +1,5 @@
 import { Routes, Route, NavLink } from 'react-router-dom'
+import Dashboard from './pages/Dashboard'
 
 export default function App() {
   return (
@@ -9,6 +10,8 @@ export default function App() {
         ))}
       </nav>
       <main className="flex-1 p-6"><Routes>
+        <Route path="/" element={<Dashboard />} />
+        <Route path="/dashboard" element={<Dashboard />} />
         <Route path="*" element={<div className="text-slate-400">P1 骨架就绪</div>} />
       </Routes></main>
     </div>
