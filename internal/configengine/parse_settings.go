@@ -2,6 +2,7 @@ package configengine
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 )
 
@@ -38,9 +39,9 @@ func parseSettings(path string, scope Scope) ([]Asset, error) {
 	var rs rawSettings
 	if err := json.Unmarshal(data, &rs); err != nil {
 		// 损坏文件:产出一条带 parse_error 的 settings 占位资产。
-		// 注意:Asset 无 ID() 方法(字段与方法同名冲突),用 makeAssetID 设置。
+		// 文件本身可读,故仍填 hash/mtime(与 placeholder 行为一致);fillHash 内部会设 ID。
 		a := Asset{Type: AssetSettings, Scope: scope, SourcePath: path, Name: "settings", ParseError: err.Error()}
-		a.ID = makeAssetID(a)
+		fillHash(&a)
 		return []Asset{a}, nil
 	}
 	var out []Asset
@@ -65,11 +66,13 @@ func parseSettings(path string, scope Scope) ([]Asset, error) {
 	fillHash(&perm)
 	out = append(out, perm)
 
-	// 每个 hook 一条资产,event/matcher 唯一标识其用途。
+	// 每个 hook 一条资产。Name 带内层索引:同一 matcher 下可挂多个 hook,
+	// 若只用 event/matcher 会导致 scope:type:name:source_path 相同 → ID 重复,
+	// 下游去重/聚合会悄悄丢弃重复 hook。event/matcher 仍保留在 Fields 里供查询。
 	for event, entries := range rs.Hooks {
 		for _, e := range entries {
-			for _, h := range e.Hooks {
-				hk := Asset{Type: AssetHook, Scope: scope, SourcePath: path, Name: event + "/" + e.Matcher}
+			for idx, h := range e.Hooks {
+				hk := Asset{Type: AssetHook, Scope: scope, SourcePath: path, Name: fmt.Sprintf("%s/%s/%d", event, e.Matcher, idx)}
 				hk.Fields = map[string]any{
 					"event":   event,
 					"matcher": e.Matcher,
@@ -85,7 +88,7 @@ func parseSettings(path string, scope Scope) ([]Asset, error) {
 }
 
 // fillHash 填充 Hash/MTime(来自源文件)与 ID。
-// 对解析失败的资产不调用(见 parseSettings 损坏分支),那里只设 ID。
+// 文件不可读时 Hash/MTime 留空但仍设 ID;由所有解析路径(含损坏文件分支)调用。
 func fillHash(a *Asset) {
 	if h, mt, err := HashAndMTime(a.SourcePath); err == nil {
 		a.Hash, a.MTime = h, mt
