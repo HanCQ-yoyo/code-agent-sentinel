@@ -1,5 +1,5 @@
 function token(): string {
-  const m = window.location.hash.match(/token=([a-f0-9]+)/)
+  const m = window.location.hash.match(/token=([A-Za-z0-9_-]+)/)
   return m ? m[1] : ''
 }
 async function req(path: string, method = 'GET'): Promise<Response> {
