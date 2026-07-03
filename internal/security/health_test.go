@@ -45,7 +45,7 @@ func TestHealthAllMaxIsZero(t *testing.T) {
 	assets := []configengine.Asset{{ID: "a", Type: configengine.AssetMCPServer, Name: "m"}}
 	// 灌大量 critical 直到封顶 Rmax
 	var findings []Finding
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		findings = append(findings, Finding{AssetID: "a", AssetType: configengine.AssetMCPServer, Severity: SeverityCritical, RuleID: "r"})
 	}
 	h := ComputeHealth(assets, findings)
@@ -95,7 +95,7 @@ func TestHealthReducibilityCappedAsset(t *testing.T) {
 		{ID: "b", Type: configengine.AssetSkill, Name: "s"},
 	}
 	var findings []Finding
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		findings = append(findings, Finding{AssetID: "a", AssetType: configengine.AssetMCPServer, Severity: SeverityHigh, RuleID: "r"})
 	}
 	// b 上挂一条 Low,确保多资产场景下分配无误。
