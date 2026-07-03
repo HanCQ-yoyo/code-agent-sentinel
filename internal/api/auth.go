@@ -1,6 +1,7 @@
 package api
 
 import (
+	"crypto/subtle"
 	"net/http"
 	"strings"
 
@@ -18,9 +19,13 @@ func authMiddleware(token string) gin.HandlerFunc {
 		t := c.GetHeader("Authorization")
 		t = strings.TrimPrefix(t, "Bearer ")
 		if t == "" {
-			t = c.Query("token")
+			c.AbortWithStatusJSON(http.StatusUnauthorized, errorBody("unauthorized", "missing or invalid token"))
+			return
 		}
-		if t != token {
+		// I-SEC-4: 用 constant-time 比较避免时序侧信道(普通 != 会短路)。
+		// I-SEC-6: 移除 ?token= 查询回退 —— 查询串会进浏览器历史/Referer,
+		// 与 fragment-only(#token=)的规格冲突;前端只用 Bearer。
+		if subtle.ConstantTimeCompare([]byte(t), []byte(token)) != 1 {
 			c.AbortWithStatusJSON(http.StatusUnauthorized, errorBody("unauthorized", "missing or invalid token"))
 			return
 		}
