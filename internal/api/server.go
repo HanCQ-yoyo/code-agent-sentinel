@@ -1,7 +1,9 @@
 package api
 
 import (
+	"mime"
 	"net/http"
+	"path"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -40,20 +42,32 @@ func (s *Server) Router() *gin.Engine {
 	api := r.Group("/api")
 	s.registerRoutes(api)
 
-	// SPA: 非 /api 路径回退 index.html
+	// SPA: 非 /api 路径先尝试 web_dist 下的真实静态文件,找不到再回退 index.html
 	r.NoRoute(func(c *gin.Context) {
 		if strings.HasPrefix(c.Request.URL.Path, "/api/") {
 			c.JSON(http.StatusNotFound, errorBody("not_found", c.Request.URL.Path))
 			return
 		}
-		f, err := webFS.Open("web_dist/index.html")
-		if err != nil {
-			c.String(http.StatusNotFound, "frontend not built; run `make web`")
-			return
+		// 清理路径,防止 .. 遍历;embed.FS 的 Open 已做了一定校验,这里显式 path.Clean
+		rel := strings.TrimPrefix(path.Clean(c.Request.URL.Path), "/")
+		if rel == "" || rel == "." || rel == "/" {
+			rel = "index.html"
 		}
-		defer f.Close()
-		c.Header("Content-Type", "text/html; charset=utf-8")
-		c.DataFromReader(http.StatusOK, -1, "text/html", f, nil)
+		data, err := webFS.ReadFile("web_dist/" + rel)
+		if err != nil {
+			// 静态文件不存在 → 回退到 index.html(SPA 客户端路由)
+			data, err = webFS.ReadFile("web_dist/index.html")
+			if err != nil {
+				c.String(http.StatusNotFound, "frontend not built; run `make web`")
+				return
+			}
+			rel = "index.html"
+		}
+		ct := mime.TypeByExtension(path.Ext(rel))
+		if ct == "" {
+			ct = "application/octet-stream"
+		}
+		c.Data(http.StatusOK, ct, data)
 	})
 
 	return r

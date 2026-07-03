@@ -1,6 +1,6 @@
 .PHONY: build test web web-install run clean
 
-build:
+build: web
 	go build -o bin/sentinel ./cmd/sentinel
 
 test:
@@ -11,6 +11,9 @@ web-install:
 
 web:
 	cd web && npm run build
+	rm -rf internal/api/web_dist
+	cp -r web/dist internal/api/web_dist
+	# 保留 embed 所需(已是 dist 内容)
 
 run: build
 	./bin/sentinel
