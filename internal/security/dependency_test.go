@@ -108,3 +108,56 @@ func TestDependencyGovulncheckScannerErrorSurfaced(t *testing.T) {
 		t.Errorf("Evidence 应包含 stderr 文本,得到: %s", f.Evidence)
 	}
 }
+
+// TestDependencyGovulncheckParsesFindings 验证 C-CORR-1:parseGovulncheck 能从
+// 真实的 govulncheck -json NDJSON 输出解析出漏洞 finding。
+//
+// 真实 govulncheck 输出含 4 类记录:{"config":...}、{"osv":{...object...}}、
+// {"finding":{"osv":"GO-...",...}}、{"progress":...}。NONE 有顶层 string osv。
+// 旧解析器期望顶层 {"osv":"<string>","severity":"<string>"},对所有真实记录
+// 解析出 0 个 finding → govulncheck 后端是死代码。新解析器按 {"finding":{"osv":...}}
+// 记录产 finding。
+func TestDependencyGovulncheckParsesFindings(t *testing.T) {
+	// 仿真 govulncheck -json NDJSON:config + osv 对象 + 2 条 finding + progress。
+	ndjson := `{"config":{"db":"vulndb"}}
+{"osv":{"id":"GO-2024-0001","severity":[{"type":"CVSS_V3","score":"high"}],"summary":"rce in foo"}}
+{"osv":{"id":"GO-2024-0002","severity":[{"type":"CVSS_V3","score":"medium"}],"summary":"dos in bar"}}
+{"finding":{"osv":"GO-2024-0001","trace":[{"module":"foo","version":"v1.0.0"}]}}
+{"finding":{"osv":"GO-2024-0002","trace":[{"module":"bar","version":"v2.0.0"}]}}
+{"progress":{"last-scanned-module":"baz"}}
+`
+	a := configengine.Asset{ID: "g1", Type: configengine.AssetPlugin, Name: "pkg"}
+	findings := parseGovulncheck("dep", []byte(ndjson), a)
+	if len(findings) != 2 {
+		t.Fatalf("应解析出 2 个 finding(每条 finding 记录一个),得到 %d: %+v", len(findings), findings)
+	}
+	// 校验两条 finding 的 OSV ID、RuleID、Message、AssetID。
+	seen := map[string]bool{}
+	for _, f := range findings {
+		if f.AssetID != "g1" {
+			t.Errorf("AssetID 应为 g1,得到 %s", f.AssetID)
+		}
+		if f.AssetType != configengine.AssetPlugin {
+			t.Errorf("AssetType 应为 plugin,得到 %s", f.AssetType)
+		}
+		osvID := strings.TrimPrefix(f.RuleID, "dep.govulncheck.")
+		if osvID != "GO-2024-0001" && osvID != "GO-2024-0002" {
+			t.Fatalf("意外 OSV ID %s (RuleID=%s)", osvID, f.RuleID)
+		}
+		if seen[osvID] {
+			t.Errorf("OSV ID %s 重复", osvID)
+		}
+		seen[osvID] = true
+		if !strings.Contains(f.Message, osvID) {
+			t.Errorf("Message 应包含 OSV ID %s,得到 %s", osvID, f.Message)
+		}
+		if !strings.Contains(f.Remediation, osvID) {
+			t.Errorf("Remediation 应包含 OSV ID %s,得到 %s", osvID, f.Remediation)
+		}
+	}
+	for _, id := range []string{"GO-2024-0001", "GO-2024-0002"} {
+		if !seen[id] {
+			t.Errorf("缺少 OSV ID %s 的 finding", id)
+		}
+	}
+}
