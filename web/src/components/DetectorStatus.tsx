@@ -5,7 +5,9 @@ export function DetectorStatusList({ list }: { list: { id: string; available: bo
       {list.map(d => (
         <div key={d.id} className="flex justify-between py-1">
           <span className="font-mono">{d.id}</span>
-          <span className={d.available ? 'text-sev-low' : 'text-sev-medium'}>{d.available ? 'available' : 'unavailable'}</span>
+          <span className={d.available ? 'text-sev-low' : 'text-sev-medium'}>
+            {d.available ? 'available' : `unavailable: ${d.reason ?? '未知'}`}
+          </span>
         </div>
       ))}
     </div>

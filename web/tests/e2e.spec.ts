@@ -6,16 +6,26 @@ test.beforeAll(() => {
   writeFileSync('/tmp/sentinel-e2e-home/.claude/settings.json', JSON.stringify({ permissions: { allow: ['Bash(*)'] } }))
 })
 
-test('dashboard 加载并扫描', async ({ page }) => {
-  // 访问根;无 token 会 401 API,但页面应渲染。从 server 输出取 token 太繁琐;
-  // P1 e2e 简化:直接访问,断言导航与标题存在
-  await page.goto('/')
+test('dashboard 带 token 认证后扫描并返回数据依赖结果', async ({ page }) => {
+  // 用 --token 标志启动 sentinel(见 playwright.config.ts webServer.command),
+  // 故 token 已知为 e2e-test-token-123。经 URL fragment 传递(与真实客户端一致):
+  // fragment 不进 server log / Referer,由前端 token() 提取后注入 Authorization 头。
+  await page.goto('/#token=e2e-test-token-123')
+
+  // 次要断言:页面骨架已渲染
   await expect(page.getByText('态势看板')).toBeVisible()
+
+  // 触发扫描
   await page.getByRole('button', { name: /重新扫描|扫描/ }).click()
-  // 扫描后健康分卡可见
-  await expect(page.getByText('健康分')).toBeVisible()
+
+  // 主要断言(数据依赖):健康分值在扫描前为 "--"(未扫描态),
+  // 扫描成功后变为具体数值。fixture 含 Bash(*) 基线 finding → 分数 < 100,
+  // 故断言分数可见、非 "--"、且非 100,以此证明后端扫描确实执行并返回了真实数据。
+  const score = page.getByTestId('health-score-value')
+  await expect(score).not.toHaveText('--', { timeout: 15000 })
+  await expect(score).not.toHaveText('100')
 })
 
-// 说明:因 token 经 URL fragment(#token=)传递且 e2e 难以自动从 server stdout 提取,
-// P1 e2e 仅验证页面骨架渲染与按钮可点(无 token 时 API 返回 401,但静态文本仍渲染)。
-// 真实 token 流程(带 token 访问 → 触发扫描 → 看到 findings 与分数)留手动验证。
+// 说明:本 e2e 通过 --token 标志使用已知 token,无需从 server stdout 提取。
+// 注意:--token 标志由后端 fixer 在另一 worktree 添加,合并前本 worktree 无法运行
+// (sentinel 会因未知标志报错)。e2e 执行延后到两 worktree 合并后验证。
