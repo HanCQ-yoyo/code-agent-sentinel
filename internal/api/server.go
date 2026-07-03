@@ -1,6 +1,7 @@
 package api
 
 import (
+	"fmt"
 	"mime"
 	"net/http"
 	"path"
@@ -27,6 +28,14 @@ func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *confi
 
 func (s *Server) Router() *gin.Engine {
 	r := gin.New()
+	// C-SEC-1: gin v1.12 默认 ForwardedByClientIP=true 且信任 0.0.0.0/0,::/0,
+	// 使 c.ClientIP() 信任攻击者伪造的 X-Forwarded-For,绕过非 loopback 绑定的
+	// IP 白名单。本地单二进制工具不应运行在任何反向代理后,故不信任任何代理:
+	// SetTrustedProxies(nil) → isTrustedProxy 恒 false → ClientIP() 返回真实 RemoteAddr。
+	if err := r.SetTrustedProxies(nil); err != nil {
+		// 理论不会失败;防御性处理。
+		panic(fmt.Sprintf("set trusted proxies: %v", err))
+	}
 	r.Use(gin.Recovery())
 	r.Use(corsStrict())
 	allowedHosts := []string{"127.0.0.1", "localhost"}
