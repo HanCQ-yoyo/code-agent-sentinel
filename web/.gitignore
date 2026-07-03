@@ -1,0 +1,7 @@
+node_modules/
+dist/
+# tsc -b incremental build cache
+*.tsbuildinfo
+# Playwright e2e 输出
+test-results/
+playwright-report/

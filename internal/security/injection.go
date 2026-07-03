@@ -1,0 +1,78 @@
+package security
+
+import (
+	"context"
+	"fmt"
+	"strings"
+
+	"code-agent-sentinel/internal/configengine"
+)
+
+type InjectionDetector struct{ rules []InjectionRule }
+
+func NewInjectionDetector() *InjectionDetector {
+	r, _ := loadInjectionRules()
+	return &InjectionDetector{rules: r}
+}
+
+func (d *InjectionDetector) ID() string { return "content.injection" }
+func (d *InjectionDetector) Covers() []configengine.AssetType {
+	return []configengine.AssetType{
+		configengine.AssetMCPServer, configengine.AssetSkill, configengine.AssetCommand,
+		configengine.AssetAgent, configengine.AssetMemory, configengine.AssetScript,
+	}
+}
+func (d *InjectionDetector) Available() bool { return true }
+func (d *InjectionDetector) Reason() string  { return "" }
+
+func (d *InjectionDetector) Scan(ctx context.Context, assets []configengine.Asset) ([]Finding, error) {
+	var out []Finding
+	for _, a := range assets {
+		text := assetText(a)
+		if text == "" {
+			continue
+		}
+		for _, r := range d.rules {
+			for _, variant := range deobfuscate(text, r.Deobfuscation) {
+				if r.re != nil && r.re.MatchString(variant) {
+					out = append(out, Finding{
+						DetectorID:  d.ID(),
+						RuleID:      r.ID,
+						Severity:    r.Severity,
+						AssetID:     a.ID,
+						AssetType:   a.Type,
+						AssetName:   a.Name,
+						Message:     r.Description,
+						Evidence:    truncate(r.re.FindString(variant), 200),
+						Remediation: r.Remediation,
+					})
+					break // 同一规则同一资产只报一次
+				}
+			}
+		}
+	}
+	return out, nil
+}
+
+func assetText(a configengine.Asset) string {
+	var b strings.Builder
+	if a.Content != "" {
+		b.WriteString(a.Content)
+	}
+	for _, v := range a.Fields {
+		if s, ok := v.(string); ok && s != "" {
+			b.WriteString("\n" + s)
+		}
+	}
+	return b.String()
+}
+
+func truncate(s string, n int) string {
+	if len(s) > n {
+		return s[:n] + "..."
+	}
+	return s
+}
+
+// 占位避免 unused(若 fmt 未用)
+var _ = fmt.Sprint
