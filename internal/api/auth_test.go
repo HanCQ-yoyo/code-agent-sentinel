@@ -35,6 +35,21 @@ func TestAuthMiddlewareAcceptsBearer(t *testing.T) {
 	}
 }
 
+// TestAuthMiddlewareRejectsQueryToken 验证 I-SEC-6:?token= 查询回退已移除。
+// 查询串会进浏览器历史/Referer,与 fragment-only 规格冲突,应拒绝。
+func TestAuthMiddlewareRejectsQueryToken(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	r := gin.New()
+	r.Use(authMiddleware("secret"))
+	r.GET("/api/x", func(c *gin.Context) { c.String(200, "ok") })
+	req := httptest.NewRequest("GET", "/api/x?token=secret", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("查询串 token 应被拒绝(401), got %d", w.Code)
+	}
+}
+
 func TestHostMiddlewareRejectsBadHost(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()

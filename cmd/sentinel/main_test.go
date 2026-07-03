@@ -46,3 +46,16 @@ func TestMainWritesNothingOnHelp(t *testing.T) {
 	_ = os.Stdout
 	_ = filepath.Base
 }
+
+// TestTokenFlagRegistered 验证 C-BUILD-1:--token flag 已注册。
+// 前端 e2e 依赖 --token 传入已知 token;flag 缺失会令 e2e 无法认证。
+func TestTokenFlagRegistered(t *testing.T) {
+	cmd := newRootCmd()
+	flag := cmd.Flag("token")
+	if flag == nil {
+		t.Fatal("--token flag 未注册")
+	}
+	if flag.DefValue != "" {
+		t.Errorf("--token 默认值应为空(随机 token),got %q", flag.DefValue)
+	}
+}

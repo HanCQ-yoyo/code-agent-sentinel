@@ -35,12 +35,13 @@ func newRootCmd() *cobra.Command {
 		noBrowser bool
 		risky     bool
 		homeFlag  string
+		tokenFlag string
 	)
 	cmd := &cobra.Command{
 		Use:   "sentinel",
 		Short: "Claude Code 配置安全态势看板(P1 只读)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context(), cfgPath, bindFlag, portFlag, noBrowser, risky, homeFlag)
+			return run(cmd.Context(), cfgPath, bindFlag, portFlag, noBrowser, risky, homeFlag, tokenFlag)
 		},
 	}
 	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.claude-sentinel/config.yaml)")
@@ -49,10 +50,12 @@ func newRootCmd() *cobra.Command {
 	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "不自动打开浏览器")
 	cmd.Flags().BoolVar(&risky, "i-know-its-risky", false, "非 loopback 且无白名单时强制启动(危险)")
 	cmd.Flags().StringVar(&homeFlag, "home", "", "覆盖 home 目录(调试)")
+	// C-BUILD-1: 调试/测试用固定 token,覆盖随机 genToken()。生产场景应留空走随机。
+	cmd.Flags().StringVar(&tokenFlag, "token", "", "覆盖随机生成的 token(调试/测试用,生产场景留空)")
 	return cmd
 }
 
-func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser, risky bool, homeFlag string) error {
+func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser, risky bool, homeFlag, tokenFlag string) error {
 	if cfgPath == "" {
 		p, err := config.DefaultPath()
 		if err != nil {
@@ -96,7 +99,11 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	r.Register(security.NewDependencyDetector("", ""))
 	orch := &security.Orchestrator{Registry: r}
 
-	token := genToken()
+	// C-BUILD-1: --token 非空则用之(调试/测试),否则随机生成。
+	token := tokenFlag
+	if token == "" {
+		token = genToken()
+	}
 	srv := api.NewServer(eng, orch, cfg, token)
 	httpSrv := &http.Server{Handler: srv.Router()}
 
@@ -112,12 +119,26 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	if am.TunnelCmd != "" {
 		fmt.Printf("远程访问(SSH 隧道): %s\n", am.TunnelCmd)
 	}
+	// I-SEC-3: 仅在确有可解析白名单时提示"已启用";--i-know-its-risky 旁路空白名单时
+	// 明确警告无白名单,避免误导。
 	if !isLoopback(cfg.Bind) {
-		fmt.Println("⚠ bind 非 loopback,已启用 IP 白名单。请确认访问来源。")
+		if len(cfg.AllowedCIDRs) > 0 {
+			fmt.Println("⚠ bind 非 loopback,已启用 IP 白名单。请确认访问来源。")
+		} else {
+			fmt.Println("⚠ 无 IP 白名单 —— 所有网络均可访问,请确认访问来源。")
+		}
 	}
 	fmt.Println("==================================================")
 	if !noBrowser {
-		openBrowser(am.URL + "#token=" + token)
+		// I-SEC-5: 非 loopback 绑定不自动打开浏览器。token 经 URL fragment 传入,
+		// openBrowser 把含 token 的 URL 作为 argv 传给 xdg-open(多为 shell 脚本),
+		// 多用户主机上 ps aux | grep xdg-open 会泄露 token。loopback 为单用户工作站,
+		// 风险低,保留原行为。
+		if isLoopback(cfg.Bind) {
+			openBrowser(am.URL + "#token=" + token)
+		} else {
+			fmt.Printf("非 loopback 绑定未自动打开浏览器;请手动复制访问: %s#token=%s\n", am.URL, token)
+		}
 	}
 	httpSrv.Serve(ln)
 	return nil

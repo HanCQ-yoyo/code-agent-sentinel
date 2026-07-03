@@ -196,7 +196,13 @@ func scannerEvidence(stderr []byte, err error, exitCode int) string {
 // 偏差(brief 的 parseGovulncheck 引用了未定义的接收者 d 并附带无用的 IDName() 垫片):
 // 将检测器 ID 作为参数传入,删除 IDName() 垫片。经人工确认同意偏离。
 func parseGovulncheck(detectorID string, stdout []byte, a configengine.Asset) []Finding {
-	// govulncheck -json 输出多行 JSON;P1 简化:按行解析 finding 对象
+	// C-CORR-1: govulncheck -json 输出多行 NDJSON,4 类记录:
+	//   {"config":{...}}         —— 扫描配置,跳过
+	//   {"osv":{...object...}}   —— 完整 OSV 对象(id 在 .id),可交叉引用,跳过
+	//   {"finding":{"osv":"GO-...",...}}  —— 一个漏洞命中,产一条 finding
+	//   {"progress":{...}}       —— 进度,跳过
+	// 旧解析器期望顶层 {"osv":"<string>"}(不存在)→ 0 finding,govulncheck 后端
+	// 实为死代码。新解析器按 finding 记录的 .osv 字段产 finding。
 	var out []Finding
 	for _, line := range strings.Split(string(stdout), "\n") {
 		line = strings.TrimSpace(line)
@@ -204,21 +210,30 @@ func parseGovulncheck(detectorID string, stdout []byte, a configengine.Asset) []
 			continue
 		}
 		var obj struct {
-			OSV      string `json:"osv"`
-			Severity string `json:"severity"`
+			// 只取 finding 记录;config/osv-object/progress 记录此字段为空,自然跳过。
+			// (Trace/模块信息留待后续增强;P1 只需 OSV ID)
+			Finding struct {
+				OSV string `json:"osv"`
+			} `json:"finding"`
 		}
-		if json.Unmarshal([]byte(line), &obj) == nil && obj.OSV != "" {
-			out = append(out, Finding{
-				DetectorID:  detectorID,
-				RuleID:      "dep.govulncheck." + obj.OSV,
-				Severity:    SeverityHigh,
-				AssetID:     a.ID,
-				AssetType:   a.Type,
-				AssetName:   a.Name,
-				Message:     "Go 漏洞: " + obj.OSV,
-				Remediation: "升级依赖修复 " + obj.OSV,
-			})
+		if err := json.Unmarshal([]byte(line), &obj); err != nil {
+			continue
 		}
+		// 只处理 finding 记录;config/osv-object/progress 记录的 finding 字段为空,跳过。
+		if obj.Finding.OSV == "" {
+			continue
+		}
+		osvID := obj.Finding.OSV
+		out = append(out, Finding{
+			DetectorID:  detectorID,
+			RuleID:      "dep.govulncheck." + osvID,
+			Severity:    SeverityHigh, // P1 固定 High;精确 severity 交叉引用 OSV 对象属后续优化
+			AssetID:     a.ID,
+			AssetType:   a.Type,
+			AssetName:   a.Name,
+			Message:     "Go 漏洞: " + osvID,
+			Remediation: "升级依赖修复 " + osvID,
+		})
 	}
 	return out
 }
