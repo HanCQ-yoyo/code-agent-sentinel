@@ -19,4 +19,6 @@ run: build
 	./bin/sentinel
 
 clean:
-	rm -rf bin web/dist
+	rm -rf bin web/dist internal/api/web_dist/assets
+	@# 恢复 embed 所需的 index.html 占位符(make web 会整体替换 web_dist)
+	@printf '<!-- placeholder; run make web -->\n' > internal/api/web_dist/index.html

@@ -14,8 +14,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -226,3 +226,5 @@ bin/
 web/dist/
 web/node_modules/
 *.coverprofile
+# make web 产出的前端构建块;仅保留 index.html 占位符
+internal/api/web_dist/assets/
