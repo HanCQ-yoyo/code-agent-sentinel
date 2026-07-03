@@ -22,6 +22,12 @@ func ValidateBindPolicy(cfg *config.Config, overrideRisky bool) error {
 	if len(cfg.AllowedCIDRs) == 0 && !overrideRisky {
 		return fmt.Errorf("bind=%s 非 loopback 但 allowed_cidrs 为空;出于安全拒绝启动。如确需暴露,请设置 allowed_cidrs 或加 --i-know-its-risky", cfg.Bind)
 	}
+	// I-SEC-2: fail-closed。若 allowed_cidrs 非空但全部无法解析,parseCIDRs 返回
+	// 空 → clientIPGuard 早期 c.Next() → 允许所有流量,白名单形同虚设。启动时校验:
+	// 至少一个可解析,否则拒绝启动。
+	if len(cfg.AllowedCIDRs) > 0 && len(parseCIDRs(cfg.AllowedCIDRs)) == 0 {
+		return fmt.Errorf("bind=%s 的 allowed_cidrs 全部无法解析(%v);拒绝启动以避免白名单失效后放行所有流量", cfg.Bind, cfg.AllowedCIDRs)
+	}
 	return nil
 }
 
