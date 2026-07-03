@@ -118,3 +118,33 @@ func TestSecretDetectorScannerErrorSurfaced(t *testing.T) {
 		t.Errorf("expected evidence to contain stderr text, got %q", f.Evidence)
 	}
 }
+
+// TestSecretDetectorAttributionFirstWinsSharedSourcePath 验证 I-CORR-2:
+// parseSettings 对同一 settings.json 产出 settings + permissions + N hook
+// 共享 SourcePath。密钥归因应给首个(settings = 文件属主),而非最后一个 hook
+// (last-wins 旧逻辑:任意且误导)。first-wins 与依赖检测器的"首个资产"归因一致,
+// 且避免按派生视图数(settings/permissions/hooks)重复发 finding 抬高分数。
+func TestSecretDetectorAttributionFirstWinsSharedSourcePath(t *testing.T) {
+	dir := t.TempDir()
+	settingsFile := filepath.Join(dir, "settings.json")
+	os.WriteFile(settingsFile, []byte("x"), 0o644)
+	// fake gitleaks:报告该 settings.json 含密钥(File 用 basename)。
+	script := filepath.Join(dir, "fake_gl")
+	os.WriteFile(script, []byte("#!/bin/sh\necho '[{\"RuleID\":\"k\",\"Secret\":\"sk\",\"File\":\"settings.json\",\"StartLine\":1}]'\n"), 0o755)
+	d := NewSecretDetector(script)
+
+	// 模拟 parseSettings 的产出顺序:settings 在前,hook 在后,共享 SourcePath。
+	settings := configengine.Asset{ID: "settings-id", Type: configengine.AssetSettings, Name: "settings", SourcePath: settingsFile}
+	perm := configengine.Asset{ID: "perm-id", Type: configengine.AssetPermissions, Name: "permissions", SourcePath: settingsFile}
+	hook := configengine.Asset{ID: "hook-id", Type: configengine.AssetHook, Name: "PreToolUse/*", SourcePath: settingsFile}
+	findings, err := d.Scan(context.Background(), []configengine.Asset{settings, perm, hook})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(findings) != 1 {
+		t.Fatalf("期望 1 条 finding(同 SourcePath 去重),实际 %d: %+v", len(findings), findings)
+	}
+	if findings[0].AssetID != "settings-id" {
+		t.Errorf("密钥应归因 settings 资产(文件属主),实际 AssetID=%s", findings[0].AssetID)
+	}
+}

@@ -43,10 +43,19 @@ func (d *SecretDetector) Scan(ctx context.Context, assets []configengine.Asset) 
 	if !d.Available() {
 		return nil, nil
 	}
-	// 收集要扫的源文件路径(去重)
+	// 收集要扫的源文件路径(去重)。
+	// I-CORR-2:first-wins 而非 last-wins。parseSettings 对同一 settings.json
+	// 产出 settings + permissions + N hook,全部共享 SourcePath;旧 last-wins
+	// 把文件级密钥归因给最后一个 hook(任意且误导),文件属主 settings 反而空白。
+	// first-wins:parseSettings 先发 settings,故密钥归因文件属主——确定且合理。
+	// 不改为"归因全部共享资产":那会按 hook 数重复发 finding、抬高分数,已被否决。
+	// 与依赖检测器 auditDir 的"首个资产"归因(同目录只扫一次、归首个资产)一致。
 	paths := map[string]configengine.Asset{}
 	for _, a := range assets {
-		if a.SourcePath != "" {
+		if a.SourcePath == "" {
+			continue
+		}
+		if _, ok := paths[a.SourcePath]; !ok {
 			paths[a.SourcePath] = a
 		}
 	}
