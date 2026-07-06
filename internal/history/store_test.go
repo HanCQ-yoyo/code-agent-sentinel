@@ -110,3 +110,46 @@ func TestSameSecondNoConflict(t *testing.T) {
 		t.Fatalf("同秒 3 条应全部保留,got %d", len(list))
 	}
 }
+
+func TestListSummaryFields(t *testing.T) {
+	s := NewStore(t.TempDir())
+	rec := ScanRecord{
+		ID:        "2026-07-06-14-30-05-a1b2c3d4",
+		StartedAt: time.Date(2026, 7, 6, 14, 30, 5, 0, time.UTC),
+		Findings: []security.Finding{
+			{DetectorID: "baseline", RuleID: "r1", Severity: security.SeverityHigh, AssetID: "a1"},
+			{DetectorID: "secrets", RuleID: "r2", Severity: security.SeverityLow, AssetID: "a2"},
+		},
+		Detectors: []security.DetectorStatus{
+			{ID: "baseline", Available: true},
+			{ID: "secrets", Available: false, Reason: "gitleaks missing"},
+		},
+		HealthScore: &security.HealthScore{Score: 75, Band: "良"},
+	}
+	if err := s.Save(rec); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	list, err := s.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("应有 1 条,got %d", len(list))
+	}
+	sum := list[0]
+	if sum.FindingCount != 2 {
+		t.Errorf("FindingCount = %d, want 2", sum.FindingCount)
+	}
+	if sum.DetectorAvail != 1 {
+		t.Errorf("DetectorAvail = %d, want 1", sum.DetectorAvail)
+	}
+	if sum.DetectorTotal != 2 {
+		t.Errorf("DetectorTotal = %d, want 2", sum.DetectorTotal)
+	}
+	if sum.HealthScore != 75 {
+		t.Errorf("HealthScore = %d, want 75", sum.HealthScore)
+	}
+	if sum.Band != "良" {
+		t.Errorf("Band = %q, want \"良\"", sum.Band)
+	}
+}

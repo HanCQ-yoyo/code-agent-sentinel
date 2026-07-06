@@ -4,10 +4,10 @@ package history
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"time"
 )
 
@@ -79,7 +79,7 @@ func (s *Store) List() ([]ScanSummary, error) {
 	}
 	var out []ScanSummary
 	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != ".json" {
+		if e.IsDir() || filepath.Ext(e.Name()) != ".json" || strings.HasPrefix(e.Name(), "tmp-") {
 			continue
 		}
 		data, err := os.ReadFile(filepath.Join(s.dir, e.Name()))
@@ -146,10 +146,8 @@ func (s *Store) Delete(id string) error {
 	return err
 }
 
-// formatID 生成 "<时间戳>-<8hex>" 形式的 ID,供调用方用(避免 main.go 重复实现)。
+// formatID 生成 "<时间戳>-<8hex>" 形式的 ID(内部辅助)。
 // 注意:测试中不要调用此函数(它依赖时间),用固定 ID。
 func formatID(t time.Time, rand8hex string) string {
 	return t.Format("2006-01-02-15-04-05") + "-" + rand8hex
 }
-
-var _ = fmt.Sprintf // 占位,避免 import fmt 在仅 formatID 未被调用时报 unused(实际被 handlers 用)
