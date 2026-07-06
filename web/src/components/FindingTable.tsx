@@ -1,27 +1,41 @@
-import type { Finding } from '../types'
+import { useState } from 'react'
+import type { Finding, Severity } from '../types'
+import clsx from 'clsx'
 
-// 静态类映射:Tailwind JIT 只扫描源码里的静态完整字符串来决定生成哪些类,
-// 动态拼接(如 `text-sev-${f.severity}`)的类名不会被生成 → 严重度列会无色。
-// 故用静态映射替换动态拼接,视觉设计保持不变(按 severity 上色)。
-const SEV_TEXT: Record<string, string> = {
-  critical: 'text-sev-critical',
-  high: 'text-sev-high',
-  medium: 'text-sev-medium',
-  low: 'text-sev-low',
-}
+const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低' }
+const order: Severity[] = ['critical', 'high', 'medium', 'low']
 
 export function FindingTable({ findings }: { findings: Finding[] }) {
+  const [sev, setSev] = useState<Severity | ''>('')
+  const list = !sev ? findings : findings.filter(f => f.severity === sev)
+  const sorted = [...list].sort((a, b) => order.indexOf(a.severity) - order.indexOf(b.severity))
+  if (findings.length === 0) return <div className="text-text-muted text-sm p-8 text-center">暂无发现 · 扫描后显示</div>
   return (
-    <table className="w-full text-sm">
-      <thead className="text-slate-400 text-left"><tr><th className="p-2">严重度</th><th>规则</th><th>资产</th><th>说明</th><th>修复</th></tr></thead>
-      <tbody>
-        {findings.map((f, i) => (
-          <tr key={i} className="border-t border-bg-border">
-            <td className={`p-2 font-mono ${SEV_TEXT[f.severity] ?? ''}`}>{f.severity}</td>
-            <td className="font-mono">{f.rule_id}</td><td>{f.asset_name}</td><td className="text-slate-400">{f.message}</td><td className="text-slate-500">{f.remediation}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        <button onClick={() => setSev('')} className={clsx('px-3 py-1 rounded-md text-sm border', !sev ? 'border-accent text-accent' : 'border-bg-border text-text-muted')}>全部 {findings.length}</button>
+        {order.map(s => {
+          const n = findings.filter(f => f.severity === s).length
+          return <button key={s} onClick={() => setSev(s)} className={clsx('px-3 py-1 rounded-md text-sm border', sev === s ? 'border-accent text-accent' : 'border-bg-border text-text-muted')}>{sevLabel[s]} {n}</button>
+        })}
+      </div>
+      <div className="bg-bg-card border border-bg-border rounded-xl overflow-hidden">
+        <table className="w-full text-sm">
+          <thead className="text-text-muted text-left border-b border-bg-border">
+            <tr><th className="p-2 w-16">级别</th><th>资产</th><th>规则</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            {sorted.map((f, i) => (
+              <tr key={i} data-testid="finding-row" className="border-b border-bg-border/50 align-top">
+                <td className="p-2"><span className="inline-block px-2 py-0.5 rounded text-xs" style={{ background: `var(--sev-${f.severity})`, color: '#fff' }}>{sevLabel[f.severity]}</span></td>
+                <td className="p-2"><div className="font-medium">{f.asset_name}</div><div className="text-xs text-text-dim font-mono-path">{f.asset_type}</div></td>
+                <td className="p-2 font-mono-path text-xs text-text-muted">{f.rule_id}</td>
+                <td className="p-2"><div>{f.message}</div>{f.evidence && <div className="text-xs text-text-dim font-mono-path mt-1 break-all">{f.evidence.slice(0, 120)}</div>}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   )
 }

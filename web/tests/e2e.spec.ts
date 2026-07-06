@@ -116,3 +116,11 @@ test('资产详情页显示字段与 hash', async ({ page }) => {
   await expect(page.getByTestId('asset-detail-name')).toBeVisible({ timeout: 10000 })
   await expect(page.getByText(/hash/i)).toBeVisible()
 })
+
+test('发现页扫描后展示 finding 行', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  await page.getByRole('button', { name: /重新扫描|扫描/ }).click()
+  await page.getByRole('link', { name: /发现/i }).click()
+  // fixture 含 Bash(*) → 至少一条 finding
+  await expect(page.locator('[data-testid="finding-row"]').first()).toBeVisible({ timeout: 15000 })
+})
