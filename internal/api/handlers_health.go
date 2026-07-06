@@ -9,14 +9,15 @@ import (
 )
 
 func (s *Server) getFindings(c *gin.Context) {
-	if s.lastResult == nil {
+	latest := s.latestScan()
+	if latest == nil {
 		c.JSON(http.StatusOK, []security.Finding{})
 		return
 	}
 	sev := security.Severity(c.Query("severity"))
 	asset := c.Query("asset")
 	var out []security.Finding
-	for _, f := range s.lastResult.Findings {
+	for _, f := range latest.Findings {
 		if (sev == "" || f.Severity == sev) && (asset == "" || f.AssetID == asset) {
 			out = append(out, f)
 		}
@@ -25,10 +26,11 @@ func (s *Server) getFindings(c *gin.Context) {
 }
 
 func (s *Server) getHealth(c *gin.Context) {
-	if s.lastResult == nil || s.lastResult.HealthScore == nil {
+	latest := s.latestScan()
+	if latest == nil || latest.HealthScore == nil {
 		inv, _ := s.Engine.Discover()
 		c.JSON(http.StatusOK, security.ComputeHealth(inv.Assets, nil))
 		return
 	}
-	c.JSON(http.StatusOK, s.lastResult.HealthScore)
+	c.JSON(http.StatusOK, latest.HealthScore)
 }

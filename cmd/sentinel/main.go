@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 
@@ -18,6 +19,7 @@ import (
 	"code-agent-sentinel/internal/api"
 	"code-agent-sentinel/internal/config"
 	"code-agent-sentinel/internal/configengine"
+	"code-agent-sentinel/internal/history"
 	"code-agent-sentinel/internal/security"
 )
 
@@ -104,7 +106,9 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	if token == "" {
 		token = genToken()
 	}
-	srv := api.NewServer(eng, orch, cfg, token)
+	histPath := filepath.Join(home, ".claude-sentinel", "history")
+	hist := history.NewStore(histPath)
+	srv := api.NewServer(eng, orch, cfg, token, hist)
 	httpSrv := &http.Server{Handler: srv.Router()}
 
 	ln, err := net.Listen("tcp", api.ResolveListenAddr(cfg))

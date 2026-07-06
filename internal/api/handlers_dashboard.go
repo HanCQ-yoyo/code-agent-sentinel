@@ -20,7 +20,7 @@ func (s *Server) getDashboard(c *gin.Context) {
 		"asset_counts": counts,
 		"duplicates":   inv.Duplicates,
 		"detectors":    s.detectorStatuses(),
-		"last_scan":    s.lastResult,
+		"last_scan":    s.latestScan(),
 	}
 	c.JSON(http.StatusOK, dash)
 }
