@@ -30,6 +30,13 @@ func (e *Engine) discoverProject(inv *Inventory) {
 		}
 	}
 
+	// ~/.claude.json 的 projects[path].mcpServers(项目 scope)。
+	// 与上面 .mcp.json 互补:.mcp.json 是项目本地提交的,.claude.json 是机器管理文件里
+	// 按项目记录的。两者都读,IDs 因 source_path 不同而不同。
+	if a, _ := parseClaudeJSONProjectMCP(e.ClaudeJSON, e.Project.Path, ScopeProject); a != nil {
+		inv.Assets = append(inv.Assets, a...)
+	}
+
 	// memory:项目 .claude/CLAUDE.md + memory/ 目录。
 	if mem, _ := parseMemory(d, ScopeProject); mem != nil {
 		inv.Assets = append(inv.Assets, mem...)

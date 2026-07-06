@@ -26,3 +26,28 @@ func parseClaudeJSONMCP(path string, scope Scope) ([]Asset, error) {
 	}
 	return mcpAssets(doc.MCPServers, path, scope), nil
 }
+
+// parseClaudeJSONProjectMCP 解析 ~/.claude.json 的 projects[projectPath].mcpServers
+// (project scope)。文件不存在/无该 project/无 mcpServers 返回 nil(不致错)。
+// 损坏文件返回一条带 parse_error 的占位资产。
+func parseClaudeJSONProjectMCP(path string, projectPath string, scope Scope) ([]Asset, error) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil, nil // 文件可能不存在,不算错误
+	}
+	var doc struct {
+		Projects map[string]struct {
+			MCPServers map[string]mcpEntry `json:"mcpServers"`
+		} `json:"projects"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		a := Asset{Type: AssetMCPServer, Scope: scope, SourcePath: path, Name: ".claude.json", ParseError: err.Error()}
+		fillHash(&a)
+		return []Asset{a}, nil
+	}
+	proj, ok := doc.Projects[projectPath]
+	if !ok {
+		return nil, nil
+	}
+	return mcpAssets(proj.MCPServers, path, scope), nil
+}
