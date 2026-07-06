@@ -23,6 +23,24 @@ func (d *BaselineDetector) Covers() []configengine.AssetType {
 func (d *BaselineDetector) Available() bool { return true }
 func (d *BaselineDetector) Reason() string  { return "" }
 
+func (d *BaselineDetector) Meta() DetectorMeta {
+	rules := make([]RuleInfo, 0, len(d.rules))
+	for _, r := range d.rules {
+		rules = append(rules, RuleInfo{ID: r.ID, Severity: string(r.Severity), Description: r.Description})
+	}
+	covers := make([]string, 0, len(d.Covers()))
+	for _, c := range d.Covers() {
+		covers = append(covers, string(c))
+	}
+	return DetectorMeta{
+		ID:      d.ID(),
+		Name:    "基线检测",
+		Engines: []EngineInfo{{Name: "内嵌 YAML 规则引擎", Kind: "embedded", Available: true}},
+		Rules:   rules,
+		Covers:  covers,
+	}
+}
+
 func (d *BaselineDetector) Scan(ctx context.Context, assets []configengine.Asset) ([]Finding, error) {
 	var out []Finding
 	for _, a := range assets {
