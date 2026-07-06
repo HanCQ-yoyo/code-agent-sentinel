@@ -3,6 +3,7 @@ import Dashboard from './pages/Dashboard'
 import Assets from './pages/Assets'
 import Findings from './pages/Findings'
 import Settings from './pages/Settings'
+import AssetDetail from './components/AssetDetail'
 import { AuthGate } from './components/AuthGate'
 import { Sidebar } from './components/Sidebar'
 import { TopBar } from './components/TopBar'
@@ -31,7 +32,7 @@ export default function App() {
               <Route path="/" element={<Dashboard />} />
               <Route path="/dashboard" element={<Dashboard />} />
               <Route path="/assets" element={<Assets />} />
-              {/* Task 10 将添加 /assets/:id -> <AssetDetail /> */}
+              <Route path="/assets/:id" element={<AssetDetail />} />
               <Route path="/findings" element={<Findings />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<div className="text-text-muted">页面不存在</div>} />

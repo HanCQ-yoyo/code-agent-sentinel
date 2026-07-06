@@ -108,3 +108,11 @@ test('资产页点击行进入详情', async ({ page }) => {
   await page.locator('[data-testid="asset-row"]').first().click()
   await expect(page).toHaveURL(/\/assets\//)
 })
+
+test('资产详情页显示字段与 hash', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  await page.getByRole('link', { name: /资产/i }).click()
+  await page.locator('[data-testid="asset-row"]').first().click()
+  await expect(page.getByTestId('asset-detail-name')).toBeVisible({ timeout: 10000 })
+  await expect(page.getByText(/hash/i)).toBeVisible()
+})
