@@ -5,14 +5,11 @@ import { SeverityChart } from '../components/SeverityChart'
 import { DetectorStatusList } from '../components/DetectorStatus'
 
 export default function Dashboard() {
-  const { scan, detectors, runScan, fetchDetectors, loading, error } = useStore()
+  // 扫描触发与标题现由 TopBar 统一承载(Task 7),本页只保留数据展示与错误提示。
+  const { scan, detectors, fetchDetectors, error } = useStore()
   useEffect(() => { fetchDetectors() }, [fetchDetectors])
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-xl">态势看板</h1>
-        <button onClick={() => runScan()} disabled={loading} className="px-4 py-2 bg-bg-border rounded">{loading ? '扫描中…' : '重新扫描'}</button>
-      </div>
       {error && (
         <div className="border border-sev-critical text-sev-critical bg-bg-card rounded-lg p-3 text-sm break-all">
           扫描失败:{error}

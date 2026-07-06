@@ -6,9 +6,8 @@ export default function Settings() {
   useEffect(() => { fetchDetectors() }, [fetchDetectors])
   return (
     <div className="space-y-4">
-      <h1 className="text-xl">设置(只读)</h1>
+      <p className="text-text-muted text-sm">只读模式 · 规则版本:P1 内置基线/注入规则集(embedded)</p>
       <DetectorStatusList list={detectors} />
-      <div className="text-slate-500 text-sm">规则版本:P1 内置基线/注入规则集(embedded)</div>
     </div>
   )
 }

@@ -1,27 +1,43 @@
-import { Routes, Route, NavLink } from 'react-router-dom'
+import { Routes, Route, useLocation } from 'react-router-dom'
 import Dashboard from './pages/Dashboard'
 import Assets from './pages/Assets'
 import Findings from './pages/Findings'
 import Settings from './pages/Settings'
 import { AuthGate } from './components/AuthGate'
+import { Sidebar } from './components/Sidebar'
+import { TopBar } from './components/TopBar'
+import { useStore } from './store'
+
+const titles: Record<string, string> = {
+  '/': '态势看板',
+  '/dashboard': '态势看板',
+  '/assets': '资产浏览',
+  '/findings': '安全发现',
+  '/settings': '设置',
+}
 
 export default function App() {
+  const { runScan, loading, detectors } = useStore()
+  const loc = useLocation()
+  const title = titles[loc.pathname] ?? 'Sentinel'
   return (
     <AuthGate>
-      <div className="min-h-screen flex">
-        <nav className="w-48 bg-bg-card border-r border-bg-border p-4 space-y-2">
-          {['dashboard','assets','findings','settings'].map(p => (
-            <NavLink key={p} to={`/${p}`} className={({isActive}) => `block px-3 py-2 rounded ${isActive ? 'bg-bg-border' : ''}`}>{p}</NavLink>
-          ))}
-        </nav>
-        <main className="flex-1 p-6"><Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/dashboard" element={<Dashboard />} />
-          <Route path="/assets" element={<Assets />} />
-          <Route path="/findings" element={<Findings />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="*" element={<div className="text-slate-400">P1 骨架就绪</div>} />
-        </Routes></main>
+      <div className="min-h-screen flex flex-col">
+        <TopBar title={title} onScan={() => runScan()} loading={loading} detectors={detectors} />
+        <div className="flex flex-1 min-h-0">
+          <Sidebar />
+          <main className="flex-1 overflow-auto p-6">
+            <Routes>
+              <Route path="/" element={<Dashboard />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/assets" element={<Assets />} />
+              {/* Task 10 将添加 /assets/:id -> <AssetDetail /> */}
+              <Route path="/findings" element={<Findings />} />
+              <Route path="/settings" element={<Settings />} />
+              <Route path="*" element={<div className="text-text-muted">页面不存在</div>} />
+            </Routes>
+          </main>
+        </div>
       </div>
     </AuthGate>
   )

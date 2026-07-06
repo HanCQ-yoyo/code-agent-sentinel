@@ -35,9 +35,10 @@ test('导航后重新扫描不丢 token(问题 3 回归)', async ({ page }) => {
   await expect(page.getByText('态势看板')).toBeVisible()
 
   // 导航到 /assets(会触发 React Router pushState,丢 #token fragment)
-  await page.getByRole('link', { name: /assets/i }).click()
+  // Task 7 起 Sidebar 用中文标签,链接可访问名 = 链接文本(资产/看板)
+  await page.getByRole('link', { name: /资产/i }).click()
   // 再导航回 /dashboard
-  await page.getByRole('link', { name: /dashboard/i }).click()
+  await page.getByRole('link', { name: /看板/i }).click()
 
   // 重新扫描 —— 旧行为会 401,修复后应成功
   await page.getByRole('button', { name: /重新扫描|扫描/ }).click()
@@ -65,4 +66,15 @@ test('主题切换并持久化', async ({ page }) => {
   expect(before).not.toBeNull()
   expect(after).not.toBeNull()
   expect(before).not.toBe(after)
+})
+
+test('侧栏导航含 4 项且 active 高亮', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  const nav = page.getByRole('navigation')
+  await expect(nav.getByRole('link', { name: /看板/i })).toBeVisible()
+  await expect(nav.getByRole('link', { name: /资产/i })).toBeVisible()
+  await expect(nav.getByRole('link', { name: /发现/i })).toBeVisible()
+  await expect(nav.getByRole('link', { name: /设置/i })).toBeVisible()
+  await nav.getByRole('link', { name: /资产/i }).click()
+  await expect(page).toHaveURL(/\/assets/)
 })
