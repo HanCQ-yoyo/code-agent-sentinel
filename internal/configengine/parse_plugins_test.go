@@ -63,9 +63,13 @@ func TestParsePluginsVersionLayout(t *testing.T) {
 	}
 	// 验证 plugin 资产 Fields
 	var sp Asset
+	var rl Asset
 	for _, p := range plugins {
-		if p.Name == "superpowers" {
+		switch p.Name {
+		case "superpowers":
 			sp = p
+		case "ralph-loop":
+			rl = p
 		}
 	}
 	if sp.Name == "" {
@@ -76,6 +80,14 @@ func TestParsePluginsVersionLayout(t *testing.T) {
 	}
 	if sp.Fields["marketplace"] != "claude-plugins-official" {
 		t.Fatalf("marketplace = %v, want claude-plugins-official", sp.Fields["marketplace"])
+	}
+	// 直接断言 ralph-loop 取的是 1.0.0 而非 0.9.0(len(skills)==3 只能证明去重,
+	// 不能证明选了高版本)。
+	if rl.Name == "" {
+		t.Fatal("ralph-loop plugin not found")
+	}
+	if rl.Fields["version"] != "1.0.0" {
+		t.Fatalf("ralph-loop version = %v, want 1.0.0", rl.Fields["version"])
 	}
 	// skill 是 plugin scope 且标注 plugin 名
 	for _, s := range skills {
@@ -97,5 +109,41 @@ func TestParsePluginsNoCache(t *testing.T) {
 	}
 	if got != nil {
 		t.Fatalf("got %+v, want nil", got)
+	}
+}
+
+// TestParsePluginsSkipsNoManifest 锁定 gopls-lsp 场景:真实插件 gopls-lsp 的
+// 版本目录下没有 .claude-plugin/plugin.json,pickHighestVersion 必须跳过。
+// 这里造两个版本目录:1.0.0 无清单(只放 README.md),0.9.0 有清单。期望只产
+// 1 个 plugin 资产,且取 0.9.0(证明 1.0.0 不是因为版本低被跳过,而是因为无清单)。
+func TestParsePluginsSkipsNoManifest(t *testing.T) {
+	f := newFixture(t)
+	// 1.0.0 版本目录存在但无 .claude-plugin/plugin.json
+	noManifestDir := filepath.Join(f.home, ".claude", "plugins", "cache",
+		"claude-plugins-official", "gopls-lsp", "1.0.0")
+	writeFile(t, filepath.Join(noManifestDir, "README.md"), "no manifest here")
+	// 0.9.0 版本目录带清单
+	makePluginFixture(t, f.home, "claude-plugins-official", "gopls-lsp", "0.9.0", []string{"gopls"})
+
+	got, err := parsePlugins(f.claude, ScopeGlobal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var plugins []Asset
+	for _, a := range got {
+		if a.Type == AssetPlugin {
+			plugins = append(plugins, a)
+		}
+	}
+	if len(plugins) != 1 {
+		t.Fatalf("plugins = %d, want 1 (no-manifest version dir should be skipped): %+v",
+			len(plugins), plugins)
+	}
+	if plugins[0].Name != "gopls-lsp" {
+		t.Fatalf("plugin name = %q, want gopls-lsp", plugins[0].Name)
+	}
+	// 取 0.9.0 而非无清单的 1.0.0 —— 证明跳过是因为无清单,不是因为版本低。
+	if plugins[0].Fields["version"] != "0.9.0" {
+		t.Fatalf("version = %v, want 0.9.0", plugins[0].Fields["version"])
 	}
 }
