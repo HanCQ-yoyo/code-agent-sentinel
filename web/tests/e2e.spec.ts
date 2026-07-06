@@ -29,3 +29,26 @@ test('dashboard 带 token 认证后扫描并返回数据依赖结果', async ({ 
 // 说明:本 e2e 通过 --token 标志使用已知 token,无需从 server stdout 提取。
 // 注意:--token 标志由后端 fixer 在另一 worktree 添加,合并前本 worktree 无法运行
 // (sentinel 会因未知标志报错)。e2e 执行延后到两 worktree 合并后验证。
+
+test('导航后重新扫描不丢 token(问题 3 回归)', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  await expect(page.getByText('态势看板')).toBeVisible()
+
+  // 导航到 /assets(会触发 React Router pushState,丢 #token fragment)
+  await page.getByRole('link', { name: /assets/i }).click()
+  // 再导航回 /dashboard
+  await page.getByRole('link', { name: /dashboard/i }).click()
+
+  // 重新扫描 —— 旧行为会 401,修复后应成功
+  await page.getByRole('button', { name: /重新扫描|扫描/ }).click()
+  const score = page.getByTestId('health-score-value')
+  await expect(score).not.toHaveText('--', { timeout: 15000 })
+  // 确认无 401 错误显示
+  await expect(page.getByText(/401|unauthorized|missing or invalid token/i)).toHaveCount(0)
+})
+
+test('无 token 显示认证门', async ({ page }) => {
+  await page.goto('/')
+  // AuthGate 渲染:标题"需要访问 token"可见即认证门已显示
+  await expect(page.getByRole('heading', { name: /需要访问 token/i })).toBeVisible({ timeout: 5000 })
+})
