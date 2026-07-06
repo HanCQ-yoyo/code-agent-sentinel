@@ -92,3 +92,19 @@ test('侧栏导航含 4 项且 active 高亮', async ({ page }) => {
   await nav.getByRole('link', { name: /资产/i }).click()
   await expect(page).toHaveURL(/\/assets/)
 })
+
+test('资产页显示资产且可筛选类型', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  await page.getByRole('link', { name: /资产/i }).click()
+  // 应有资产行(至少 settings 一条)
+  await expect(page.locator('[data-testid="asset-row"]').first()).toBeVisible({ timeout: 10000 })
+  // 类型筛选按钮存在
+  await expect(page.getByRole('button', { name: /全部/i })).toBeVisible()
+})
+
+test('资产页点击行进入详情', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  await page.getByRole('link', { name: /资产/i }).click()
+  await page.locator('[data-testid="asset-row"]').first().click()
+  await expect(page).toHaveURL(/\/assets\//)
+})
