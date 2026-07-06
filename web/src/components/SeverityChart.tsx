@@ -1,35 +1,32 @@
-import type { Finding } from '../types'
+import type { Finding, Severity } from '../types'
 
-// Tailwind JIT 只扫描源码里的静态完整字符串来决定生成哪些类名,
-// 动态拼接的 `bg-sev-${s}` / `text-sev-${s}` 不会被生成 → 条形和图例会无色。
-// 故用静态类映射替换动态拼接,视觉设计保持不变。
-const SEV_BG: Record<string, string> = {
-  critical: 'bg-sev-critical',
-  high: 'bg-sev-high',
-  medium: 'bg-sev-medium',
-  low: 'bg-sev-low',
-}
-const SEV_TEXT: Record<string, string> = {
-  critical: 'text-sev-critical',
-  high: 'text-sev-high',
-  medium: 'text-sev-medium',
-  low: 'text-sev-low',
-}
+const order: Severity[] = ['critical', 'high', 'medium', 'low']
+const labels: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低' }
 
 export function SeverityChart({ findings }: { findings: Finding[] }) {
-  const counts = { critical: 0, high: 0, medium: 0, low: 0 } as Record<string, number>
-  for (const f of findings) counts[f.severity] = (counts[f.severity] ?? 0) + 1
+  const counts = order.reduce((acc, s) => {
+    acc[s] = findings.filter(f => f.severity === s).length
+    return acc
+  }, {} as Record<Severity, number>)
   const total = findings.length || 1
   return (
-    <div className="bg-bg-card border border-bg-border rounded-lg p-4">
-      <div className="text-sm text-slate-400 mb-2">风险摘要</div>
-      <div className="flex h-6 rounded overflow-hidden">
-        {['critical','high','medium','low'].map(s => (
-          <div key={s} className={SEV_BG[s]} style={{ width: `${(counts[s]/total)*100}%` }} title={`${s}: ${counts[s]}`} />
+    <div className="bg-bg-card border border-bg-border rounded-xl p-5">
+      <div className="text-sm text-text-muted mb-3">严重度分布</div>
+      <div className="space-y-2">
+        {order.map(s => (
+          <div key={s} className="flex items-center gap-3">
+            <span className="w-10 text-sm text-text">{labels[s]}</span>
+            <div className="flex-1 h-6 rounded bg-bg-border overflow-hidden">
+              {/* sev 色仅作色条填充(标记色,非文本),配标签读取。 */}
+              <div
+                data-testid={`severity-${s}`}
+                className="h-full"
+                style={{ width: `${(counts[s] / total) * 100}%`, background: `var(--sev-${s})`, minWidth: counts[s] > 0 ? '8px' : 0 }}
+              />
+            </div>
+            <span className="w-8 text-right text-sm tabular-nums text-text">{counts[s]}</span>
+          </div>
         ))}
-      </div>
-      <div className="flex gap-4 mt-2 text-xs">
-        {['critical','high','medium','low'].map(s => <span key={s} className={SEV_TEXT[s]}>{s}: {counts[s]}</span>)}
       </div>
     </div>
   )

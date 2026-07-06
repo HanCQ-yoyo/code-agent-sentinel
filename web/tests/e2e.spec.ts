@@ -68,6 +68,20 @@ test('主题切换并持久化', async ({ page }) => {
   expect(before).not.toBe(after)
 })
 
+test('看板扫描后显示健康分与严重度分布', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  await page.getByRole('button', { name: /重新扫描|扫描/ }).click()
+  await expect(page.getByTestId('health-score-value')).not.toHaveText('--', { timeout: 15000 })
+  // 4 个严重度行(critical/high/medium/low)均渲染出 severity-{s} testid
+  await expect(
+    page
+      .getByTestId('severity-critical')
+      .or(page.getByTestId('severity-high'))
+      .or(page.getByTestId('severity-medium'))
+      .or(page.getByTestId('severity-low'))
+  ).toHaveCount(4)
+})
+
 test('侧栏导航含 4 项且 active 高亮', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
   const nav = page.getByRole('navigation')
