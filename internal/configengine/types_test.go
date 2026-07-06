@@ -33,3 +33,18 @@ func TestAssetIDStable(t *testing.T) {
 		t.Fatal("ID 不稳定")
 	}
 }
+
+func TestScopePluginConstant(t *testing.T) {
+	// ScopePlugin 用于插件下钻资产,Filter 须能按之过滤。
+	if ScopePlugin != "plugin" {
+		t.Fatalf("ScopePlugin = %q, want %q", ScopePlugin, "plugin")
+	}
+	inv := Inventory{Assets: []Asset{
+		{Type: AssetSkill, Scope: ScopePlugin, Name: "brainstorming"},
+		{Type: AssetSkill, Scope: ScopeGlobal, Name: "global-skill"},
+	}}
+	got := inv.Filter("", ScopePlugin)
+	if len(got) != 1 || got[0].Name != "brainstorming" {
+		t.Fatalf("Filter ScopePlugin = %+v, want only brainstorming", got)
+	}
+}

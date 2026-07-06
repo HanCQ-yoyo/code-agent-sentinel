@@ -13,6 +13,7 @@ const (
 	ScopeGlobal  Scope = "global"
 	ScopeProject Scope = "project"
 	ScopeManaged Scope = "managed"
+	ScopePlugin  Scope = "plugin" // 插件下钻资产(skills/commands/agents/hooks 打包在插件内)
 )
 
 type AssetType string
