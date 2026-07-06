@@ -25,7 +25,9 @@ export function FindingTable({ findings }: { findings: Finding[] }) {
             <tr><th className="p-2 w-16">级别</th><th>资产</th><th>规则</th><th>说明</th></tr>
           </thead>
           <tbody>
-            {sorted.map((f, i) => (
+            {sorted.length === 0 ? (
+              <tr><td colSpan={4} className="p-8 text-center text-text-muted text-sm">无该级别发现</td></tr>
+            ) : sorted.map((f, i) => (
               <tr key={i} data-testid="finding-row" className="border-b border-bg-border/50 align-top">
                 <td className="p-2"><span className="inline-block px-2 py-0.5 rounded text-xs" style={{ background: `var(--sev-${f.severity})`, color: '#fff' }}>{sevLabel[f.severity]}</span></td>
                 <td className="p-2"><div className="font-medium">{f.asset_name}</div><div className="text-xs text-text-dim font-mono-path">{f.asset_type}</div></td>

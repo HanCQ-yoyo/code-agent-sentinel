@@ -23,7 +23,9 @@ export function getAuthToken(): string {
 }
 
 export function clearAuthToken(): void {
-  cachedToken = ''
+  // 置 null(而非 ''):让 getAuthToken 下次调用重新 captureToken(),
+  // 以便用户带新的 #token= 再访问时能重新捕获,不再卡在 AuthGate。
+  cachedToken = null
   sessionStorage.removeItem(TOKEN_KEY)
 }
 

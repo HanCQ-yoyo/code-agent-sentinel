@@ -28,7 +28,7 @@ export function TopBar({ title, onScan, loading, detectors }: Props) {
         <button
           onClick={onScan}
           disabled={loading}
-          className="px-4 py-1.5 rounded-md bg-accent text-white text-sm disabled:opacity-50"
+          className="px-4 py-1.5 rounded-md bg-accent text-white text-sm font-semibold disabled:opacity-50"
         >
           {loading ? '扫描中…' : '↻ 重新扫描'}
         </button>
