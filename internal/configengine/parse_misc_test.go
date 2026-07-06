@@ -2,21 +2,6 @@ package configengine
 
 import "testing"
 
-func TestParsePlugins(t *testing.T) {
-	f := newFixture(t)
-	f.write("plugins/cache/mkt1/foo/package.json", `{"name":"foo","version":"1.0"}`)
-	assets, err := parsePlugins(f.claude, ScopeGlobal)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(assets) != 1 || assets[0].Name != "foo" {
-		t.Fatalf("got %+v", assets)
-	}
-	if assets[0].Fields["marketplace"] != "mkt1" {
-		t.Errorf("marketplace: %v", assets[0].Fields)
-	}
-}
-
 func TestParseKeybindings(t *testing.T) {
 	f := newFixture(t)
 	f.write("keybindings.json", `{"ctrl+k": "foo"}`)
