@@ -52,3 +52,17 @@ test('无 token 显示认证门', async ({ page }) => {
   // AuthGate 渲染:标题"需要访问 token"可见即认证门已显示
   await expect(page.getByRole('heading', { name: /需要访问 token/i })).toBeVisible({ timeout: 5000 })
 })
+
+test('主题切换并持久化', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  // 默认应有主题切换按钮
+  const toggle = page.getByRole('button', { name: /主题|theme/i })
+  await expect(toggle).toBeVisible()
+  // 切换后 data-theme 应变化
+  const before = await page.locator('html').getAttribute('data-theme')
+  await toggle.click()
+  const after = await page.locator('html').getAttribute('data-theme')
+  expect(before).not.toBeNull()
+  expect(after).not.toBeNull()
+  expect(before).not.toBe(after)
+})

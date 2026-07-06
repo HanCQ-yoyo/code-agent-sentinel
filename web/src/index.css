@@ -1,2 +1,67 @@
-@tailwind base; @tailwind components; @tailwind utilities;
-body { @apply bg-bg text-slate-200 font-mono; }
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * 双主题设计 token —— 色值取自 dataviz 技能的 references/palette.md
+ * (可验证默认色板)。status 严重度色按 dataviz 方法论为"固定不随主题变",
+ * 在浅色面上 warning/serious 低于 3:1 是设计意图,需配 icon+label 缓解
+ * (见 palette.md § Status palette)。中性面层级 / 墨色 / 网格线也均来自
+ * palette.md § Chart chrome & ink。
+ *
+ * 对比度(WCAG,text↔bg):
+ *   浅色: text 19.17 / muted 7.73 / dim 3.50(大字 AA) / accent 4.30(大字 AA)
+ *   深色: text 17.42 / muted 9.72 / dim 4.85 / accent 4.79
+ */
+
+/* 默认根(防 FOUC):无 data-theme 时回退到深色,与 inline 脚本配合 */
+:root {
+  --bg: #0d0d0d;
+  --bg-card: #1a1a19;
+  --bg-border: #2c2c2a;
+  --text: #ffffff;
+  --text-muted: #c3c2b7;
+  --text-dim: #898781;
+  --sev-critical: #d03b3b;
+  --sev-high: #ec835a;
+  --sev-medium: #fab219;
+  --sev-low: #0ca30c;
+  --accent: #3987e5;
+}
+
+:root[data-theme="dark"] {
+  --bg: #0d0d0d;          /* page plane (palette.md) */
+  --bg-card: #1a1a19;     /* chart surface */
+  --bg-border: #2c2c2a;   /* gridline hairline */
+  --text: #ffffff;        /* primary ink */
+  --text-muted: #c3c2b7;  /* secondary ink */
+  --text-dim: #898781;    /* muted (axis/labels) */
+  --sev-critical: #d03b3b;/* status: critical (固定) */
+  --sev-high: #ec835a;    /* status: serious  (固定) */
+  --sev-medium: #fab219;  /* status: warning  (固定) */
+  --sev-low: #0ca30c;     /* status: good     (固定) */
+  --accent: #3987e5;      /* categorical slot 1 blue (dark step) */
+}
+
+:root[data-theme="light"] {
+  --bg: #f9f9f7;          /* page plane */
+  --bg-card: #fcfcfb;     /* chart surface */
+  --bg-border: #e1e0d9;   /* gridline hairline */
+  --text: #0b0b0b;        /* primary ink */
+  --text-muted: #52514e;  /* secondary ink */
+  --text-dim: #898781;    /* muted (axis/labels) */
+  --sev-critical: #d03b3b;/* status: critical (固定) */
+  --sev-high: #ec835a;    /* status: serious  (固定) */
+  --sev-medium: #fab219;  /* status: warning  (固定) */
+  --sev-low: #0ca30c;     /* status: good     (固定) */
+  --accent: #2a78d6;      /* categorical slot 1 blue (light step) */
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+.font-mono-path {
+  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
+}
