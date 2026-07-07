@@ -1,33 +1,29 @@
+import { Card } from 'antd'
 import type { Finding, Severity } from '../types'
 
 const order: Severity[] = ['critical', 'high', 'medium', 'low']
-const labels: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低' }
+const label: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低' }
 
 export function SeverityChart({ findings }: { findings: Finding[] }) {
-  const counts = order.reduce((acc, s) => {
-    acc[s] = findings.filter(f => f.severity === s).length
-    return acc
-  }, {} as Record<Severity, number>)
+  const counts: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0 }
+  for (const f of findings) counts[f.severity] = (counts[f.severity] ?? 0) + 1
   const total = findings.length || 1
   return (
-    <div className="bg-bg-card border border-bg-border rounded-xl p-5">
-      <div className="text-sm text-text-muted mb-3">严重度分布</div>
-      <div className="space-y-2">
-        {order.map(s => (
-          <div key={s} className="flex items-center gap-3">
-            <span className="w-10 text-sm text-text">{labels[s]}</span>
-            <div className="flex-1 h-6 rounded bg-bg-border overflow-hidden">
-              {/* sev 色仅作色条填充(标记色,非文本),配标签读取。 */}
+    <Card title="严重度分布">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+        {order.map((s) => (
+          <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ width: 32, color: 'var(--text-muted)' }}>{label[s]}</span>
+            <div style={{ flex: 1, background: 'var(--bg-border)', borderRadius: 4, height: 12, overflow: 'hidden' }}>
               <div
                 data-testid={`severity-${s}`}
-                className="h-full"
-                style={{ width: `${(counts[s] / total) * 100}%`, background: `var(--sev-${s})`, minWidth: counts[s] > 0 ? '8px' : 0 }}
+                style={{ width: `${(counts[s] / total) * 100}%`, minWidth: counts[s] > 0 ? 8 : 0, height: '100%', background: `var(--sev-${s})` }}
               />
             </div>
-            <span className="w-8 text-right text-sm tabular-nums text-text">{counts[s]}</span>
+            <span style={{ width: 28, textAlign: 'right', color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>{counts[s]}</span>
           </div>
         ))}
       </div>
-    </div>
+    </Card>
   )
 }
