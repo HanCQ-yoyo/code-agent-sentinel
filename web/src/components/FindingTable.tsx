@@ -30,9 +30,9 @@ export function FindingTable({ findings }: { findings: Finding[] }) {
             ) : sorted.map((f, i) => (
               <tr key={i} data-testid="finding-row" className="border-b border-bg-border/50 align-top">
                 <td className="p-2"><span className="inline-block px-2 py-0.5 rounded text-xs" style={{ background: `var(--sev-${f.severity})`, color: '#fff' }}>{sevLabel[f.severity]}</span></td>
-                <td className="p-2"><div className="font-medium">{f.asset_name}</div><div className="text-xs text-text-dim font-mono-path">{f.asset_type}</div></td>
-                <td className="p-2 font-mono-path text-xs text-text-muted">{f.rule_id}</td>
-                <td className="p-2"><div>{f.message}</div>{f.evidence && <div className="text-xs text-text-dim font-mono-path mt-1 break-all">{f.evidence.slice(0, 120)}</div>}</td>
+                <td className="p-2"><div className="font-medium">{f.asset_name}</div><div className="text-xs text-text-dim font-mono">{f.asset_type}</div></td>
+                <td className="p-2 font-mono text-xs text-text-muted">{f.rule_id}</td>
+                <td className="p-2"><div>{f.message}</div>{f.evidence && <div className="text-xs text-text-dim font-mono mt-1 break-all">{f.evidence.slice(0, 120)}</div>}</td>
               </tr>
             ))}
           </tbody>

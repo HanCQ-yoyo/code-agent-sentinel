@@ -40,11 +40,11 @@ export function AssetTable({ assets, findings = [] }: { assets: Asset[]; finding
               onClick={() => nav(`/assets/${a.id}`)}
               className="border-b border-bg-border/50 hover:bg-bg-border/30 cursor-pointer"
             >
-              <td className={clsx('p-2 font-mono-path text-xs', typeColor[a.type] ?? 'text-text-muted')}>{a.type}</td>
+              <td className={clsx('p-2 font-mono text-xs', typeColor[a.type] ?? 'text-text-muted')}>{a.type}</td>
               <td className="p-2">{a.name}{a.parse_error && <span className="text-sev-critical ml-1">⚠</span>}</td>
               <td className="p-2 text-text-muted text-xs">{a.scope}</td>
               <td className="p-2">{sev && <span className="inline-block w-2 h-2 rounded-full" style={{ background: `var(--sev-${sev})` }} title={sev} />}</td>
-              <td className="p-2 text-text-dim text-xs font-mono-path truncate max-w-xs" title={a.source_path}>{a.source_path}</td>
+              <td className="p-2 text-text-dim text-xs font-mono truncate max-w-xs" title={a.source_path}>{a.source_path}</td>
             </tr>
           )
         })}
