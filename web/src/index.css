@@ -22,6 +22,8 @@
   --scope-project: #2E8B4A;
   --scope-managed: #C9742E;
   --scope-plugin: #6B3A8C;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
 /* D1 深色覆盖 */
@@ -44,12 +46,14 @@
   --scope-project: #2F5D3A;
   --scope-managed: #6B4A2D;
   --scope-plugin: #4A2D6B;
+  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: var(--font-sans);
 }
 
 /* 等宽工具类(供路径/ID/hash/时间/code 用) */
