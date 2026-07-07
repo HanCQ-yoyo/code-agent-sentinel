@@ -44,3 +44,4 @@ async function req(path: string, method = 'GET'): Promise<Response> {
 
 export const apiGet = <T>(p: string) => req(p).then(r => r.json() as Promise<T>)
 export const apiPost = <T>(p: string) => req(p, 'POST').then(r => r.json() as Promise<T>)
+export const apiDelete = (p: string) => req(p, 'DELETE').then(r => r.json() as Promise<unknown>)

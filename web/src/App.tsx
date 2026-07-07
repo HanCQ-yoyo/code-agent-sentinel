@@ -1,4 +1,5 @@
 import { Routes, Route, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
 import Dashboard from './pages/Dashboard'
 import Assets from './pages/Assets'
 import Findings from './pages/Findings'
@@ -18,9 +19,10 @@ const titles: Record<string, string> = {
 }
 
 export default function App() {
-  const { runScan, loading, detectors } = useStore()
+  const { runScan, loading, detectors, fetchLatestScan } = useStore()
   const loc = useLocation()
   const title = titles[loc.pathname] ?? 'Sentinel'
+  useEffect(() => { fetchLatestScan() }, [fetchLatestScan])
   return (
     <AuthGate>
       <div className="min-h-screen flex flex-col">
