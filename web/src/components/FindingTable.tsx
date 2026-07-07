@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import type { Finding, Severity } from '../types'
 import clsx from 'clsx'
+import { Badge, type BadgeTone } from './Badge'
 
 const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低' }
 const order: Severity[] = ['critical', 'high', 'medium', 'low']
@@ -29,7 +30,7 @@ export function FindingTable({ findings }: { findings: Finding[] }) {
               <tr><td colSpan={4} className="p-8 text-center text-text-muted text-sm">无该级别发现</td></tr>
             ) : sorted.map((f, i) => (
               <tr key={i} data-testid="finding-row" className="border-b border-bg-border/50 align-top">
-                <td className="p-2"><span className="inline-block px-2 py-0.5 rounded text-xs" style={{ background: `var(--sev-${f.severity})`, color: '#fff' }}>{sevLabel[f.severity]}</span></td>
+                <td className="p-2"><Badge tone={`sev-${f.severity}` as BadgeTone}>{sevLabel[f.severity]}</Badge></td>
                 <td className="p-2"><div className="font-medium">{f.asset_name}</div><div className="text-xs text-text-dim font-mono">{f.asset_type}</div></td>
                 <td className="p-2 font-mono text-xs text-text-muted">{f.rule_id}</td>
                 <td className="p-2"><div>{f.message}</div>{f.evidence && <div className="text-xs text-text-dim font-mono mt-1 break-all">{f.evidence.slice(0, 120)}</div>}</td>

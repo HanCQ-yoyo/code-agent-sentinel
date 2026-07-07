@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { apiGet } from '../api/client'
 import type { Asset } from '../types'
+import { Badge, type BadgeTone } from './Badge'
 
 export default function AssetDetail() {
   const { id } = useParams<{ id: string }>()
@@ -19,8 +20,8 @@ export default function AssetDetail() {
       <div className="bg-bg-card border border-bg-border rounded-xl p-5 space-y-3">
         <div className="flex items-baseline gap-3">
           <h2 className="text-base font-medium" data-testid="asset-detail-name">{asset.name}</h2>
-          <span className="font-mono text-xs text-text-muted">{asset.type}</span>
-          <span className="text-xs px-2 py-0.5 rounded bg-bg-border text-text-muted">{asset.scope}</span>
+          <Badge tone="neutral">{asset.type}</Badge>
+          <Badge tone={`scope-${asset.scope}` as BadgeTone}>{asset.scope}</Badge>
         </div>
         {asset.parse_error && (
           <div className="border border-sev-critical text-sev-critical rounded-md p-2 text-sm">解析错误:{asset.parse_error}</div>
