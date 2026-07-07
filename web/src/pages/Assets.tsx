@@ -1,10 +1,12 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import { useStore } from '../store'
 import { AssetTable } from '../components/AssetTable'
 
 export default function Assets() {
   const { assets, fetchAssets, scan, error } = useStore()
+  const nav = useNavigate()
   const [type, setType] = useState('')
   const [q, setQ] = useState('')
   useEffect(() => { fetchAssets() }, [fetchAssets])
@@ -32,7 +34,7 @@ export default function Assets() {
       </div>
       <div className="text-sm text-text-muted">{list.length} / {all.length} 资产</div>
       <div className="bg-bg-card border border-bg-border rounded-xl overflow-hidden">
-        <AssetTable assets={list} findings={scan?.findings} />
+        <AssetTable assets={list} findings={scan?.findings} onSelect={(id) => nav(`/assets/${id}`)} />
       </div>
     </div>
   )
