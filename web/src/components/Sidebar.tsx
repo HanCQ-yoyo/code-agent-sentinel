@@ -5,6 +5,7 @@ const items = [
   { to: '/dashboard', label: '看板', icon: '◆' },
   { to: '/assets', label: '资产', icon: '▦' },
   { to: '/findings', label: '发现', icon: '⚠' },
+  { to: '/history', label: '历史', icon: '◷' },
   { to: '/settings', label: '设置', icon: '⚙' },
 ]
 
