@@ -41,6 +41,10 @@
   --sev-medium: #fab219;  /* status: warning  (固定) */
   --sev-low: #0ca30c;     /* status: good     (固定) */
   --accent: #3987e5;      /* categorical slot 1 blue (dark step) */
+  --scope-global:  #2d4a6b;   /* 蓝(低饱和) */
+  --scope-project: #2f5d3a;   /* 绿 */
+  --scope-managed: #6b4a2d;   /* 橙 */
+  --scope-plugin:  #4a2d6b;   /* 紫 */
 }
 
 :root[data-theme="light"] {
@@ -55,13 +59,14 @@
   --sev-medium: #fab219;  /* status: warning  (固定) */
   --sev-low: #0ca30c;     /* status: good     (固定) */
   --accent: #2a78d6;      /* categorical slot 1 blue (light step) */
+  --scope-global:  #d8e4f0;
+  --scope-project: #d8eadc;
+  --scope-managed: #f0e2d4;
+  --scope-plugin:  #e2d8f0;
 }
 
 body {
   background: var(--bg);
   color: var(--text);
   font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
-}
-.font-mono-path {
-  font-family: ui-monospace, 'SFMono-Regular', Menlo, monospace;
 }

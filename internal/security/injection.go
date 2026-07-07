@@ -25,6 +25,24 @@ func (d *InjectionDetector) Covers() []configengine.AssetType {
 func (d *InjectionDetector) Available() bool { return true }
 func (d *InjectionDetector) Reason() string  { return "" }
 
+func (d *InjectionDetector) Meta() DetectorMeta {
+	rules := make([]RuleInfo, 0, len(d.rules))
+	for _, r := range d.rules {
+		rules = append(rules, RuleInfo{ID: r.ID, Severity: string(r.Severity), Description: r.Description})
+	}
+	covers := make([]string, 0, len(d.Covers()))
+	for _, c := range d.Covers() {
+		covers = append(covers, string(c))
+	}
+	return DetectorMeta{
+		ID:      d.ID(),
+		Name:    "提示注入检测",
+		Engines: []EngineInfo{{Name: "内嵌 YAML 引擎 + 反混淆(zero_width/html_comment/base64/leetspeak)", Kind: "embedded", Available: true}},
+		Rules:   rules,
+		Covers:  covers,
+	}
+}
+
 func (d *InjectionDetector) Scan(ctx context.Context, assets []configengine.Asset) ([]Finding, error) {
 	var out []Finding
 	for _, a := range assets {

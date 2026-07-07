@@ -11,6 +11,7 @@ import (
 
 	"code-agent-sentinel/internal/config"
 	"code-agent-sentinel/internal/configengine"
+	"code-agent-sentinel/internal/history"
 	"code-agent-sentinel/internal/security"
 )
 
@@ -19,11 +20,11 @@ type Server struct {
 	Orchestrator *security.Orchestrator
 	Config       *config.Config
 	Token        string
-	lastResult   *security.ScanResult
+	History      *history.Store
 }
 
-func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *config.Config, token string) *Server {
-	return &Server{Engine: eng, Orchestrator: orch, Config: cfg, Token: token}
+func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *config.Config, token string, hist *history.Store) *Server {
+	return &Server{Engine: eng, Orchestrator: orch, Config: cfg, Token: token, History: hist}
 }
 
 func (s *Server) Router() *gin.Engine {
@@ -93,6 +94,9 @@ func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	api.GET("/detectors", s.getDetectors)
 	api.GET("/project", s.getProject)
 	api.POST("/project", s.postProject)
+	api.GET("/history", s.getHistoryList)
+	api.GET("/history/:id", s.getHistoryDetail)
+	api.DELETE("/history/:id", s.deleteHistory)
 }
 
 func (s *Server) notImplemented(c *gin.Context) {

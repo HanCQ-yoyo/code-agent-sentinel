@@ -12,6 +12,7 @@ import (
 
 	"code-agent-sentinel/internal/config"
 	"code-agent-sentinel/internal/configengine"
+	"code-agent-sentinel/internal/history"
 	"code-agent-sentinel/internal/security"
 )
 
@@ -22,7 +23,8 @@ func newTestServer(t *testing.T, home string) *Server {
 	r := security.NewRegistry()
 	r.Register(security.NewBaselineDetector())
 	orch := &security.Orchestrator{Registry: r}
-	return NewServer(eng, orch, config.DefaultConfig(), "tok")
+	hist := history.NewStore(filepath.Join(home, "..", "history")) // 历史目录与 .claude 同级,在 home 之外
+	return NewServer(eng, orch, config.DefaultConfig(), "tok", hist)
 }
 
 func TestGetAssets(t *testing.T) {

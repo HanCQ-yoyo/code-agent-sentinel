@@ -41,6 +41,24 @@ func (d *DependencyDetector) Reason() string {
 	return "npm 与 govulncheck 均未找到(依赖扫描将跳过)"
 }
 
+func (d *DependencyDetector) Meta() DetectorMeta {
+	covers := make([]string, 0, len(d.Covers()))
+	for _, c := range d.Covers() {
+		covers = append(covers, string(c))
+	}
+	engines := []EngineInfo{
+		{Name: "npm audit", Kind: "subprocess", Available: commandExists(d.npmBin)},
+		{Name: "govulncheck", Kind: "subprocess", Available: commandExists(d.govulncheck)},
+	}
+	return DetectorMeta{
+		ID:      d.ID(),
+		Name:    "依赖检测",
+		Engines: engines,
+		Rules:   nil,
+		Covers:  covers,
+	}
+}
+
 type npmAudit struct {
 	Vulnerabilities map[string]struct {
 		Severity string `json:"severity"`

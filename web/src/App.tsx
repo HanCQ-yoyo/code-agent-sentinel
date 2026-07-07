@@ -1,7 +1,9 @@
 import { Routes, Route, useLocation } from 'react-router-dom'
+import { useEffect } from 'react'
 import Dashboard from './pages/Dashboard'
 import Assets from './pages/Assets'
 import Findings from './pages/Findings'
+import History from './pages/History'
 import Settings from './pages/Settings'
 import AssetDetail from './components/AssetDetail'
 import { AuthGate } from './components/AuthGate'
@@ -14,13 +16,15 @@ const titles: Record<string, string> = {
   '/dashboard': '态势看板',
   '/assets': '资产浏览',
   '/findings': '安全发现',
+  '/history': '历史扫描',
   '/settings': '设置',
 }
 
 export default function App() {
-  const { runScan, loading, detectors } = useStore()
+  const { runScan, loading, detectors, fetchLatestScan } = useStore()
   const loc = useLocation()
   const title = titles[loc.pathname] ?? 'Sentinel'
+  useEffect(() => { fetchLatestScan() }, [fetchLatestScan])
   return (
     <AuthGate>
       <div className="min-h-screen flex flex-col">
@@ -34,6 +38,8 @@ export default function App() {
               <Route path="/assets" element={<Assets />} />
               <Route path="/assets/:id" element={<AssetDetail />} />
               <Route path="/findings" element={<Findings />} />
+              <Route path="/history" element={<History />} />
+              <Route path="/history/:id" element={<History />} />
               <Route path="/settings" element={<Settings />} />
               <Route path="*" element={<div className="text-text-muted">页面不存在</div>} />
             </Routes>

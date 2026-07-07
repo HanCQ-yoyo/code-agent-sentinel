@@ -32,6 +32,16 @@ func (d *SecretDetector) Reason() string {
 	return "gitleaks 未在 PATH 中找到(密钥扫描将跳过)"
 }
 
+func (d *SecretDetector) Meta() DetectorMeta {
+	return DetectorMeta{
+		ID:      d.ID(),
+		Name:    "密钥检测",
+		Engines: []EngineInfo{{Name: "gitleaks", Kind: "subprocess", Available: d.Available(), Reason: d.Reason()}},
+		Rules:   nil, // 规则在 gitleaks 内置配置
+		Covers:  nil, // Covers() 返回 nil = 全部资产(按源文件路径)
+	}
+}
+
 type gitleaksFinding struct {
 	RuleID    string `json:"RuleID"`
 	Secret    string `json:"Secret"`
