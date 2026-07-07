@@ -146,8 +146,3 @@ func (s *Store) Delete(id string) error {
 	return err
 }
 
-// formatID 生成 "<时间戳>-<8hex>" 形式的 ID(内部辅助)。
-// 注意:测试中不要调用此函数(它依赖时间),用固定 ID。
-func formatID(t time.Time, rand8hex string) string {
-	return t.Format("2006-01-02-15-04-05") + "-" + rand8hex
-}
