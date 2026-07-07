@@ -1,36 +1,40 @@
-import { NavLink } from 'react-router-dom'
-import clsx from 'clsx'
+import { Layout, Menu } from 'antd'
+import {
+  DashboardOutlined,
+  AppstoreOutlined,
+  WarningOutlined,
+  ClockCircleOutlined,
+  SettingOutlined,
+} from '@ant-design/icons'
+import { useLocation, useNavigate } from 'react-router-dom'
+
+const { Sider } = Layout
 
 const items = [
-  { to: '/dashboard', label: '看板', icon: '◆' },
-  { to: '/assets', label: '资产', icon: '▦' },
-  { to: '/findings', label: '发现', icon: '⚠' },
-  { to: '/history', label: '历史', icon: '◷' },
-  { to: '/settings', label: '设置', icon: '⚙' },
+  { key: '/dashboard', icon: <DashboardOutlined />, label: '看板' },
+  { key: '/assets', icon: <AppstoreOutlined />, label: '资产' },
+  { key: '/findings', icon: <WarningOutlined />, label: '发现' },
+  { key: '/history', icon: <ClockCircleOutlined />, label: '历史' },
+  { key: '/settings', icon: <SettingOutlined />, label: '设置' },
 ]
 
 export function Sidebar() {
+  const nav = useNavigate()
+  const loc = useLocation()
+  // '/' 等同 '/dashboard'
+  const selected = loc.pathname === '/' ? '/dashboard' : loc.pathname
   return (
-    <nav role="navigation" className="w-56 shrink-0 border-r border-bg-border bg-bg-card p-3 space-y-1">
-      <div className="px-3 py-2 mb-2 flex items-center gap-2">
-        <span className="text-accent text-lg">◆</span>
-        <span className="font-semibold tracking-wide">Sentinel</span>
+    <Sider width={208} breakpoint="lg" collapsedWidth={0} style={{ background: 'var(--bg-card)' }}>
+      <div style={{ color: 'var(--accent)', fontWeight: 700, padding: '20px 24px', fontSize: 18 }}>
+        Sentinel
       </div>
-      {items.map(it => (
-        <NavLink
-          key={it.to}
-          to={it.to}
-          className={({ isActive }) =>
-            clsx(
-              'flex items-center gap-3 px-3 py-2 rounded-md text-sm transition-colors',
-              isActive ? 'bg-accent/15 text-accent' : 'text-text-muted hover:text-text hover:bg-bg-border'
-            )
-          }
-        >
-          <span className="w-4 text-center">{it.icon}</span>
-          {it.label}
-        </NavLink>
-      ))}
-    </nav>
+      <Menu
+        mode="inline"
+        selectedKeys={[selected]}
+        onClick={({ key }) => nav(key)}
+        items={items}
+        style={{ background: 'var(--bg-card)', borderInlineEnd: 'none' }}
+      />
+    </Sider>
   )
 }

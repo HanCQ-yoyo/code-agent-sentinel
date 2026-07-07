@@ -1,40 +1,23 @@
-import { useEffect, useState } from 'react'
-import { apiGet } from '../api/client'
+import { Drawer } from 'antd'
 import type { Asset } from '../types'
 import { AssetDetailPanel } from './AssetDetailPanel'
 
-// AssetDrawer 是右侧抽屉:id 非 null 时打开,内部 fetch 资产并渲染 Panel。
-export function AssetDrawer({ id, onClose }: { id: string | null; onClose: () => void }) {
-  const [asset, setAsset] = useState<Asset | null>(null)
-  const [err, setErr] = useState('')
-
-  useEffect(() => {
-    if (!id) { setAsset(null); setErr(''); return }
-    let stale = false
-    setAsset(null); setErr('')
-    apiGet<Asset>(`/api/assets/${id}`)
-      .then(a => { if (!stale) setAsset(a) })
-      .catch(e => { if (!stale) setErr(String(e)) })
-    return () => { stale = true }
-  }, [id])
-
-  useEffect(() => {
-    if (!id) return
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose() }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [id, onClose])
-
-  if (!id) return null
+// mask={false}:抽屉占右侧 50% 无遮罩,左半表格保持可点击——点 B 行直接切内容,修"先关 A 再开 B"竞态。
+// rootClassName="asset-drawer":保留 data-testid 钩子供 e2e 定位(Task 15 重写时用 .asset-drawer 选择器)。
+export function AssetDrawer({ asset, onClose }: { asset: Asset | null; onClose: () => void }) {
   return (
-    <div className="fixed inset-0 z-40 flex justify-end" data-testid="asset-drawer">
-      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
-      <div className="relative w-full max-w-xl bg-bg-card border-l border-bg-border overflow-auto p-5">
-        <button onClick={onClose} className="absolute top-3 right-3 text-text-muted hover:text-text" aria-label="关闭">✕</button>
-        {err && <div className="text-text p-4 border-l-2 border-sev-critical">{err}</div>}
-        {!asset && !err && <div className="text-text-muted p-4">加载中…</div>}
-        {asset && <AssetDetailPanel asset={asset} />}
-      </div>
-    </div>
+    <Drawer
+      title="资产详情"
+      placement="right"
+      width="50%"
+      open={asset !== null}
+      onClose={onClose}
+      mask={false}
+      keyboard
+      rootClassName="asset-drawer"
+      styles={{ body: { padding: 16, overflow: 'auto' } }}
+    >
+      {asset ? <AssetDetailPanel asset={asset} /> : null}
+    </Drawer>
   )
 }

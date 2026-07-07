@@ -1,84 +1,68 @@
-// web/src/pages/Settings.tsx
 import { useEffect, useState } from 'react'
+import { Card, Tag, Typography, Empty, Badge as AntBadge } from 'antd'
 import { useStore } from '../store'
-import { Badge, type BadgeTone } from '../components/Badge'
 import type { DetectorMeta } from '../types'
+import { Badge, type BadgeTone } from '../components/Badge'
+
+function DetectorCard({ d }: { d: DetectorMeta }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <Card size="small" title={<span style={{ color: 'var(--text)' }}>{d.name}</span>} extra={d.available ? <Tag color="success">可用</Tag> : <Tag color="error">不可用</Tag>}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>引擎</Typography.Text>
+          <div style={{ marginTop: 4 }}>
+            {d.engines.map((e) => (
+              <div key={e.name} style={{ fontSize: 13 }}>
+                <AntBadge status={e.available ? 'success' : 'error'} />
+                <span style={{ color: 'var(--text)' }}>{e.name}</span>
+                <Typography.Text type="secondary" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, marginLeft: 8 }}>{e.kind}</Typography.Text>
+                {!e.available && e.reason ? <Typography.Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>{e.reason}</Typography.Text> : null}
+              </div>
+            ))}
+          </div>
+        </div>
+        <div>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>覆盖</Typography.Text>
+          <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+            {d.covers.map((c) => <Badge key={c} tone="neutral">{c}</Badge>)}
+          </div>
+        </div>
+        <div>
+          {d.rules.length === 0 ? (
+            <Typography.Text type="secondary" style={{ fontSize: 12 }}>由外部扫描引擎内置配置提供</Typography.Text>
+          ) : (
+            <>
+              <a onClick={() => setOpen(!open)} style={{ fontSize: 12 }}>{open ? '收起规则' : `展开规则 (${d.rules.length})`}</a>
+              {open ? (
+                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {d.rules.map((r) => (
+                    <div key={r.id} style={{ fontSize: 12 }}>
+                      <Badge tone={`sev-${r.severity}` as BadgeTone}>{r.severity}</Badge>
+                      <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, marginLeft: 6 }}>{r.id}</Typography.Text>
+                      <Typography.Text type="secondary" style={{ marginLeft: 6 }}>{r.description}</Typography.Text>
+                    </div>
+                  ))}
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+      </div>
+    </Card>
+  )
+}
 
 export default function Settings() {
   const { detectors, fetchDetectors } = useStore()
   useEffect(() => { fetchDetectors() }, [fetchDetectors])
   return (
-    <div className="space-y-4 max-w-3xl">
-      <div className="bg-bg-card border border-bg-border rounded-xl p-5">
-        <h2 className="text-base font-semibold mb-1">设置(只读)</h2>
-        <p className="text-sm text-text-muted mb-4">P1 阶段所有配置资产只读。检测器能力与状态如下;缺失的子进程检测器会优雅降级,不阻断扫描。</p>
-      </div>
-      <div className="space-y-3">
-        {detectors.map(d => <DetectorCard key={d.id} d={d} />)}
-      </div>
-      <div className="bg-bg-card border border-bg-border rounded-xl p-5">
-        <h2 className="text-base font-semibold mb-1">关于</h2>
-        <div className="text-sm text-text-muted space-y-1">
-          <div>规则版本:P1 内置基线 / 提示注入规则集(embedded)</div>
-          <div>密钥检测:依赖 gitleaks(缺失时跳过),P2 将重心转移到 MCP/Skills/Scripts 定向检测</div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function DetectorCard({ d }: { d: DetectorMeta }) {
-  const [open, setOpen] = useState(false)
-  return (
-    <div className="bg-bg-card border border-bg-border rounded-xl p-5">
-      <div className="flex items-center justify-between">
-        <h3 className="text-base font-medium">{d.name}</h3>
-        {d.available
-          ? <Badge tone="sev-low">可用</Badge>
-          : <Badge tone="sev-critical" >不可用</Badge>}
-      </div>
-      <div className="mt-3 space-y-1 text-sm">
-        <div className="text-text-muted">引擎:</div>
-        <div className="ml-4 space-y-0.5">
-          {d.engines.map((e, i) => (
-            <div key={i} className="flex items-center gap-2">
-              <span className={e.available ? 'text-text' : 'text-text-dim'}>{e.name}</span>
-              <span className="text-xs text-text-dim">({e.kind})</span>
-              {!e.available && e.reason && <span className="text-xs text-text-muted">{e.reason}</span>}
-            </div>
-          ))}
-        </div>
-        {d.covers && d.covers.length > 0 && (
-          <>
-            <div className="text-text-muted">覆盖:</div>
-            <div className="ml-4 flex flex-wrap gap-1">
-              {d.covers.map(c => <Badge key={c} tone="neutral">{c}</Badge>)}
-            </div>
-          </>
-        )}
-        <div className="text-text-muted mt-2">
-          规则{d.rules && d.rules.length > 0 ? `(${d.rules.length})` : ''}
-          {d.rules && d.rules.length > 0 && (
-            <button onClick={() => setOpen(o => !o)} className="ml-2 text-accent text-xs">{open ? '收起 ▴' : '展开 ▾'}</button>
-          )}
-        </div>
-        {open && d.rules && (
-          <div className="ml-4 space-y-1">
-            {d.rules.map(r => (
-              <div key={r.id} className="flex items-start gap-2">
-                <Badge tone={`sev-${r.severity}` as BadgeTone}>{r.severity}</Badge>
-                <div>
-                  <div className="font-mono text-xs text-text-muted">{r.id}</div>
-                  <div className="text-xs">{r.description}</div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-        {(!d.rules || d.rules.length === 0) && (
-          <div className="ml-4 text-xs text-text-dim">由外部扫描引擎内置配置提供</div>
-        )}
-      </div>
+    <div style={{ maxWidth: 768, display: 'flex', flexDirection: 'column', gap: 16 }}>
+      <Card size="small"><Typography.Text type="secondary">设置(只读)——检测引擎与规则。编辑能力在后续阶段。</Typography.Text></Card>
+      {detectors.length === 0 ? <Empty description="暂无检测器" /> : detectors.map((d) => <DetectorCard key={d.id} d={d} />)}
+      <Card size="small" title="关于">
+        <Typography.Text type="secondary" style={{ fontSize: 12}}>规则版本随二进制内嵌;密钥检测依赖 gitleaks 子进程,依赖检测依赖 govulncheck/npm-audit。</Typography.Text>
+      </Card>
     </div>
   )
 }
