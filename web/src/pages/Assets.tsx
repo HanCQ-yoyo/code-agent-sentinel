@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import clsx from 'clsx'
 import { useStore } from '../store'
 import { AssetTable } from '../components/AssetTable'
+import { AssetDrawer } from '../components/AssetDrawer'
 
 export default function Assets() {
   const { assets, fetchAssets, scan, error } = useStore()
-  const nav = useNavigate()
   const [type, setType] = useState('')
   const [q, setQ] = useState('')
+  const [selected, setSelected] = useState<string | null>(null)
   useEffect(() => { fetchAssets() }, [fetchAssets])
 
   if (!assets && !error) return <div className="text-text-muted p-8">加载中…</div>
@@ -34,8 +34,9 @@ export default function Assets() {
       </div>
       <div className="text-sm text-text-muted">{list.length} / {all.length} 资产</div>
       <div className="bg-bg-card border border-bg-border rounded-xl overflow-hidden">
-        <AssetTable assets={list} findings={scan?.findings} onSelect={(id) => nav(`/assets/${id}`)} />
+        <AssetTable assets={list} findings={scan?.findings} onSelect={setSelected} />
       </div>
+      <AssetDrawer id={selected} onClose={() => setSelected(null)} />
     </div>
   )
 }
