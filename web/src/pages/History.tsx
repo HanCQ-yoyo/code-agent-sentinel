@@ -18,7 +18,7 @@ export default function History() {
   useEffect(() => {
     if (!id) { fetchHistory(); return }
     setDetail(null); setErr('')
-    fetchHistoryDetail(id).then((r) => { if (r) setDetail(r) }).catch((e) => setErr(String(e)))
+    fetchHistoryDetail(id).then((r) => { if (r) setDetail(r); else setErr('加载失败') }).catch((e) => setErr(String(e)))
   }, [id, fetchHistory, fetchHistoryDetail])
 
   if (id) {
