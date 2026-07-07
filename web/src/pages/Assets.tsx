@@ -48,7 +48,7 @@ export default function Assets() {
           </>
         )}
       </div>
-      <div className="text-sm text-text-muted">{list.length} / {all.length} 资产</div>
+      <div className="text-sm text-text-muted">{view === 'tree' ? `${all.length} 资产` : `${list.length} / ${all.length} 资产`}</div>
       {view === 'list' ? (
         <>
           <div className="bg-bg-card border border-bg-border rounded-xl overflow-hidden">

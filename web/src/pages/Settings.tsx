@@ -1,7 +1,7 @@
 // web/src/pages/Settings.tsx
 import { useEffect, useState } from 'react'
 import { useStore } from '../store'
-import { Badge } from '../components/Badge'
+import { Badge, type BadgeTone } from '../components/Badge'
 import type { DetectorMeta } from '../types'
 
 export default function Settings() {
@@ -44,7 +44,7 @@ function DetectorCard({ d }: { d: DetectorMeta }) {
             <div key={i} className="flex items-center gap-2">
               <span className={e.available ? 'text-text' : 'text-text-dim'}>{e.name}</span>
               <span className="text-xs text-text-dim">({e.kind})</span>
-              {!e.available && e.reason && <span className="text-xs text-sev-high">{e.reason}</span>}
+              {!e.available && e.reason && <span className="text-xs text-text-muted">{e.reason}</span>}
             </div>
           ))}
         </div>
@@ -66,7 +66,7 @@ function DetectorCard({ d }: { d: DetectorMeta }) {
           <div className="ml-4 space-y-1">
             {d.rules.map(r => (
               <div key={r.id} className="flex items-start gap-2">
-                <Badge tone={`sev-${r.severity}` as any}>{r.severity}</Badge>
+                <Badge tone={`sev-${r.severity}` as BadgeTone}>{r.severity}</Badge>
                 <div>
                   <div className="font-mono text-xs text-text-muted">{r.id}</div>
                   <div className="text-xs">{r.description}</div>

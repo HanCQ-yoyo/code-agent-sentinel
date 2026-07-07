@@ -11,7 +11,7 @@ export function AssetDetailPanel({ asset }: { asset: Asset }) {
         <Badge tone={`scope-${asset.scope}` as BadgeTone}>{asset.scope}</Badge>
       </div>
       {asset.parse_error && (
-        <div className="border border-sev-critical text-sev-critical rounded-md p-2 text-sm">解析错误:{asset.parse_error}</div>
+        <div className="border border-sev-critical text-text rounded-md p-2 text-sm">解析错误:{asset.parse_error}</div>
       )}
       <div className="text-xs text-text-dim font-mono break-all">{asset.source_path}</div>
       <div className="grid grid-cols-2 gap-3 text-sm">

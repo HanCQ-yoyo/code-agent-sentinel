@@ -10,8 +10,12 @@ export function AssetDrawer({ id, onClose }: { id: string | null; onClose: () =>
 
   useEffect(() => {
     if (!id) { setAsset(null); setErr(''); return }
+    let stale = false
     setAsset(null); setErr('')
-    apiGet<Asset>(`/api/assets/${id}`).then(setAsset).catch(e => setErr(String(e)))
+    apiGet<Asset>(`/api/assets/${id}`)
+      .then(a => { if (!stale) setAsset(a) })
+      .catch(e => { if (!stale) setErr(String(e)) })
+    return () => { stale = true }
   }, [id])
 
   useEffect(() => {
@@ -27,7 +31,7 @@ export function AssetDrawer({ id, onClose }: { id: string | null; onClose: () =>
       <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="relative w-full max-w-xl bg-bg-card border-l border-bg-border overflow-auto p-5">
         <button onClick={onClose} className="absolute top-3 right-3 text-text-muted hover:text-text" aria-label="关闭">✕</button>
-        {err && <div className="text-sev-critical p-4">{err}</div>}
+        {err && <div className="text-text p-4 border-l-2 border-sev-critical">{err}</div>}
         {!asset && !err && <div className="text-text-muted p-4">加载中…</div>}
         {asset && <AssetDetailPanel asset={asset} />}
       </div>

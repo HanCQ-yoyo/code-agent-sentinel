@@ -5,7 +5,6 @@ import { useStore } from '../store'
 import { HealthScoreCard } from '../components/HealthScoreCard'
 import { SeverityChart } from '../components/SeverityChart'
 import { FindingTable } from '../components/FindingTable'
-import { Badge } from '../components/Badge'
 import type { ScanRecord } from '../types'
 
 export default function History() {
@@ -24,7 +23,7 @@ export default function History() {
 
   // 详情视图:复用看板组件,传历史数据
   if (id) {
-    if (err) return <div className="text-sev-critical p-8">{err}</div>
+    if (err) return <div className="text-text p-8 border-l-2 border-sev-critical">{err}</div>
     if (!detail) return <div className="text-text-muted p-8">加载中…</div>
     return (
       <div className="space-y-4">
@@ -59,7 +58,7 @@ export default function History() {
                   <td className="p-2">{h.finding_count}</td>
                   <td className="p-2 text-text-muted">{h.detector_avail}/{h.detector_total}</td>
                   <td className="p-2">
-                    <button onClick={() => deleteHistory(h.id)} className="text-sev-critical text-xs hover:underline">删除</button>
+                    <button onClick={() => deleteHistory(h.id)} className="text-text-muted hover:text-text text-xs hover:underline">删除</button>
                   </td>
                 </tr>
               ))}
