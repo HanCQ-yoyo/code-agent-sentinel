@@ -1,6 +1,6 @@
 import { Routes, Route, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
-import { ConfigProvider } from 'antd'
+import { ConfigProvider, Layout } from 'antd'
 import Dashboard from './pages/Dashboard'
 import Assets from './pages/Assets'
 import Findings from './pages/Findings'
@@ -14,6 +14,8 @@ import { ThemeShell } from './components/ThemeShell'
 import { useTheme } from './theme'
 import { antdTheme } from './theme/antdTheme'
 import { useStore } from './store'
+
+const { Content } = Layout
 
 const titles: Record<string, string> = {
   '/': '态势看板',
@@ -30,32 +32,30 @@ export default function App() {
   const loc = useLocation()
   const title = titles[loc.pathname] ?? 'Sentinel'
   useEffect(() => { fetchLatestScan() }, [fetchLatestScan])
+
   return (
     <ConfigProvider theme={antdTheme(theme)}>
       <AuthGate>
-        {/* 临时主题验证路由(Task 15 移除) */}
-        {loc.pathname === '/__theme' ? <ThemeShell /> : (
-          <div className="min-h-screen flex flex-col">
-            <TopBar title={title} onScan={() => runScan()} loading={loading} detectors={detectors} />
-            <div className="flex flex-1 min-h-0">
-              <Sidebar />
-              <main className="flex-1 overflow-auto p-6">
-                <Routes>
-                  <Route path="/" element={<Dashboard />} />
-                  <Route path="/dashboard" element={<Dashboard />} />
-                  <Route path="/assets" element={<Assets />} />
-                  <Route path="/assets/:id" element={<AssetDetail />} />
-                  <Route path="/findings" element={<Findings />} />
-                  <Route path="/history" element={<History />} />
-                  <Route path="/history/:id" element={<History />} />
-                  <Route path="/settings" element={<Settings />} />
-                  <Route path="/__theme" element={<ThemeShell />} />
-                  <Route path="*" element={<div className="text-text-muted">页面不存在</div>} />
-                </Routes>
-              </main>
-            </div>
-          </div>
-        )}
+        <Layout style={{ minHeight: '100vh' }}>
+          <TopBar title={title} onScan={() => runScan()} loading={loading} detectors={detectors} />
+          <Layout>
+            <Sidebar />
+            <Content style={{ overflow: 'auto', padding: 24 }}>
+              <Routes>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/dashboard" element={<Dashboard />} />
+                <Route path="/assets" element={<Assets />} />
+                <Route path="/assets/:id" element={<AssetDetail />} />
+                <Route path="/findings" element={<Findings />} />
+                <Route path="/history" element={<History />} />
+                <Route path="/history/:id" element={<History />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/__theme" element={<ThemeShell />} />
+                <Route path="*" element={<div className="text-text-muted">页面不存在</div>} />
+              </Routes>
+            </Content>
+          </Layout>
+        </Layout>
       </AuthGate>
     </ConfigProvider>
   )
