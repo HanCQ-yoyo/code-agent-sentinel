@@ -10,7 +10,6 @@ import AssetDetail from './components/AssetDetail'
 import { AuthGate } from './components/AuthGate'
 import { Sidebar } from './components/Sidebar'
 import { TopBar } from './components/TopBar'
-import { ThemeShell } from './components/ThemeShell'
 import { useTheme } from './theme'
 import { antdTheme } from './theme/antdTheme'
 import { useStore } from './store'
@@ -50,7 +49,6 @@ export default function App() {
                 <Route path="/history" element={<History />} />
                 <Route path="/history/:id" element={<History />} />
                 <Route path="/settings" element={<Settings />} />
-                <Route path="/__theme" element={<ThemeShell />} />
                 <Route path="*" element={<div className="text-text-muted">页面不存在</div>} />
               </Routes>
             </Content>
