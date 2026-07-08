@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 
@@ -17,9 +18,10 @@ func (s *Server) getTree(c *gin.Context) {
 		return
 	}
 	var root string
+	var p string
 	switch scope {
 	case "project":
-		p := c.Query("path")
+		p = c.Query("path")
 		if p == "" {
 			c.JSON(http.StatusBadRequest, errorBody("bad_request", "path required for project scope"))
 			return
@@ -50,12 +52,17 @@ func (s *Server) getTree(c *gin.Context) {
 		root = s.Agents[0].RootDir
 		scope = "global"
 	}
-	// 按 scope 过滤资产(global 含 plugin;project 含该项目资产)。
+	// 按 scope 过滤资产(global 含 plugin;project 仅含选中项目 p 的资产)。
+	// project scope 必须额外按 source_path 前缀(<p>/)过滤:Discover 全 agent 发现
+	// 后,所有项目的 ScopeProject 资产都在 inv.Assets 里,仅按 scope 过滤会把其他
+	// 项目的资产(<projB>/.claude/...)也带进来,根外资产会被 BuildTree 挂为根级
+	// synthetic 节点泄漏进选中项目树。前缀边界 <p>+Separator 防 /home/foo 匹配
+	// /home/foobar。
 	var assets []configengine.Asset
 	for _, a := range inv.Assets {
 		if scope == "global" && (a.Scope == configengine.ScopeGlobal || a.Scope == configengine.ScopePlugin) {
 			assets = append(assets, a)
-		} else if scope == "project" && a.Scope == configengine.ScopeProject {
+		} else if scope == "project" && a.Scope == configengine.ScopeProject && strings.HasPrefix(a.SourcePath, p+string(filepath.Separator)) {
 			assets = append(assets, a)
 		}
 	}

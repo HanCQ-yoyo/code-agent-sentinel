@@ -26,12 +26,13 @@ export default function Assets() {
   const all = assets.assets
 
   // 按 activeProjectTab 过滤(纯视图):全局 tab = scope∈{global,plugin};
-  // 项目 tab = source_path 在 <path>/.claude/ 下。
+  // 项目 tab = source_path 在 <path>/ 下(与后端 project scope 语义一致,
+  // 含项目根资产如 .mcp.json,不仅限于 <path>/.claude/)。
   const tabFiltered = all.filter((a) => {
     if (activeProjectTab.kind === 'global') {
       return a.scope === 'global' || a.scope === 'plugin'
     }
-    return a.source_path.includes(`${activeProjectTab.path}/.claude/`)
+    return a.source_path.startsWith(`${activeProjectTab.path}/`)
   })
 
   const types = [...new Set(tabFiltered.map((a) => a.type))].sort()
