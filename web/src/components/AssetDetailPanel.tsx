@@ -1,13 +1,28 @@
-import { Card, Descriptions, Typography, Alert } from 'antd'
+import { Descriptions, Typography, Alert } from 'antd'
 import type { Asset } from '../types'
 import { Badge, type BadgeTone } from './Badge'
 import { relativeClaudePath } from '../lib/path'
+import { ContentArea } from './ContentArea'
+import { useTheme } from '../theme'
 
+// AssetDetailPanel:资产详情。三消费方(Assets 列表抽屉 50% / 树右栏 480px sticky / /assets/:id 全页)
+// 共用此组件,签名 { asset } 不变。阶段 C 重排:
+//  1. frontmatter 上浮:markdown 资产的 description 取自 fields.description,上移到 header 副标题(人语位置)。
+//  2. 二合一:旧「解析字段 Card + 文件内容 Card」→ 单一 ContentArea(structured 字段即内容,二合一)。
+//  3. 内容撑满:ContentArea flex:1。
+// header h2 保留 data-testid="asset-detail-name"(e2e 钩子,阶段 A 硬规则延续)。
 export function AssetDetailPanel({ asset }: { asset: Asset }) {
+  const { theme } = useTheme()
+  const description = (asset.fields as Record<string, unknown> | undefined)?.description
+  const isMarkdown = ['memory', 'skill', 'command', 'agent'].includes(asset.type)
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
       <div>
-        <h2 data-testid="asset-detail-name" style={{ color: 'var(--text)', margin: '0 0 8px' }}>{asset.name}</h2>
+        <h2 data-testid="asset-detail-name" style={{ color: 'var(--text)', margin: '0 0 4px' }}>{asset.name}</h2>
+        {isMarkdown && typeof description === 'string' && description ? (
+          <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>{description}</Typography.Text>
+        ) : null}
         <div style={{ display: 'flex', gap: 8 }}>
           <Badge tone="neutral">{asset.type}</Badge>
           <Badge tone={`scope-${asset.scope}` as BadgeTone}>{asset.scope}</Badge>
@@ -30,21 +45,7 @@ export function AssetDetailPanel({ asset }: { asset: Asset }) {
         </Descriptions.Item>
       </Descriptions>
 
-      {asset.fields && Object.keys(asset.fields).length > 0 ? (
-        <Card size="small" title="解析字段" styles={{ body: { padding: 0 } }}>
-          <pre style={{ margin: 0, padding: 12, maxHeight: 320, overflow: 'auto', fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text)' }}>
-{JSON.stringify(asset.fields, null, 2)}
-          </pre>
-        </Card>
-      ) : null}
-
-      {asset.content ? (
-        <Card size="small" title="文件内容" style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }} styles={{ body: { flex: 1, padding: 0, overflow: 'hidden' } }}>
-          <pre style={{ margin: 0, padding: 12, height: '100%', overflow: 'auto', fontFamily: 'var(--font-mono)', fontSize: 12.5, color: 'var(--text)' }}>
-{asset.content}
-          </pre>
-        </Card>
-      ) : null}
+      <ContentArea asset={asset} theme={theme} />
     </div>
   )
 }
