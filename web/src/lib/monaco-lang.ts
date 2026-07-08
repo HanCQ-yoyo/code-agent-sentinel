@@ -23,3 +23,24 @@ export function langByExt(sourcePath: string): string {
   }
   return map[ext] ?? 'plaintext'
 }
+
+// langByClassName:按 react-markdown code 的 className(language-xxx)返回 Monaco 语言 ID。
+// 无 className 或未知 → plaintext。围栏代码块经此映射内嵌 Monaco。
+export function langByClassName(className?: string): string {
+  if (!className) return 'plaintext'
+  const m = className.match(/language-([\w-]+)/)
+  if (!m) return 'plaintext'
+  const lang = m[1].toLowerCase()
+  const map: Record<string, string> = {
+    shell: 'shell', bash: 'shell', sh: 'shell', zsh: 'shell',
+    python: 'python', py: 'python',
+    javascript: 'javascript', js: 'javascript', mjs: 'javascript', cjs: 'javascript',
+    typescript: 'typescript', ts: 'typescript',
+    go: 'go',
+    json: 'json',
+    markdown: 'markdown', md: 'markdown',
+    yaml: 'yaml', yml: 'yaml',
+    html: 'html', css: 'css', xml: 'xml', sql: 'sql', rust: 'rust', java: 'java', c: 'c', cpp: 'cpp',
+  }
+  return map[lang] ?? 'plaintext'
+}
