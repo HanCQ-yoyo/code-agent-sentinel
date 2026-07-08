@@ -3,6 +3,7 @@ package configengine
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 	"time"
 )
@@ -31,6 +32,25 @@ func TestAssetIDStable(t *testing.T) {
 	id2 := makeAssetID(Asset{Type: AssetMCPServer, Scope: ScopeGlobal, Name: "foo", SourcePath: "/p"})
 	if id1 == "" || id1 != id2 {
 		t.Fatal("ID 不稳定")
+	}
+}
+
+func TestInventoryProjectsField(t *testing.T) {
+	inv := Inventory{Projects: []Project{{Path: "/a", Name: "a"}, {Path: "/b", Name: "b"}}}
+	if len(inv.Projects) != 2 {
+		t.Fatalf("Projects 长度 = %d, 期望 2", len(inv.Projects))
+	}
+	if inv.Projects[0].Path != "/a" {
+		t.Errorf("Projects[0].Path = %q", inv.Projects[0].Path)
+	}
+}
+
+func TestEngineHasNoSelectProject(t *testing.T) {
+	// SelectProject 已删除:若残留方法,以下断言失败。
+	var e *Engine
+	_, ok := reflect.TypeOf(e).MethodByName("SelectProject")
+	if ok {
+		t.Fatal("Engine 不应再有 SelectProject 方法(本任务已移除单项目选择)")
 	}
 }
 

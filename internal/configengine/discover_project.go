@@ -6,43 +6,46 @@ import (
 	"path/filepath"
 )
 
-// discoverProject 发现项目级资产:settings / .mcp.json / memory / skills /
-// commands / agents / scripts(从项目级 hook/command 抽取)。
+// discoverProjects 发现所有已知项目的项目级资产:settings / .mcp.json / memory /
+// skills / commands / agents / scripts(从项目级 hook/command 抽取)。
 //
-// 所有解析失败均被各 parse* 函数内部吞为带 parse_error 的占位资产,不致整体失败。
-func (e *Engine) discoverProject(inv *Inventory) {
-	if e.Project == nil {
+// 遍历 ListProjects() 返回的全部项目(全 agent 发现),缺失目录静默跳过。
+// 解析失败被各 parse* 函数内部吞为带 parse_error 的占位资产,不致整体失败。
+func (e *Engine) discoverProjects(inv *Inventory) {
+	projects, err := e.ListProjects()
+	if err != nil || len(projects) == 0 {
 		return
 	}
-	d := filepath.Join(e.Project.Path, ".claude")
+	for _, p := range projects {
+		if !fileExists(filepath.Join(p.Path, ".claude")) && !fileExists(filepath.Join(p.Path, ".mcp.json")) {
+			// 项目目录已不存在(可能 ~/.claude.json 里登记的路径已删),静默跳过。
+			continue
+		}
+		e.discoverOneProject(inv, p)
+		inv.Projects = append(inv.Projects, p)
+	}
+}
 
-	// settings.json:项目级 settings + permissions + hooks。
+// discoverOneProject 发现单个项目的项目级资产(原 discoverProject 主体)。
+func (e *Engine) discoverOneProject(inv *Inventory, p Project) {
+	d := filepath.Join(p.Path, ".claude")
+
 	if sp := filepath.Join(d, "settings.json"); fileExists(sp) {
 		if a, _ := parseSettings(sp, ScopeProject); a != nil {
 			inv.Assets = append(inv.Assets, a...)
 		}
 	}
-
-	// 项目根 .mcp.json:项目级 MCP servers。
-	if mp := filepath.Join(e.Project.Path, ".mcp.json"); fileExists(mp) {
+	if mp := filepath.Join(p.Path, ".mcp.json"); fileExists(mp) {
 		if a, _ := parseMCPJSON(mp, ScopeProject); a != nil {
 			inv.Assets = append(inv.Assets, a...)
 		}
 	}
-
-	// ~/.claude.json 的 projects[path].mcpServers(项目 scope)。
-	// 与上面 .mcp.json 互补:.mcp.json 是项目本地提交的,.claude.json 是机器管理文件里
-	// 按项目记录的。两者都读,IDs 因 source_path 不同而不同。
-	if a, _ := parseClaudeJSONProjectMCP(e.ClaudeJSON, e.Project.Path, ScopeProject); a != nil {
+	if a, _ := parseClaudeJSONProjectMCP(e.ClaudeJSON, p.Path, ScopeProject); a != nil {
 		inv.Assets = append(inv.Assets, a...)
 	}
-
-	// memory:项目 .claude/CLAUDE.md + memory/ 目录。
 	if mem, _ := parseMemory(d, ScopeProject); mem != nil {
 		inv.Assets = append(inv.Assets, mem...)
 	}
-
-	// skills / commands / agents markdown 目录。
 	for _, sub := range []struct {
 		rel string
 		typ AssetType
@@ -55,12 +58,7 @@ func (e *Engine) discoverProject(inv *Inventory) {
 			inv.Assets = append(inv.Assets, a...)
 		}
 	}
-
-	// 仅对项目级 hook/command 资产抽取脚本:Discover 已对全局资产跑过 parseScripts,
-	// 若此处再扫全表,parseScripts 的 per-call seen 不跨调用共享,会重发全局 hook
-	// 引用的已存在脚本 → 重复 asset ID + detectDuplicates 误报。故只扫项目 scope。
-	// (brief Step 4 原写 parseScripts(inv.Assets, d),此为审批通过的偏差,见
-	//  TestDiscoverProjectNoScriptDup 回归测试。)
+	// 仅对项目级 hook/command 资产抽取脚本(沿用原偏差注释,防全局脚本重复抽取)。
 	var projAssets []Asset
 	for _, a := range inv.Assets {
 		if a.Scope == ScopeProject && (a.Type == AssetHook || a.Type == AssetCommand) {

@@ -11,9 +11,10 @@ func TestDiscoverProject(t *testing.T) {
 	f.writeProject("myproj/.claude/settings.json", `{"model":"sonnet"}`)
 	f.writeProject("myproj/.mcp.json", `{"mcpServers":{"p":{"command":"x"}}}`)
 	f.writeProject("myproj/CLAUDE.md", `# proj`)
+	// 在 ~/.claude.json 登记 myproj 为已知项目(ListProjects 读 projects 的 key)
+	f.writeClaudeJSON(`{"projects":{"` + filepath.Join(f.home, "myproj") + `":{}}}`)
 
 	eng := NewEngine(f.home)
-	eng.SelectProject(Project{Path: filepath.Join(f.home, "myproj"), Name: "myproj"})
 	inv, err := eng.Discover()
 	if err != nil {
 		t.Fatal(err)
@@ -29,8 +30,8 @@ func TestDiscoverProject(t *testing.T) {
 	if seen[AssetMCPServer] < 1 {
 		t.Errorf("缺项目 mcp: %d", seen[AssetMCPServer])
 	}
-	if inv.Project == nil || inv.Project.Name != "myproj" {
-		t.Errorf("project 未设置: %+v", inv.Project)
+	if len(inv.Projects) != 1 || inv.Projects[0].Name != "myproj" {
+		t.Errorf("Projects 应含 myproj: %+v", inv.Projects)
 	}
 }
 
@@ -49,16 +50,19 @@ func TestDiscoverProjectNoScriptDup(t *testing.T) {
 	f.write("settings.json", `{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"bash `+scriptPath+`"}]}]}}`)
 	// 创建被引用的脚本文件(f.writeProject 写在 f.home 下,此处复用其 MkdirAll 语义)。
 	f.writeProject("scripts/foo.sh", "#!/bin/bash\necho hi\n")
+	// 给 myproj 一个 .claude/settings.json,确保 discoverOneProject 实际运行
+	// (discoverProjects 的守卫跳过既无 .claude 又无 .mcp.json 的项目)。
+	f.writeProject("myproj/.claude/settings.json", `{}`)
+	// 在 ~/.claude.json 登记 myproj 为已知项目(ListProjects 读 projects 的 key)。
+	f.writeClaudeJSON(`{"projects":{"` + filepath.Join(f.home, "myproj") + `":{}}}`)
 
-	// 选择任意项目触发 discoverProject(项目无需有真实资产,只要 e.Project != nil)。
 	eng := NewEngine(f.home)
-	eng.SelectProject(Project{Path: filepath.Join(f.home, "myproj"), Name: "myproj"})
 	inv, err := eng.Discover()
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	// script 资产应恰好 1 个(全局 hook 引用的那个),不被 discoverProject 重复抽取。
+	// script 资产应恰好 1 个(全局 hook 引用的那个),不被 discoverOneProject 重复抽取。
 	scriptCount := 0
 	idCount := map[string]int{}
 	for _, a := range inv.Assets {

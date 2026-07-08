@@ -62,7 +62,7 @@ type Project struct {
 // Inventory 是一次发现的全部资产。
 type Inventory struct {
 	Assets     []Asset     `json:"assets"`
-	Project    *Project    `json:"project,omitempty"`
+	Projects   []Project   `json:"projects,omitempty"`   // 全部已发现项目(全局 + 所有已知项目)
 	Duplicates []Duplicate `json:"duplicates,omitempty"`
 }
 
