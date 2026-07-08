@@ -74,19 +74,6 @@ func TestGetDetectors(t *testing.T) {
 	}
 }
 
-func TestPostProject(t *testing.T) {
-	s := newTestServer(t, t.TempDir())
-	r := s.Router()
-	req := httptest.NewRequest("POST", "/api/project?path=/tmp/foo", nil)
-	req.Host = "127.0.0.1"
-	req.Header.Set("Authorization", "Bearer tok")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	if w.Code != 200 {
-		t.Fatalf("got %d", w.Code)
-	}
-}
-
 func writeFile(t *testing.T, p, c string) {
 	t.Helper()
 	os.MkdirAll(filepath.Dir(p), 0o755)

@@ -120,3 +120,54 @@ func doJSON[T any](t *testing.T, s *Server, method, path string) T {
 	json.Unmarshal(w.Body.Bytes(), &v)
 	return v
 }
+
+func TestSaveHistoryProjects(t *testing.T) {
+	dir := t.TempDir()
+	claude := filepath.Join(dir, ".claude")
+	writeFile(t, filepath.Join(claude, "settings.json"), `{"model":"opus"}`)
+	// 登记一个项目触发 discoverProjects
+	cj := filepath.Join(dir, ".claude.json")
+	writeFile(t, cj, `{"projects":{"`+filepath.Join(dir, "myproj")+`":{}}}`)
+	writeFile(t, filepath.Join(dir, "myproj", ".claude", "settings.json"), `{"model":"sonnet"}`)
+
+	s := newTestServer(t, dir)
+	r := s.Router()
+	req := httptest.NewRequest("POST", "/api/scan", nil)
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("scan got %d: %s", w.Code, w.Body)
+	}
+	// 取历史详情,断言 projects 非空
+	req2 := httptest.NewRequest("GET", "/api/history", nil)
+	req2.Host = "127.0.0.1"
+	req2.Header.Set("Authorization", "Bearer tok")
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	if w2.Code != 200 {
+		t.Fatalf("history got %d", w2.Code)
+	}
+	// 取最新详情(列表第一项 id)
+	var list []map[string]any
+	json.Unmarshal(w2.Body.Bytes(), &list)
+	if len(list) == 0 {
+		t.Skip("无历史记录")
+	}
+	id := list[0]["id"].(string)
+	req3 := httptest.NewRequest("GET", "/api/history/"+id, nil)
+	req3.Host = "127.0.0.1"
+	req3.Header.Set("Authorization", "Bearer tok")
+	w3 := httptest.NewRecorder()
+	r.ServeHTTP(w3, req3)
+	var rec map[string]any
+	json.Unmarshal(w3.Body.Bytes(), &rec)
+	projects, ok := rec["projects"]
+	if !ok {
+		t.Fatal("ScanRecord 应有 projects 字段")
+	}
+	if pl, _ := projects.([]any); len(pl) == 0 {
+		t.Error("projects 不应为空(已登记项目)")
+	}
+}

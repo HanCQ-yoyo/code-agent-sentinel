@@ -93,7 +93,6 @@ func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	api.GET("/dashboard", s.getDashboard)
 	api.GET("/detectors", s.getDetectors)
 	api.GET("/project", s.getProject)
-	api.POST("/project", s.postProject)
 	api.GET("/history", s.getHistoryList)
 	api.GET("/history/:id", s.getHistoryDetail)
 	api.DELETE("/history/:id", s.deleteHistory)
