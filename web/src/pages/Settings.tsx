@@ -23,7 +23,7 @@ function DetectorCard({ d }: { d: DetectorMeta }) {
             ))}
           </div>
         </div>
-        {d.covers.length > 0 ? (
+        {d.covers && d.covers.length > 0 ? (
           <div>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>覆盖</Typography.Text>
             <div style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: 4 }}>
@@ -32,7 +32,7 @@ function DetectorCard({ d }: { d: DetectorMeta }) {
           </div>
         ) : null}
         <div>
-          {d.rules.length === 0 ? (
+          {!d.rules || d.rules.length === 0 ? (
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>由外部扫描引擎内置配置提供</Typography.Text>
           ) : (
             <>

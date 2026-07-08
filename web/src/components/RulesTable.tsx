@@ -11,7 +11,7 @@ export function RulesTable({ detectors }: { detectors: DetectorMeta[] }) {
   const [sev, setSev] = useState<string>('all')
 
   const allRules = useMemo<FlatRule[]>(
-    () => detectors.flatMap((d) => d.rules.map((r) => ({ ...r, detector: d.name, detector_id: d.id }))),
+    () => detectors.flatMap((d) => (d.rules ?? []).map((r) => ({ ...r, detector: d.name, detector_id: d.id }))),
     [detectors]
   )
 
