@@ -16,15 +16,24 @@ import (
 )
 
 type Server struct {
-	Engine       *configengine.Engine
-	Orchestrator *security.Orchestrator
-	Config       *config.Config
-	Token        string
-	History      *history.Store
+	Engine          *configengine.Engine
+	Orchestrator    *security.Orchestrator
+	Config          *config.Config
+	Token           string
+	History         *history.Store
+	Agents          []configengine.Agent
+	SelectedAgentID string
 }
 
-func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *config.Config, token string, hist *history.Store) *Server {
-	return &Server{Engine: eng, Orchestrator: orch, Config: cfg, Token: token, History: hist}
+func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *config.Config, token string, hist *history.Store, agents []configengine.Agent) *Server {
+	if len(agents) == 0 {
+		agents = configengine.DefaultAgents(eng.HomeDir)
+	}
+	current := ""
+	if len(agents) > 0 {
+		current = agents[0].ID
+	}
+	return &Server{Engine: eng, Orchestrator: orch, Config: cfg, Token: token, History: hist, Agents: agents, SelectedAgentID: current}
 }
 
 func (s *Server) Router() *gin.Engine {
@@ -86,14 +95,15 @@ func (s *Server) Router() *gin.Engine {
 func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	api.GET("/assets", s.getAssets)
 	api.GET("/assets/:id", s.getAsset)
+	api.GET("/tree", s.getTree)
 	api.POST("/scan", s.postScan)
 	api.GET("/scan/result", s.getScanResult)
 	api.GET("/findings", s.getFindings)
 	api.GET("/health", s.getHealth)
 	api.GET("/dashboard", s.getDashboard)
 	api.GET("/detectors", s.getDetectors)
+	api.GET("/agents", s.getAgents)
 	api.GET("/project", s.getProject)
-	api.POST("/project", s.postProject)
 	api.GET("/history", s.getHistoryList)
 	api.GET("/history/:id", s.getHistoryDetail)
 	api.DELETE("/history/:id", s.deleteHistory)

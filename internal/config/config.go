@@ -18,7 +18,6 @@ type Config struct {
 	AllowedCIDRs []string   `yaml:"allowed_cidrs"`
 	BasicAuth    *BasicAuth `yaml:"basic_auth"`
 	HomeDir      string     `yaml:"home_dir"` // 覆盖 ~/.claude 的 home
-	Project      string     `yaml:"project"`  // 初始项目
 }
 
 func DefaultConfig() *Config {

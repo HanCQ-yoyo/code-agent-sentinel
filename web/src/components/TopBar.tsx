@@ -1,7 +1,9 @@
-import { Layout, Button, Switch, Space, Typography } from 'antd'
+import { Layout, Button, Switch, Space, Typography, Select } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
 import { useTheme } from '../theme'
-import type { DetectorMeta } from '../types'
+import { useStore } from '../store'
+import { agentMeta } from '../lib/agents'
+import type { Agent, DetectorMeta } from '../types'
 
 const { Header } = Layout
 
@@ -14,7 +16,13 @@ interface Props {
 
 export function TopBar({ title, onScan, loading, detectors }: Props) {
   const { theme, toggle } = useTheme()
+  const { agents, fetchAgents } = useStore()
+  const currentAgent = agents?.current
   const avail = detectors.filter((d) => d.available).length
+
+  // agent 选择器:本轮单选项,选择走通链路(单 agent 无实际切换效果)。
+  if (!agents) void fetchAgents()
+
   return (
     <Header
       style={{
@@ -27,9 +35,19 @@ export function TopBar({ title, onScan, loading, detectors }: Props) {
         height: 56,
       }}
     >
-      <Typography.Title level={4} style={{ color: 'var(--text)', margin: 0 }}>
-        {title}
-      </Typography.Title>
+      <Space size="middle">
+        <Typography.Title level={4} style={{ color: 'var(--text)', margin: 0 }}>
+          {title}
+        </Typography.Title>
+        <Select
+          size="small"
+          style={{ width: 150 }}
+          value={currentAgent ?? (agents?.agents?.[0]?.id ?? undefined)}
+          disabled={(agents?.agents?.length ?? 0) <= 1}
+          options={(agents?.agents ?? []).map((a: Agent) => ({ value: a.id, label: `${agentMeta(a).icon} ${agentMeta(a).label}` }))}
+          onChange={() => { /* 单 agent 本轮无实际切换;未来多 agent 在此 dispatch */ }}
+        />
+      </Space>
       <Space size="middle">
         <span data-testid="detector-summary" style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
           检测器 {avail}/{detectors.length}

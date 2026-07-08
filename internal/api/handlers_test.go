@@ -24,7 +24,7 @@ func newTestServer(t *testing.T, home string) *Server {
 	r.Register(security.NewBaselineDetector())
 	orch := &security.Orchestrator{Registry: r}
 	hist := history.NewStore(filepath.Join(home, "..", "history")) // 历史目录与 .claude 同级,在 home 之外
-	return NewServer(eng, orch, config.DefaultConfig(), "tok", hist)
+	return NewServer(eng, orch, config.DefaultConfig(), "tok", hist, configengine.DefaultAgents(home))
 }
 
 func TestGetAssets(t *testing.T) {
@@ -65,19 +65,6 @@ func TestGetDetectors(t *testing.T) {
 	s := newTestServer(t, t.TempDir())
 	r := s.Router()
 	req := httptest.NewRequest("GET", "/api/detectors", nil)
-	req.Host = "127.0.0.1"
-	req.Header.Set("Authorization", "Bearer tok")
-	w := httptest.NewRecorder()
-	r.ServeHTTP(w, req)
-	if w.Code != 200 {
-		t.Fatalf("got %d", w.Code)
-	}
-}
-
-func TestPostProject(t *testing.T) {
-	s := newTestServer(t, t.TempDir())
-	r := s.Router()
-	req := httptest.NewRequest("POST", "/api/project?path=/tmp/foo", nil)
 	req.Host = "127.0.0.1"
 	req.Header.Set("Authorization", "Bearer tok")
 	w := httptest.NewRecorder()

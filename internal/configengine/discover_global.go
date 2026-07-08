@@ -12,7 +12,7 @@ import (
 // keybindings + scripts(从 hook/command 抽取)。
 // 项目级发现在 discover_project.go(Task 8)。
 func (e *Engine) Discover() (Inventory, error) {
-	inv := Inventory{Project: e.Project}
+	inv := Inventory{}
 	claude := filepath.Join(e.HomeDir, ".claude")
 
 	// settings.json:真实解析,拆成 settings + permissions + 每个 hook 一条。
@@ -61,10 +61,10 @@ func (e *Engine) Discover() (Inventory, error) {
 	// scripts:在所有解析完成后,从 hook/command 资产的 command 字段抽取引用脚本。
 	inv.Assets = append(inv.Assets, parseScripts(inv.Assets, claude)...)
 
-	// 项目级发现:合并选中项目的 settings/mcp/memory/skills/commands/agents/scripts。
-	// discoverProject 内部对项目 scope 的 hook/command 单独跑 parseScripts,避免与
+	// 项目级发现:遍历所有已知项目(全 agent 发现),合并各项目的资产。
+	// discoverProjects 内部对项目 scope 的 hook/command 单独跑 parseScripts,避免与
 	// 上面的全局 parseScripts 重复(见 discover_project.go 偏差注释)。
-	e.discoverProject(&inv)
+	e.discoverProjects(&inv)
 
 	// 重复检测:跨 scope / 跨 source_path 的同类型同名资产。
 	inv.Duplicates = detectDuplicates(inv.Assets)

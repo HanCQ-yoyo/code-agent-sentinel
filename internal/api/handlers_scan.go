@@ -52,7 +52,7 @@ func (s *Server) saveHistory(res *security.ScanResult, inv *configengine.Invento
 		Detectors:   res.Detectors,
 		HealthScore: res.HealthScore,
 		Inventory:   inv,
-		Project:     inv.Project,
+		Projects:    inv.Projects,
 	}
 	_ = s.History.Save(rec) // 持久化失败不阻断 API
 }

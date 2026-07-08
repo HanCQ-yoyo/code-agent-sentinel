@@ -7,6 +7,7 @@ web/node_modules/
 web/dist/
 # 内嵌前端产物:仅 index.html 占位符入库,assets/ 构建块不入库
 internal/api/web_dist/assets/
+design-mockups/
 
 # 本地工具 / 规划产物(不进远端)
 .claude/
@@ -18,3 +19,4 @@ CLAUDE.md
 # 编辑器 / 系统
 .DS_Store
 *.swp
+.history/

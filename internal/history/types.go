@@ -17,7 +17,7 @@ type ScanRecord struct {
 	Detectors   []security.DetectorStatus `json:"detectors"`
 	HealthScore *security.HealthScore     `json:"health_score,omitempty"`
 	Inventory   *configengine.Inventory   `json:"inventory"`
-	Project     *configengine.Project     `json:"project,omitempty"`
+	Projects    []configengine.Project    `json:"projects,omitempty"`
 }
 
 // ScanSummary 是列表用的轻量摘要,不含 findings/assets。

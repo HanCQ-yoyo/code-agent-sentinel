@@ -1,6 +1,8 @@
 import { create } from 'zustand'
 import { apiGet, apiPost, apiDelete, AuthError } from '../api/client'
-import type { Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord } from '../types'
+import type { Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, TreeNode, Project } from '../types'
+
+type ProjectTab = { kind: 'global' } | { kind: 'project'; path: string }
 
 interface State {
   assets: Inventory | null
@@ -10,6 +12,14 @@ interface State {
   loading: boolean
   error: string | null
   authError: boolean
+  // agent
+  agents: AgentsResponse | null
+  // 目录树
+  tree: TreeNode | null
+  // 项目列表(供 Tabs)
+  projects: Project[]
+  // 当前选中的项目 tab(纯视图,默认全局)
+  activeProjectTab: ProjectTab
   fetchAssets: () => Promise<void>
   runScan: (detectors?: string) => Promise<void>
   fetchDetectors: () => Promise<void>
@@ -17,7 +27,10 @@ interface State {
   fetchHistory: () => Promise<void>
   fetchHistoryDetail: (id: string) => Promise<ScanRecord | undefined>
   deleteHistory: (id: string) => Promise<void>
-  switchProject: (path: string) => Promise<void>
+  fetchAgents: () => Promise<void>
+  fetchProjects: () => Promise<void>
+  fetchTree: (tab: ProjectTab) => Promise<void>
+  setActiveProjectTab: (tab: ProjectTab) => void
   clearError: () => void
 }
 
@@ -36,6 +49,7 @@ const wrap = async <T>(fn: () => Promise<T>, set: (p: Partial<State>) => void): 
 
 export const useStore = create<State>((set, get) => ({
   assets: null, scan: null, detectors: [], history: [], loading: false, error: null, authError: false,
+  agents: null, tree: null, projects: [], activeProjectTab: { kind: 'global' },
   fetchAssets: async () => {
     const inv = await wrap(() => apiGet<Inventory>('/api/assets'), set)
     if (inv) set({ assets: inv })
@@ -46,7 +60,6 @@ export const useStore = create<State>((set, get) => ({
     set({ scan: res ?? null, loading: false })
   },
   fetchDetectors: async () => {
-    // 后端 DetectorMeta 未直接含顶层 available/reason;从 engines 聚合(任一引擎可用则检测器可用)
     const list = await wrap(() => apiGet<DetectorMeta[]>('/api/detectors'), set)
     if (list) {
       const normalized = list.map(m => ({
@@ -72,10 +85,24 @@ export const useStore = create<State>((set, get) => ({
     await wrap(() => apiDelete(`/api/history/${id}`), set)
     await get().fetchHistory()
   },
-  switchProject: async (path) => {
-    await wrap(() => apiPost(`/api/project?path=${encodeURIComponent(path)}`), set)
-    const inv = await wrap(() => apiGet<Inventory>('/api/assets'), set)
-    if (inv) set({ assets: inv })
+  fetchAgents: async () => {
+    const res = await wrap(() => apiGet<AgentsResponse>('/api/agents'), set)
+    if (res) set({ agents: res })
+  },
+  fetchProjects: async () => {
+    const res = await wrap(() => apiGet<{ projects: Project[] }>('/api/project'), set)
+    if (res) set({ projects: res.projects ?? [] })
+  },
+  fetchTree: async (tab) => {
+    const url = tab.kind === 'global'
+      ? '/api/tree?scope=global'
+      : `/api/tree?scope=project&path=${encodeURIComponent(tab.path)}`
+    const tree = await wrap(() => apiGet<TreeNode>(url), set)
+    if (tree) set({ tree })
+  },
+  setActiveProjectTab: (tab) => {
+    set({ activeProjectTab: tab })
+    get().fetchTree(tab)
   },
   clearError: () => set({ error: null, authError: false }),
 }))
