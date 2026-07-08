@@ -11,7 +11,9 @@ export default defineConfig({
       output: {
         manualChunks: {
           antd: ['antd', '@ant-design/icons', '@ant-design/x'],
-          monaco: ['monaco-editor'],
+          // 不显式拆 monaco chunk:monaco-editor 仅被 MonacoViewer 动态 import(React.lazy),
+          // Vite 自动把它拆成 dynamic chunk(按需加载),首屏 index.html 不再 modulepreload 它,
+          // 回归 spec D2「markdown 默认预览不触发 Monaco 加载」(首屏 fetch 不含 ~3.7MB monaco)。
           vendor: ['react', 'react-dom', 'react-router-dom', 'zustand', 'react-markdown', 'remark-gfm'],
         },
       },

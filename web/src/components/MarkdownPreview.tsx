@@ -44,7 +44,9 @@ export function MarkdownPreview({ content }: { content: string }) {
             )
           },
           // code:有 className(language-xxx)→ 块内 code(已被 pre 包裹);无 className → 行内 code。
-          code({ className, children, ...props }: any) {
+          // 解构并丢弃 `node`(react-markdown v10 passNode 注入的 hast 节点对象),
+          // 否则经 ...props 透传到 <code> DOM 触发 React dev 警告 "React does not recognize the `node` prop"。
+          code({ node: _node, className, children, ...props }: any) {
             if (className) {
               return (
                 <code className={className} style={{ fontFamily: 'var(--font-mono)' }} {...props}>
