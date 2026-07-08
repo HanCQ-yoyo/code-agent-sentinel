@@ -151,3 +151,21 @@ func TestBuildTreeRootMissing(t *testing.T) {
 		t.Error("root 不存在时应返回 error")
 	}
 }
+
+// TestBuildTreeRootUnreadable 验证 root 存在但不可读时返回 error(而非空树)。
+// CI 是 Linux,chmod 0o000 足以让 ReadDir 失败;t.TempDir 会清理,但显式恢复权限以防万一。
+func TestBuildTreeRootUnreadable(t *testing.T) {
+	f := newFixture(t)
+	root := f.claude
+	// 0o000:无读权限 → os.ReadDir 失败(需 root 可 stat 才能走到 ReadDir 预检,0o000 仍允许 stat)。
+	if err := os.Chmod(root, 0o000); err != nil {
+		t.Skipf("chmod 失败,跳过:%v", err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(root, 0o755) })
+
+	eng := NewEngine(f.home)
+	_, err := eng.BuildTree(root, nil)
+	if err == nil {
+		t.Error("root 不可读时应返回 error")
+	}
+}

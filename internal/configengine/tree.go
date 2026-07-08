@@ -62,15 +62,20 @@ func (e *Engine) BuildTree(root string, assets []Asset) (TreeNode, error) {
 	if err != nil || !fi.IsDir() {
 		return TreeNode{}, os.ErrNotExist
 	}
+	// 预检 root 可读:root 不可读要返回 error(区别于子目录不可读只跳过)。
+	// 放在 build 之外,使 build 闭包无需 error 返回——子目录不可读静默跳过更诚实。
+	if _, err := os.ReadDir(root); err != nil {
+		return TreeNode{}, err
+	}
 
 	// 1) 真实走 fs 建 dir/file 树。索引:相对路径 → *treeNode(指针稳定,便于挂资产)。
 	byPath := map[string]*treeNode{}
-	var build func(absDir string, rel string) ([]*treeNode, error)
-	build = func(absDir string, rel string) ([]*treeNode, error) {
+	var build func(absDir string, rel string) []*treeNode
+	build = func(absDir string, rel string) []*treeNode {
 		entries, err := os.ReadDir(absDir)
 		if err != nil {
 			// 子目录不可读:跳过该子树,返回空(不整体失败)。
-			return nil, nil
+			return nil
 		}
 		sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 		var children []*treeNode
@@ -79,8 +84,7 @@ func (e *Engine) BuildTree(root string, assets []Asset) (TreeNode, error) {
 			node := &treeNode{Name: en.Name(), Path: childRel}
 			if en.IsDir() {
 				node.Kind = "dir"
-				sub, _ := build(filepath.Join(absDir, en.Name()), childRel)
-				node.Children = sub
+				node.Children = build(filepath.Join(absDir, en.Name()), childRel)
 			} else {
 				node.Kind = "file"
 			}
@@ -89,9 +93,9 @@ func (e *Engine) BuildTree(root string, assets []Asset) (TreeNode, error) {
 			children = append(children, node)
 			byPath[childRel] = node
 		}
-		return children, nil
+		return children
 	}
-	rootChildren, _ := build(root, ".")
+	rootChildren := build(root, ".")
 	rootNode := &treeNode{Name: filepath.Base(root), Path: ".", Kind: "dir", Children: rootChildren}
 
 	// 2) 挂资产:把 source_path 转相对 root;在 root 内的挂到 file 节点,根外的进 synthetic。
@@ -102,7 +106,7 @@ func (e *Engine) BuildTree(root string, assets []Asset) (TreeNode, error) {
 	synthetic := map[string]*synGroup{}
 	for _, a := range assets {
 		rel, err := filepath.Rel(root, a.SourcePath)
-		if err != nil || strings.HasPrefix(rel, "..") {
+		if err != nil || rel == ".." || strings.HasPrefix(rel, "../") {
 			// 根外资产:synthetic 分组(按 basename)。
 			base := filepath.Base(a.SourcePath)
 			g := synthetic[base]
