@@ -10,11 +10,11 @@ import { SeverityChart } from '../components/SeverityChart'
 import { FindingTable } from '../components/FindingTable'
 import { formatDateTime } from '../lib/format'
 
-// 健康分 Tag 色:复用 HealthScoreCard bandColor 的 score-based 映射(sev 色作标记,非正文)。
+// 健康分 Tag 色:score-based 三档(≥80 success/≥60 warning/否则 error),与 HealthScoreCard
+// bandColor 同阈值方向(sev 色作标记,非正文)。antd Tag preset 仅三色,故 40 以下两档合一。
 function scoreTagColor(score: number): string {
   if (score >= 80) return 'success'
   if (score >= 60) return 'warning'
-  if (score >= 40) return 'error'
   return 'error'
 }
 

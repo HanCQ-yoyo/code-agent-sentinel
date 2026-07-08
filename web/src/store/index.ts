@@ -62,11 +62,14 @@ export const useStore = create<State>((set, get) => ({
   fetchDetectors: async () => {
     const list = await wrap(() => apiGet<DetectorMeta[]>('/api/detectors'), set)
     if (list) {
-      const normalized = list.map(m => ({
-        ...m,
-        available: m.engines.length > 0 && m.engines.some(e => e.available),
-        reason: m.engines.find(e => !e.available && e.reason)?.reason,
-      }))
+      const normalized = list.map(m => {
+        const engines = m.engines ?? []
+        return {
+          ...m,
+          available: engines.length > 0 && engines.some(e => e.available),
+          reason: engines.find(e => !e.available && e.reason)?.reason,
+        }
+      })
       set({ detectors: normalized })
     }
   },

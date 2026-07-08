@@ -13,7 +13,7 @@ function DetectorCard({ d }: { d: DetectorMeta }) {
         <div>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>引擎</Typography.Text>
           <div style={{ marginTop: 4 }}>
-            {d.engines.map((e) => (
+            {(d.engines ?? []).map((e) => (
               <div key={e.name} style={{ fontSize: 13 }}>
                 <AntBadge status={e.available ? 'success' : 'error'} />
                 <span style={{ color: 'var(--text)' }}>{e.name}</span>
