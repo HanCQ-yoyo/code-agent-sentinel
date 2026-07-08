@@ -27,3 +27,14 @@ func TestDefaultAgents(t *testing.T) {
 		t.Errorf("HomeDir = %q, 期望 /home/alice", a.HomeDir)
 	}
 }
+
+func TestNewEngineFromAgent(t *testing.T) {
+	agents := DefaultAgents("/home/alice")
+	eng := NewEngineFromAgent(agents[0])
+	if eng.HomeDir != "/home/alice" {
+		t.Errorf("HomeDir = %q, 期望 /home/alice", eng.HomeDir)
+	}
+	if eng.ClaudeJSON != agents[0].ClaudeJSON {
+		t.Errorf("ClaudeJSON = %q, 期望 %q", eng.ClaudeJSON, agents[0].ClaudeJSON)
+	}
+}

@@ -20,3 +20,9 @@ func NewEngine(home string) *Engine {
 func (e *Engine) ListProjects() ([]Project, error) {
 	return readProjectList(e.ClaudeJSON)
 }
+
+// NewEngineFromAgent 用 agent 描述构造 Engine。本轮 Claude Code 等价 NewEngine(a.HomeDir),
+// 但 agent 描述显式化,为多 agent 铺路。
+func NewEngineFromAgent(a Agent) *Engine {
+	return NewEngine(a.HomeDir)
+}
