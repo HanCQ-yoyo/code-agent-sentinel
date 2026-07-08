@@ -26,7 +26,7 @@ import (
 func TestRouterXFFNotTrusted(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	cfg := &config.Config{Bind: "0.0.0.0", AllowedCIDRs: []string{"10.0.0.0/8"}}
-	srv := NewServer(&configengine.Engine{}, &security.Orchestrator{}, cfg, "tok", nil)
+	srv := NewServer(&configengine.Engine{}, &security.Orchestrator{}, cfg, "tok", nil, nil)
 	r := srv.Router()
 	r.GET("/probe", func(c *gin.Context) { c.String(200, "ok") })
 

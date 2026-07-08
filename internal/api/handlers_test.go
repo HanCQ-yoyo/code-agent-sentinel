@@ -24,7 +24,7 @@ func newTestServer(t *testing.T, home string) *Server {
 	r.Register(security.NewBaselineDetector())
 	orch := &security.Orchestrator{Registry: r}
 	hist := history.NewStore(filepath.Join(home, "..", "history")) // 历史目录与 .claude 同级,在 home 之外
-	return NewServer(eng, orch, config.DefaultConfig(), "tok", hist)
+	return NewServer(eng, orch, config.DefaultConfig(), "tok", hist, configengine.DefaultAgents(home))
 }
 
 func TestGetAssets(t *testing.T) {
