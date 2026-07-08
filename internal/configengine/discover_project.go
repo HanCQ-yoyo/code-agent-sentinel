@@ -29,6 +29,9 @@ func (e *Engine) discoverProjects(inv *Inventory) {
 // discoverOneProject 发现单个项目的项目级资产(原 discoverProject 主体)。
 func (e *Engine) discoverOneProject(inv *Inventory, p Project) {
 	d := filepath.Join(p.Path, ".claude")
+	// 捕获本次 discoverOneProject 调用前 inv.Assets 的长度,用于末尾只对**本项目**
+	// 本次新增的 hook/command 抽取脚本(见函数末尾注释)。
+	start := len(inv.Assets)
 
 	if sp := filepath.Join(d, "settings.json"); fileExists(sp) {
 		if a, _ := parseSettings(sp, ScopeProject); a != nil {
@@ -58,10 +61,13 @@ func (e *Engine) discoverOneProject(inv *Inventory, p Project) {
 			inv.Assets = append(inv.Assets, a...)
 		}
 	}
-	// 仅对项目级 hook/command 资产抽取脚本(沿用原偏差注释,防全局脚本重复抽取)。
+	// 仅对**本项目**本次新增的 hook/command 抽取脚本(parseScripts 的 seen 去重是
+	// per-call 的;多项目循环下若扫全部 inv.Assets 的项目级 hook,每个项目都会重扫
+	// 前面项目已处理的 hook → 绝对路径脚本被重复产出(同 ID)+ detectDuplicates 误报。
+	// 故只扫本次 discoverOneProject 解析出的 hook/command,即 inv.Assets[start:])。
 	var projAssets []Asset
-	for _, a := range inv.Assets {
-		if a.Scope == ScopeProject && (a.Type == AssetHook || a.Type == AssetCommand) {
+	for _, a := range inv.Assets[start:] {
+		if a.Type == AssetHook || a.Type == AssetCommand {
 			projAssets = append(projAssets, a)
 		}
 	}
