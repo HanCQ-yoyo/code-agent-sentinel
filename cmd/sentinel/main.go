@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -91,9 +90,6 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	}
 
 	eng := configengine.NewEngine(home)
-	if cfg.Project != "" {
-		eng.SelectProject(configengine.Project{Path: cfg.Project, Name: filepathBase(cfg.Project)})
-	}
 	r := security.NewRegistry()
 	r.Register(security.NewBaselineDetector())
 	r.Register(security.NewInjectionDetector())
@@ -180,11 +176,4 @@ func openBrowser(url string) {
 	default:
 		exec.Command("xdg-open", url).Start()
 	}
-}
-
-func filepathBase(p string) string {
-	if i := strings.LastIndex(p, "/"); i >= 0 {
-		return p[i+1:]
-	}
-	return p
 }

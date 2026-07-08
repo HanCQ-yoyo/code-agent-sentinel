@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -35,5 +36,14 @@ func TestLoadFromFile(t *testing.T) {
 	}
 	if c.BasicAuth == nil || c.BasicAuth.User != "admin" {
 		t.Errorf("basic auth: %+v", c.BasicAuth)
+	}
+}
+
+func TestConfigHasNoProjectField(t *testing.T) {
+	// --project 启动项已下线,Config 不应再有 Project 字段(若残留则断言失败)。
+	var c Config
+	_, ok := reflect.TypeOf(c).FieldByName("Project")
+	if ok {
+		t.Fatal("Config 不应再有 Project 字段(--project 已移除)")
 	}
 }
