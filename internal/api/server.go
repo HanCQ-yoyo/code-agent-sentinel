@@ -95,6 +95,7 @@ func (s *Server) Router() *gin.Engine {
 func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	api.GET("/assets", s.getAssets)
 	api.GET("/assets/:id", s.getAsset)
+	api.GET("/tree", s.getTree)
 	api.POST("/scan", s.postScan)
 	api.GET("/scan/result", s.getScanResult)
 	api.GET("/findings", s.getFindings)
