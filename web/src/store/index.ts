@@ -100,9 +100,10 @@ export const useStore = create<State>((set, get) => ({
     const tree = await wrap(() => apiGet<TreeNode>(url), set)
     if (tree) set({ tree })
   },
+  // setActiveProjectTab 仅 setState;fetchTree 由 Assets useEffect(activeProjectTab deps)统一驱动,
+  // 避免阶段 B 遗留的双重 fetchTree 冗余(setActiveProjectTab + Assets effect 各调一次)。
   setActiveProjectTab: (tab) => {
     set({ activeProjectTab: tab })
-    get().fetchTree(tab)
   },
   clearError: () => set({ error: null, authError: false }),
 }))

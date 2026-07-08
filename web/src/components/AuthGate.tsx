@@ -8,7 +8,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
   const hasToken = getAuthToken() !== ''
   if (!hasToken || authError) {
     return (
-      <div style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
+      // role="alert" 放外层 div:antd Result 的 ResultProps 不含 role,且实现不 spread rest 到根 div,
+      // 放 Result 上既过不了 TS 也不到 DOM。外层 div 语义上等价(screen-reader 仍宣告整个区域为 alert)。
+      <div role="alert" style={{ minHeight: '100vh', display: 'grid', placeItems: 'center', padding: 24 }}>
         <Result
           status="warning"
           title="需要访问 token"
