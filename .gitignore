@@ -8,6 +8,10 @@ web/dist/
 # 内嵌前端产物:仅 index.html 占位符入库,assets/ 构建块不入库
 internal/api/web_dist/assets/
 design-mockups/
+# 本地真实环境验证脚本(驱动外部 CDP 浏览器 + 指定端口,非 CI 测试,不进远端)
+web/_pw-*.mjs
+# 临时调试截图(shot-*.png,模型不支持多模态,截图无解析价值)
+shot-*.png
 
 # 本地工具 / 规划产物(不进远端)
 .claude/
