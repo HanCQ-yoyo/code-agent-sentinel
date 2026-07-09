@@ -45,7 +45,9 @@ export function AssetDetailPanel({ asset }: { asset: Asset }) {
         </Descriptions.Item>
       </Descriptions>
 
-      <ContentArea asset={asset} theme={theme} />
+      {/* key={asset.id}:切资产时重挂载 ContentArea,使其 Segmented view state 回默认(预览/结构化),
+          修阶段 C defer「view state carryover」(切某 md 资产到源码后选另一 md 资产仍是源码视图)。 */}
+      <ContentArea key={asset.id} asset={asset} theme={theme} />
     </div>
   )
 }

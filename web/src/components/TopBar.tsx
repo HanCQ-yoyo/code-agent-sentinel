@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Layout, Button, Switch, Space, Typography, Select } from 'antd'
 import { ReloadOutlined } from '@ant-design/icons'
 import { useTheme } from '../theme'
@@ -20,8 +21,10 @@ export function TopBar({ title, onScan, loading, detectors }: Props) {
   const currentAgent = agents?.current
   const avail = detectors.filter((d) => d.available).length
 
-  // agent 选择器:本轮单选项,选择走通链路(单 agent 无实际切换效果)。
-  if (!agents) void fetchAgents()
+  // agent 加载:移出 render body 防 render 中触发副作用。
+  useEffect(() => {
+    if (!agents) fetchAgents()
+  }, [agents, fetchAgents])
 
   return (
     <Header
@@ -57,6 +60,7 @@ export function TopBar({ title, onScan, loading, detectors }: Props) {
           onChange={toggle}
           checkedChildren="深"
           unCheckedChildren="浅"
+          aria-label="主题"
         />
         <Button type="primary" icon={<ReloadOutlined />} loading={loading} onClick={onScan}>
           {loading ? '扫描中…' : '重新扫描'}

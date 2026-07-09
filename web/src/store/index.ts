@@ -62,11 +62,14 @@ export const useStore = create<State>((set, get) => ({
   fetchDetectors: async () => {
     const list = await wrap(() => apiGet<DetectorMeta[]>('/api/detectors'), set)
     if (list) {
-      const normalized = list.map(m => ({
-        ...m,
-        available: m.engines.length > 0 && m.engines.some(e => e.available),
-        reason: m.engines.find(e => !e.available && e.reason)?.reason,
-      }))
+      const normalized = list.map(m => {
+        const engines = m.engines ?? []
+        return {
+          ...m,
+          available: engines.length > 0 && engines.some(e => e.available),
+          reason: engines.find(e => !e.available && e.reason)?.reason,
+        }
+      })
       set({ detectors: normalized })
     }
   },
@@ -100,9 +103,10 @@ export const useStore = create<State>((set, get) => ({
     const tree = await wrap(() => apiGet<TreeNode>(url), set)
     if (tree) set({ tree })
   },
+  // setActiveProjectTab 仅 setState;fetchTree 由 Assets useEffect(activeProjectTab deps)统一驱动,
+  // 避免阶段 B 遗留的双重 fetchTree 冗余(setActiveProjectTab + Assets effect 各调一次)。
   setActiveProjectTab: (tab) => {
     set({ activeProjectTab: tab })
-    get().fetchTree(tab)
   },
   clearError: () => set({ error: null, authError: false }),
 }))

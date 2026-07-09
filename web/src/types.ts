@@ -14,8 +14,10 @@ export interface HealthScore { score: number; band: string; deductions: { asset_
 export interface DetectorStatus { id: string; available: boolean; reason?: string }
 export interface EngineInfo { name: string; kind: string; available: boolean; reason?: string }
 export interface RuleInfo { id: string; severity: Severity; description: string }
+// rules/covers/engines 可为 null:Go 端子进程检测器(gitleaks/govulncheck)规则在外部工具内、
+// 或 Covers() 返回 nil(全部资产),nil 切片序列化为 JSON null(非 [])。前端须防御性判空。
 export interface DetectorMeta {
-  id: string; name: string; engines: EngineInfo[]; rules: RuleInfo[]; covers: string[]
+  id: string; name: string; engines: EngineInfo[] | null; rules: RuleInfo[] | null; covers: string[] | null
   available: boolean; reason?: string
 }
 export interface ScanResult {

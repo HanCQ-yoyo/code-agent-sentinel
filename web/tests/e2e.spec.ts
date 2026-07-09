@@ -4,6 +4,9 @@ import { writeFileSync, mkdirSync } from 'fs'
 test.beforeAll(() => {
   mkdirSync('/tmp/sentinel-e2e-home/.claude', { recursive: true })
   writeFileSync('/tmp/sentinel-e2e-home/.claude/settings.json', JSON.stringify({ permissions: { allow: ['Bash(*)'] } }))
+  // Task 9:加 memory 资产(CLAUDE.md → memory 类型),供 md 资产预览断言;
+  // 含 fenced bash 代码块,同时间接覆盖 MonacoBlock 在预览中的渲染。
+  writeFileSync('/tmp/sentinel-e2e-home/.claude/CLAUDE.md', '# 项目记忆\n\n示例代码块:\n\n```bash\necho hello\n```\n')
 })
 
 test('dashboard 带 token 认证后扫描并返回数据依赖结果', async ({ page }) => {
@@ -130,4 +133,36 @@ test('发现页扫描后展示 finding 行', async ({ page }) => {
   await page.getByRole('menuitem', { name: /发现/i }).click()
   // fixture 含 Bash(*) → 至少一条 finding
   await expect(page.locator('[data-testid="finding-row"]').first()).toBeVisible({ timeout: 15000 })
+})
+
+test('md 资产预览渲染 markdown', async ({ page }) => {
+  // 选一个 markdown 类资产(memory/skill/command/agent),断言预览区 .markdown-preview 渲染。
+  await page.goto('/#token=e2e-test-token-123')
+  await page.getByRole('menuitem', { name: /资产/i }).click()
+  // 找一个 md 资产行(类型 Badge 文本含 memory/skill/command/agent 之一)
+  const mdRow = page.locator('[data-testid="asset-row"]').filter({ hasText: /memory|skill|command|agent/ }).first()
+  await mdRow.click()
+  // 抽屉打开后 asset-detail-name 可见,内容区 .markdown-preview 渲染
+  await expect(page.getByTestId('asset-detail-name')).toBeVisible({ timeout: 10000 })
+  await expect(page.locator('.markdown-preview')).toBeVisible({ timeout: 10000 })
+})
+
+test('结构化资产详情渲染', async ({ page }) => {
+  // 选一个结构化资产(settings/permissions/mcp_server/hook/keybinding/plugin),
+  // 断言 structured-kv(结构化视图)或 monaco-editor(源码视图)渲染。
+  await page.goto('/#token=e2e-test-token-123')
+  await page.getByRole('menuitem', { name: /资产/i }).click()
+  const structRow = page.locator('[data-testid="asset-row"]').filter({ hasText: /settings|permissions|mcp_server|hook|keybinding|plugin/ }).first()
+  await structRow.click()
+  await expect(page.getByTestId('asset-detail-name')).toBeVisible({ timeout: 10000 })
+  await expect(page.locator('[data-testid="structured-kv"], .monaco-editor').first()).toBeVisible({ timeout: 10000 })
+})
+
+test('设置页 Tabs 切换规则总览', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  await page.getByRole('menuitem', { name: /设置/i }).click()
+  // 默认检测器 Tab,点「规则总览」
+  await page.getByRole('tab', { name: /规则总览/ }).click()
+  // 规则总览 Segmented 的「全部 N」标签可见(证明 RulesTable 渲染)
+  await expect(page.getByText(/全部 \d+/)).toBeVisible({ timeout: 10000 })
 })

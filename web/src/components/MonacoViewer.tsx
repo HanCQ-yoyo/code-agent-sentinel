@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react'
 import * as monaco from 'monaco-editor'
 import '../lib/monaco-workers' // 副作用:注册 self.MonacoEnvironment(worker)
+import '../lib/monaco-theme' // 副作用:注册 sentinel-light/dark 主题(从 tokens 派生)
 
 // MonacoViewer:monaco-editor 薄包装。P1 只读(readOnly:true),无 minimap。
-// 主题由 props 传入(app useTheme() 的 'light'|'dark' → Monaco 'vs'|'vs-dark'),
+// 主题由 props 传入(app useTheme() 的 'light'|'dark' → Monaco 'sentinel-light'|'sentinel-dark'),
 // theme 变化时 useEffect 重新 updateOptions,无需重建 editor。
 // 通过 React.lazy 动态导入(ContentArea 内),markdown 默认预览不触发加载。
 //
@@ -29,7 +30,7 @@ export default function MonacoViewer({
     const editor = monaco.editor.create(ref.current, {
       value,
       language,
-      theme: theme === 'dark' ? 'vs-dark' : 'vs',
+      theme: theme === 'dark' ? 'sentinel-dark' : 'sentinel-light',
       readOnly: true,
       minimap: { enabled: false },
       automaticLayout: true,
@@ -66,7 +67,7 @@ export default function MonacoViewer({
   // theme 变化 → 更新(app 切深浅色)
   useEffect(() => {
     if (editorRef.current) {
-      editorRef.current.updateOptions({ theme: theme === 'dark' ? 'vs-dark' : 'vs' })
+      editorRef.current.updateOptions({ theme: theme === 'dark' ? 'sentinel-dark' : 'sentinel-light' })
     }
   }, [theme])
 

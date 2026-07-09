@@ -2,6 +2,7 @@ import { lazy, Suspense, useState } from 'react'
 import { Card, Segmented, Spin, Empty } from 'antd'
 import type { Asset } from '../types'
 import { MarkdownPreview } from './MarkdownPreview'
+import { StructuredKV } from './StructuredKV'
 import { langByExt } from '../lib/monaco-lang'
 
 // MonacoViewer 懒加载:markdown 默认预览不触发 monaco chunk 加载,
@@ -77,7 +78,7 @@ export function ContentArea({ asset, theme }: { asset: Asset; theme: 'light' | '
     )
   }
 
-  // structured:settings 有 fields.raw(原始 JSON),其余序列化 fields
+  // structured:Segmented[结构化|源码],默认结构化(StructuredKV 递归);源码 = Monaco JSON。
   if (isStructured) {
     const raw = (asset.fields as Record<string, unknown> | undefined)?.raw
     const value = typeof raw === 'string'
@@ -91,11 +92,23 @@ export function ContentArea({ asset, theme }: { asset: Asset; theme: 'light' | '
         size="small"
         title="内容"
         style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }}
-        styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
+        styles={{ body: { flex: 1, padding: 12, overflow: 'auto', display: 'flex', flexDirection: 'column' } }}
+        extra={
+          <Segmented
+            size="small"
+            value={view}
+            onChange={(v) => setView(v as 'preview' | 'source')}
+            options={[{ value: 'preview', label: '结构化' }, { value: 'source', label: '源码' }]}
+          />
+        }
       >
-        <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
-          <MonacoViewer value={value} language="json" theme={theme} />
-        </Suspense>
+        {view === 'preview' ? (
+          <StructuredKV value={asset.fields ?? {}} />
+        ) : (
+          <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
+            <MonacoViewer value={value} language="json" theme={theme} />
+          </Suspense>
+        )}
       </Card>
     )
   }

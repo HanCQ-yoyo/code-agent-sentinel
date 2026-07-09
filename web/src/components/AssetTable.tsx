@@ -1,3 +1,4 @@
+import { type HTMLAttributes } from 'react'
 import { Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import type { Asset, Finding, Severity } from '../types'
@@ -77,7 +78,8 @@ export function AssetTable({ assets, findings = [], onSelect }: { assets: Asset[
       pagination={false}
       size="middle"
       locale={{ emptyText: '暂无资产' }}
-      onRow={(a) => ({ 'data-testid': 'asset-row', onClick: () => onSelect(a.id) })}
+      // 保留 asset-row testid 供 e2e;cast 与 FindingTable onRow 一致(antd Table onRow 无 data-* 索引签名)。
+      onRow={(a) => ({ 'data-testid': 'asset-row', onClick: () => onSelect(a.id) }) as HTMLAttributes<HTMLElement>}
       rowClassName={() => 'cursor-pointer'}
     />
   )
