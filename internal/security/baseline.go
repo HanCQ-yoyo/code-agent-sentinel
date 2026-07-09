@@ -26,7 +26,12 @@ func (d *BaselineDetector) Reason() string  { return "" }
 func (d *BaselineDetector) Meta() DetectorMeta {
 	rules := make([]RuleInfo, 0, len(d.rules))
 	for _, r := range d.rules {
-		rules = append(rules, RuleInfo{ID: r.ID, Severity: string(r.Severity), Description: r.Description})
+		rules = append(rules, RuleInfo{
+			ID:          r.ID,
+			Severity:    string(r.Severity),
+			Description: r.Description,
+			Syntax:      baselineSyntax(r),
+		})
 	}
 	covers := make([]string, 0, len(d.Covers()))
 	for _, c := range d.Covers() {
@@ -38,6 +43,19 @@ func (d *BaselineDetector) Meta() DetectorMeta {
 		Engines: []EngineInfo{{Name: "内嵌 YAML 规则引擎", Kind: "embedded", Available: true}},
 		Rules:   rules,
 		Covers:  covers,
+	}
+}
+
+// baselineSyntax 按 op 生成可读规则语法。contains → 字段包含 value;
+// key_matches → 键匹配正则;兜底 → op value 形式。
+func baselineSyntax(r BaselineRule) string {
+	switch r.Op {
+	case "contains":
+		return fmt.Sprintf("字段 %q 包含 %q", r.Field, r.Value)
+	case "key_matches":
+		return fmt.Sprintf("键 %q 匹配正则 /%s/", r.Field, r.Value)
+	default:
+		return fmt.Sprintf("字段 %q %s %q", r.Field, r.Op, r.Value)
 	}
 }
 

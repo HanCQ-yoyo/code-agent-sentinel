@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"code-agent-sentinel/internal/configengine"
@@ -75,6 +76,35 @@ func TestDetectorMeta(t *testing.T) {
 					t.Errorf("引擎 %q kind 非法: %q", e.Name, e.Kind)
 				}
 			}
+			// baseline/injection 每条内嵌规则须含 syntax(可读语法或正则);secret/dep rules 为 nil 不校验。
+			if len(m.Rules) > 0 {
+				for _, r := range m.Rules {
+					if r.Syntax == "" {
+						t.Errorf("规则 %q syntax 为空", r.ID)
+					}
+				}
+			}
 		})
+	}
+}
+
+func TestRuleSyntaxContent(t *testing.T) {
+	// baseline.wildcard-bash 的 syntax 应含 value "Bash(*)"(op=contains 的可读语法含 value)。
+	bd := NewBaselineDetector()
+	m := bd.Meta()
+	var got string
+	for _, r := range m.Rules {
+		if r.ID == "baseline.wildcard-bash" {
+			got = r.Syntax
+		}
+	}
+	if !strings.Contains(got, "Bash(*)") {
+		t.Fatalf("baseline.wildcard-bash syntax = %q, want 含 Bash(*)", got)
+	}
+	// injection 规则 syntax 应为 pattern 正则原文(非空)。
+	id := NewInjectionDetector()
+	im := id.Meta()
+	if len(im.Rules) == 0 || im.Rules[0].Syntax == "" {
+		t.Fatalf("injection 第一条规则 syntax 为空: %+v", im.Rules)
 	}
 }
