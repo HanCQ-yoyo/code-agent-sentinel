@@ -6,8 +6,9 @@ import { Badge, type BadgeTone } from './Badge'
 
 type FlatRule = { id: string; severity: Severity; description: string; detector: string; detector_id: string }
 
-// 规则总览:汇总所有检测器的规则,按 sev 筛选。规则号 mono,sev 标签,检测器名,说明。
-export function RulesTable({ detectors }: { detectors: DetectorMeta[] }) {
+// 规则总览:汇总所有检测器的规则,按 sev + 检测器筛选。规则号 mono,sev 标签,检测器名,说明。
+// detectorFilter(可选):外部胶囊行点击检测器后传入,只显示该检测器规则。
+export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorMeta[]; detectorFilter?: string }) {
   const [sev, setSev] = useState<string>('all')
 
   const allRules = useMemo<FlatRule[]>(
@@ -15,13 +16,21 @@ export function RulesTable({ detectors }: { detectors: DetectorMeta[] }) {
     [detectors]
   )
 
-  const counts = useMemo(() => {
-    const c: Record<string, number> = { all: allRules.length, critical: 0, high: 0, medium: 0, low: 0 }
-    for (const r of allRules) c[r.severity] = (c[r.severity] ?? 0) + 1
-    return c
-  }, [allRules])
+  // 先按检测器筛选(detectorFilter 来自胶囊行),再据此算 sev 分布 + 二次 sev 筛选。
+  // 这样 Segmented 计数随检测器筛选联动,「全部 N」反映当前检测器规则数,而非全局。
+  const byDetector = useMemo(
+    () => allRules.filter((r) => !detectorFilter || r.detector_id === detectorFilter),
+    [allRules, detectorFilter]
+  )
 
-  const filtered = sev === 'all' ? allRules : allRules.filter((r) => r.severity === sev)
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: byDetector.length, critical: 0, high: 0, medium: 0, low: 0 }
+    for (const r of byDetector) c[r.severity] = (c[r.severity] ?? 0) + 1
+    return c
+  }, [byDetector])
+
+  // 合并筛选:在 byDetector 基础上再按 sev。
+  const filtered = sev === 'all' ? byDetector : byDetector.filter((r) => r.severity === sev)
 
   const columns: ColumnsType<FlatRule> = [
     { title: '级别', width: 90, dataIndex: 'severity', render: (s: Severity) => <Badge tone={`sev-${s}` as BadgeTone}>{s}</Badge> },

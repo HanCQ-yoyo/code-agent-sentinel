@@ -1,14 +1,45 @@
 import { useEffect, useState } from 'react'
-import { Card, Tag, Typography, Empty, Badge as AntBadge, Tabs } from 'antd'
+import { Card, Typography, Empty, Badge as AntBadge, Tabs } from 'antd'
 import { useStore } from '../store'
 import type { DetectorMeta } from '../types'
 import { Badge, type BadgeTone } from '../components/Badge'
 import { RulesTable } from '../components/RulesTable'
 
-function DetectorCard({ d }: { d: DetectorMeta }) {
-  const [open, setOpen] = useState(false)
+// 检测器规则数:有规则返回数字;无规则但有 engines → 外部引擎内置配置;否则 0。
+function ruleCountLabel(d: DetectorMeta): string {
+  const n = (d.rules ?? []).length
+  if (n > 0) return String(n)
+  if (d.engines && d.engines.length > 0) return '外部'
+  return '0'
+}
+
+// 胶囊:可用性圆点 + 名称 + 规则数;选中 accent 高亮。
+function DetectorChip({ d, active, onClick }: { d: DetectorMeta; active: boolean; onClick: () => void }) {
   return (
-    <Card size="small" title={<span style={{ color: 'var(--text)' }}>{d.name}</span>} extra={d.available ? <Tag color="success">可用</Tag> : <Tag color="error">不可用</Tag>}>
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid="detector-chip"
+      aria-pressed={active}
+      style={{
+        display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px',
+        borderRadius: 16, cursor: 'pointer', fontSize: 13,
+        background: active ? 'var(--brand-soft)' : 'var(--bg-card)',
+        border: `1px solid ${active ? 'var(--accent)' : 'var(--bg-border)'}`,
+        color: 'var(--text)',
+      }}
+    >
+      <AntBadge status={d.available ? 'success' : 'error'} />
+      <span>{d.name}</span>
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{ruleCountLabel(d)}</span>
+    </button>
+  )
+}
+
+// 选中检测器的紧凑详情条(复用原 DetectorCard 信息):引擎/覆盖/不可用 reason。
+function DetectorDetailStrip({ d }: { d: DetectorMeta }) {
+  return (
+    <Card size="small" style={{ background: 'var(--surface2)' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         <div>
           <Typography.Text type="secondary" style={{ fontSize: 12 }}>引擎</Typography.Text>
@@ -31,26 +62,9 @@ function DetectorCard({ d }: { d: DetectorMeta }) {
             </div>
           </div>
         ) : null}
-        <div>
-          {!d.rules || d.rules.length === 0 ? (
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>由外部扫描引擎内置配置提供</Typography.Text>
-          ) : (
-            <>
-              <Typography.Link style={{ fontSize: 12 }} onClick={() => setOpen(!open)}>{open ? '收起规则' : `展开规则 (${d.rules.length})`}</Typography.Link>
-              {open ? (
-                <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {d.rules.map((r) => (
-                    <div key={r.id} style={{ fontSize: 12 }}>
-                      <Badge tone={`sev-${r.severity}` as BadgeTone}>{r.severity}</Badge>
-                      <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, marginLeft: 6 }}>{r.id}</Typography.Text>
-                      <Typography.Text type="secondary" style={{ marginLeft: 6 }}>{r.description}</Typography.Text>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
-            </>
-          )}
-        </div>
+        {!d.available && d.reason ? (
+          <Typography.Text type="danger" style={{ fontSize: 12 }}>{d.reason}</Typography.Text>
+        ) : null}
       </div>
     </Card>
   )
@@ -58,15 +72,53 @@ function DetectorCard({ d }: { d: DetectorMeta }) {
 
 export default function Settings() {
   const { detectors, fetchDetectors } = useStore()
+  const [filter, setFilter] = useState<string | undefined>(undefined)
   useEffect(() => { fetchDetectors() }, [fetchDetectors])
 
-  const items = [
-    { key: 'detectors', label: '检测器', children: (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        {detectors.length === 0 ? <Empty description="暂无检测器" /> : detectors.map((d) => <DetectorCard key={d.id} d={d} />)}
+  const selected = filter ? detectors.find((d) => d.id === filter) : undefined
+  const totalRules = detectors.reduce((n, d) => n + (d.rules ?? []).length, 0)
+  const availCount = detectors.filter((d) => d.available).length
+
+  const detectorsAndRules = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* 胶囊行:检测器粒度统计 + 点击快捷筛选。「全部」清筛选。 */}
+      <div data-testid="detector-chips" style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
+        <button
+          type="button"
+          onClick={() => setFilter(undefined)}
+          aria-pressed={!filter}
+          style={{
+            display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px',
+            borderRadius: 16, cursor: 'pointer', fontSize: 13,
+            background: !filter ? 'var(--brand-soft)' : 'var(--bg-card)',
+            border: `1px solid ${!filter ? 'var(--accent)' : 'var(--bg-border)'}`,
+            color: 'var(--text)',
+          }}
+        >
+          <span>全部</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{totalRules}</span>
+        </button>
+        {detectors.map((d) => (
+          <DetectorChip key={d.id} d={d} active={filter === d.id} onClick={() => setFilter(filter === d.id ? undefined : d.id)} />
+        ))}
       </div>
-    ) },
-    { key: 'rules', label: '规则总览', children: <RulesTable detectors={detectors} /> },
+
+      {/* 选中检测器详情条;选「全部」显示摘要。 */}
+      {selected ? (
+        <DetectorDetailStrip d={selected} />
+      ) : (
+        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+          共 {detectors.length} 个检测器,{availCount} 个可用,{totalRules} 条规则。
+        </Typography.Text>
+      )}
+
+      {/* 规则列表:受胶囊行 detectorFilter 筛选。 */}
+      {totalRules === 0 ? <Empty description="暂无规则" /> : <RulesTable detectors={detectors} detectorFilter={filter} />}
+    </div>
+  )
+
+  const items = [
+    { key: 'detectors-rules', label: '检测器与规则', children: detectorsAndRules },
     { key: 'about', label: '关于', children: (
       <Card size="small">
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>规则版本随二进制内嵌;密钥检测依赖 gitleaks 子进程,依赖检测依赖 govulncheck/npm-audit。</Typography.Text>
@@ -77,7 +129,7 @@ export default function Settings() {
   return (
     <div style={{ maxWidth: 900 }}>
       <Card size="small" style={{ marginBottom: 16 }}><Typography.Text type="secondary">设置(只读)——检测引擎与规则。编辑能力在后续阶段。</Typography.Text></Card>
-      <Tabs defaultActiveKey="detectors" items={items} />
+      <Tabs defaultActiveKey="detectors-rules" items={items} />
     </div>
   )
 }

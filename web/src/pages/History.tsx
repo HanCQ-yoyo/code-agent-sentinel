@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Table, Button, Card, Row, Col, Spin, Empty, Typography, Alert, Popconfirm, Tag } from 'antd'
+import { Table, Button, Card, Row, Col, Spin, Empty, Typography, Alert, Popconfirm } from 'antd'
 import { ArrowLeftOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { useStore } from '../store'
@@ -8,14 +8,17 @@ import type { ScanSummary, ScanRecord } from '../types'
 import { HealthScoreCard } from '../components/HealthScoreCard'
 import { SeverityChart } from '../components/SeverityChart'
 import { FindingTable } from '../components/FindingTable'
-import { formatDateTime } from '../lib/format'
+import { formatDateTime, formatDateTimeShort } from '../lib/format'
 
-// 健康分 Tag 色:score-based 三档(≥80 success/≥60 warning/否则 error),与 HealthScoreCard
-// bandColor 同阈值方向(sev 色作标记,非正文)。antd Tag preset 仅三色,故 40 以下两档合一。
-function scoreTagColor(score: number): string {
-  if (score >= 80) return 'success'
-  if (score >= 60) return 'warning'
-  return 'error'
+// 风险指数色:score → sev token(复用现有 4 级绿→红色阶,与 band 5 级对齐)。
+// Excellent(≥90)/Good(≥75)同属健康,合 sev-low(绿);Fair→medium;At-Risk→high;Critical→critical。
+// 与 HealthScoreCard.bandColor 阈值方向一致(sev 色作数字标记)。文本穿 text 色,色仅着数字。
+function riskColor(score: number): string {
+  if (score >= 90) return 'var(--sev-low)'
+  if (score >= 75) return 'var(--sev-low)'
+  if (score >= 60) return 'var(--sev-medium)'
+  if (score >= 40) return 'var(--sev-high)'
+  return 'var(--sev-critical)'
 }
 
 export default function History() {
@@ -49,8 +52,10 @@ export default function History() {
   }
 
   const columns: ColumnsType<ScanSummary> = [
-    { title: '时间', dataIndex: 'started_at', render: (t: string, h: ScanSummary) => <Link to={`/history/${h.id}`}><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{formatDateTime(t)}</span></Link> },
-    { title: '健康分', width: 140, render: (_: unknown, h: ScanSummary) => <Tag color={scoreTagColor(h.health_score)} style={{ fontFamily: 'var(--font-mono)' }}>{h.health_score} · {h.band}</Tag> },
+    { title: '时间', dataIndex: 'started_at', width: 110, render: (t: string, h: ScanSummary) => <Link to={`/history/${h.id}`}><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{formatDateTimeShort(t)}</span></Link> },
+    { title: '风险指数', width: 90, render: (_: unknown, h: ScanSummary) => (
+      <span title={h.band} style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: riskColor(h.health_score) }}>{h.health_score}</span>
+    ) },
     { title: '发现', dataIndex: 'finding_count', width: 80 },
     { title: '检测器', width: 120, render: (_: unknown, h: ScanSummary) => <span style={{ fontFamily: 'var(--font-mono)' }}>{h.detector_avail}/{h.detector_total}</span> },
     { title: '', width: 80, render: (_: unknown, h: ScanSummary) => (

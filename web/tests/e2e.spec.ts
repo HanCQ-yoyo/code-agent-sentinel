@@ -15,8 +15,8 @@ test('dashboard 带 token 认证后扫描并返回数据依赖结果', async ({ 
   // fragment 不进 server log / Referer,由前端 token() 提取后注入 Authorization 头。
   await page.goto('/#token=e2e-test-token-123')
 
-  // 次要断言:页面骨架已渲染
-  await expect(page.getByText('态势看板')).toBeVisible()
+  // 次要断言:页面骨架已渲染(品牌落侧边栏最上方)
+  await expect(page.getByTestId('brand')).toBeVisible()
 
   // 触发扫描
   await page.getByRole('button', { name: /重新扫描|扫描/ }).click()
@@ -34,13 +34,13 @@ test('dashboard 带 token 认证后扫描并返回数据依赖结果', async ({ 
 
 test('导航后重新扫描不丢 token(问题 3 回归)', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
-  await expect(page.getByText('态势看板')).toBeVisible()
+  await expect(page.getByTestId('brand')).toBeVisible()
 
   // 导航到 /assets(会触发 React Router pushState,丢 #token fragment)
   // Task 3 起 Sidebar 用 antd Menu,菜单项渲染为 role="menuitem"(非 link),可访问名=项文本
   await page.getByRole('menuitem', { name: /资产/i }).click()
   // 再导航回 /dashboard
-  await page.getByRole('menuitem', { name: /看板/i }).click()
+  await page.getByRole('menuitem', { name: /dashboard/i }).click()
 
   // 重新扫描 —— 旧行为会 401,修复后应成功
   await page.getByRole('button', { name: /重新扫描|扫描/ }).click()
@@ -90,9 +90,9 @@ test('侧栏导航含 4 项且 active 高亮', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
   // Sidebar 用 antd Menu,容器 role="menu",菜单项 role="menuitem"(可访问名=项文本)
   const nav = page.getByRole('menu')
-  await expect(nav.getByRole('menuitem', { name: /看板/i })).toBeVisible()
+  await expect(nav.getByRole('menuitem', { name: /dashboard/i })).toBeVisible()
   await expect(nav.getByRole('menuitem', { name: /资产/i })).toBeVisible()
-  await expect(nav.getByRole('menuitem', { name: /发现/i })).toBeVisible()
+  await expect(nav.getByRole('menuitem', { name: /风险管理/ })).toBeVisible()
   await expect(nav.getByRole('menuitem', { name: /设置/i })).toBeVisible()
   await nav.getByRole('menuitem', { name: /资产/i }).click()
   await expect(page).toHaveURL(/\/assets/)
@@ -131,7 +131,7 @@ test('资产详情页显示字段与 hash', async ({ page }) => {
 test('发现页扫描后展示 finding 行', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
   await page.getByRole('button', { name: /重新扫描|扫描/ }).click()
-  await page.getByRole('menuitem', { name: /发现/i }).click()
+  await page.getByRole('menuitem', { name: /风险管理/ }).click()
   // fixture 含 Bash(*) → 至少一条 finding
   await expect(page.locator('[data-testid="finding-row"]').first()).toBeVisible({ timeout: 15000 })
   // 点击行打开风险详情抽屉:断言抽屉容器 + 风险信息区 + 资产区(asset-detail-name)均渲染。
@@ -164,13 +164,15 @@ test('结构化资产详情渲染', async ({ page }) => {
   await expect(page.locator('[data-testid="structured-kv"], .monaco-editor').first()).toBeVisible({ timeout: 10000 })
 })
 
-test('设置页 Tabs 切换规则总览', async ({ page }) => {
+test('设置页合并视图渲染检测器与规则', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
   await page.getByRole('menuitem', { name: /设置/i }).click()
-  // 默认检测器 Tab,点「规则总览」
-  await page.getByRole('tab', { name: /规则总览/ }).click()
-  // 规则总览 Segmented 的「全部 N」标签可见(证明 RulesTable 渲染)
+  // 合并后默认 Tab「检测器与规则」直接渲染:胶囊行 + 规则列表 Segmented 的「全部 N」
+  await expect(page.getByTestId('detector-chips')).toBeVisible({ timeout: 10000 })
   await expect(page.getByText(/全部 \d+/)).toBeVisible({ timeout: 10000 })
+  // 点一个检测器胶囊 → 该检测器规则数胶囊可见(快捷筛选)
+  await page.getByTestId('detector-chip').first().click()
+  await expect(page.getByTestId('detector-chip').first()).toHaveAttribute('aria-pressed', 'true')
 })
 
 // 阶段 D 资产页增强:标签筛选 / 收藏置顶 / 分页 / 切 tab 关抽屉 / 无资产文件打开。
