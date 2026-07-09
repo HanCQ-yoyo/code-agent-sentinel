@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Card, Segmented, Input, Radio, Spin, Alert, Typography, Tabs, Splitter, Modal, Tag } from 'antd'
+import { Card, Segmented, Input, Radio, Spin, Alert, Typography, Tabs, Splitter, Modal, Tag, Button } from 'antd'
 import { useStore } from '../store'
 import type { Asset } from '../types'
 import { AssetTable } from '../components/AssetTable'
@@ -42,6 +42,8 @@ export default function Assets() {
   const [selected, setSelected] = useState<string | null>(null)
   // 树模式右栏:无资产文件原始内容(path 为绝对路径)。
   const [rawPath, setRawPath] = useState<string | null>(null)
+  // 树展开状态受控:默认全收起([])。「全部收起」按钮置空。
+  const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([])
   const [favorites, setFavorites] = useState<Set<string>>(() => loadFavorites())
   // 标签编辑弹窗:点击树节点标签徽标时打开,选 配置/运行时/恢复默认。
   const [tagEdit, setTagEdit] = useState<{ relPath: string; current: DirTag | undefined } | null>(null)
@@ -165,7 +167,10 @@ export default function Assets() {
             </Radio.Group>
             <Input.Search value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索名称或路径" style={{ width: 240, marginLeft: 'auto' }} allowClear />
           </>
-        ) : null}
+        ) : (
+          // 树模式:全部收起按钮(默认已全收起,展开后可一键收回)。
+          <Button size="small" onClick={() => setExpandedKeys([])} disabled={expandedKeys.length === 0}>全部收起</Button>
+        )}
         <Typography.Text type="secondary" style={{ fontFamily: 'var(--font-mono)' }}>
           {view === 'list' ? `${list.length} / ${tabFiltered.length} 资产` : `${tabFiltered.length} 资产`}
         </Typography.Text>
@@ -206,6 +211,8 @@ export default function Assets() {
                   dirTagsDefaults={dirTagsDefaults}
                   dirTagsOverrides={dirTagsOverrides}
                   onEditTag={(rel, cur) => setTagEdit({ relPath: rel, current: cur })}
+                  expandedKeys={expandedKeys}
+                  onExpandedKeysChange={setExpandedKeys}
                 />
               ) : <Spin />}
             </Card>

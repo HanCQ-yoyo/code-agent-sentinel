@@ -33,11 +33,12 @@ type EngineInfo struct {
 	Reason    string `json:"reason,omitempty"`
 }
 
-// RuleInfo 是一条内嵌规则的摘要(不含 pattern 等实现细节)。
+// RuleInfo 是一条内嵌规则的摘要(含可读语法或正则,供发现页抽屉展示规则表达式)。
 type RuleInfo struct {
 	ID          string `json:"id"`
 	Severity    string `json:"severity"`
 	Description string `json:"description"`
+	Syntax      string `json:"syntax,omitempty"` // 可读语法(baseline:按 op 拼)或正则原文(injection)
 }
 
 // Registry 管理已注册检测器。

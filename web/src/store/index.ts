@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { apiGet, apiPost, apiPut, apiDelete, AuthError } from '../api/client'
-import type { Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, TreeNode, Project, DirTagsResponse, RawFile } from '../types'
+import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, TreeNode, Project, DirTagsResponse, RawFile } from '../types'
 import { type DirTag, type DirTagsMap } from '../lib/dirTags'
 
 type ProjectTab = { kind: 'global' } | { kind: 'project'; path: string }
@@ -42,6 +42,8 @@ interface State {
   saveDirTags: (overrides: DirTagsMap) => Promise<void>
   setSelectedTagFilter: (tag: DirTag | null) => void
   fetchRaw: (path: string) => Promise<RawFile | undefined>
+  // 拉单资产(含 content),供发现页详情抽屉按 finding.asset_id 展示资产文件内容。
+  fetchAsset: (id: string) => Promise<Asset | undefined>
   clearError: () => void
 }
 
@@ -130,5 +132,6 @@ export const useStore = create<State>((set, get) => ({
   },
   setSelectedTagFilter: (tag) => set({ selectedTagFilter: tag }),
   fetchRaw: async (path) => wrap(() => apiGet<RawFile>(`/api/raw?path=${encodeURIComponent(path)}`), set),
+  fetchAsset: async (id) => wrap(() => apiGet<Asset>(`/api/assets/${encodeURIComponent(id)}`), set),
   clearError: () => set({ error: null, authError: false }),
 }))

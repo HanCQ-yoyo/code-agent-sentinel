@@ -35,6 +35,9 @@ interface AssetTreeProps {
   dirTagsOverrides: DirTagsMap
   // 编辑标签回调:点击节点右侧"标签"按钮时弹出菜单。
   onEditTag: (relPath: string, currentTag: DirTag | undefined) => void
+  // 受控展开状态:由 Assets 持有(默认全收起 []),提供「全部收起」按钮。
+  expandedKeys: React.Key[]
+  onExpandedKeysChange: (keys: React.Key[]) => void
 }
 
 // nodeTag:节点生效标签(相对 root 的 path → resolveDirTag)。
@@ -52,7 +55,7 @@ function subtreeHasTag(n: TreeNode, tag: DirTag, defaults: DirTagsMap, overrides
   return false
 }
 
-export function AssetTree({ tree, assets, findings = [], onSelect, onOpenRaw, rootAbs, tagFilter, dirTagsDefaults, dirTagsOverrides, onEditTag }: AssetTreeProps) {
+export function AssetTree({ tree, assets, findings = [], onSelect, onOpenRaw, rootAbs, tagFilter, dirTagsDefaults, dirTagsOverrides, onEditTag, expandedKeys, onExpandedKeysChange }: AssetTreeProps) {
   const byId = useMemo(() => {
     const m = new Map<string, Asset>()
     for (const a of assets) m.set(a.id, a)
@@ -70,19 +73,13 @@ export function AssetTree({ tree, assets, findings = [], onSelect, onOpenRaw, ro
     return m
   }, [tree])
 
-  const [expandedKeys, setExpandedKeys] = useState<React.Key[]>(() => {
-    // 默认展开根 + 第一层目录;synthetic 与 plugins 默认折叠。
-    const keys: React.Key[] = [tree.path]
-    for (const c of tree.children ?? []) {
-      if (c.kind === 'dir' && c.name !== 'plugins') keys.push(c.path)
-    }
-    return keys
-  })
+  // expandedKeys 受控(由 Assets 持有,默认全收起 []),这里只转发变更。
+  const setExpandedKeys = onExpandedKeysChange
   const [selectedKeys, setSelectedKeys] = useState<React.Key[]>([])
 
   const toggleExpand = (key: React.Key) => {
-    setExpandedKeys((prev) =>
-      prev.includes(key) ? prev.filter((k) => k !== key) : [...prev, key],
+    setExpandedKeys(
+      expandedKeys.includes(key) ? expandedKeys.filter((k) => k !== key) : [...expandedKeys, key],
     )
   }
 

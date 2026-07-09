@@ -28,7 +28,12 @@ func (d *InjectionDetector) Reason() string  { return "" }
 func (d *InjectionDetector) Meta() DetectorMeta {
 	rules := make([]RuleInfo, 0, len(d.rules))
 	for _, r := range d.rules {
-		rules = append(rules, RuleInfo{ID: r.ID, Severity: string(r.Severity), Description: r.Description})
+		rules = append(rules, RuleInfo{
+			ID:          r.ID,
+			Severity:    string(r.Severity),
+			Description: r.Description,
+			Syntax:      r.Pattern,
+		})
 	}
 	covers := make([]string, 0, len(d.Covers()))
 	for _, c := range d.Covers() {

@@ -13,7 +13,7 @@ export interface Finding {
 export interface HealthScore { score: number; band: string; deductions: { asset_name: string; rule_id: string; severity: Severity; points: number }[] }
 export interface DetectorStatus { id: string; available: boolean; reason?: string }
 export interface EngineInfo { name: string; kind: string; available: boolean; reason?: string }
-export interface RuleInfo { id: string; severity: Severity; description: string }
+export interface RuleInfo { id: string; severity: Severity; description: string; syntax?: string }
 // rules/covers/engines 可为 null:Go 端子进程检测器(gitleaks/govulncheck)规则在外部工具内、
 // 或 Covers() 返回 nil(全部资产),nil 切片序列化为 JSON null(非 [])。前端须防御性判空。
 export interface DetectorMeta {
@@ -24,6 +24,8 @@ export interface ScanResult {
   findings: Finding[]
   detectors: { id: string; available: boolean; reason?: string; finding_count: number }[]
   health_score?: HealthScore
+  // 整次扫描的起始时间(后端 ScanResult.StartedAt,同一次扫描所有 Finding 共享)。
+  started_at?: string
 }
 export interface ScanRecord extends ScanResult {
   id: string
