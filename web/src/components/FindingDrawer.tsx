@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
 import { Drawer, Descriptions, Typography, Alert, Spin, Empty } from 'antd'
 import type { Finding, DetectorMeta, Severity, Asset } from '../types'
+import { apiGet } from '../api/client'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { AssetDetailPanel } from './AssetDetailPanel'
-import { useStore } from '../store'
 import { formatDateTime } from '../lib/format'
 
 const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低' }
@@ -25,8 +25,9 @@ function findSyntax(detectors: DetectorMeta[], detectorId: string, ruleId: strin
 }
 
 // 资产区:按 finding.asset_id 拉完整 Asset(含 content),复用 AssetDetailPanel 展示路径/hash/文件内容。
+// 直接走 apiGet(不经 store.wrap):wrap 吞所有错误返 undefined,会让 .catch 死代码、失败时误报「未找到资产」。
+// 此处需细粒度错误,故与 AssetDetail.tsx 同模式自管 err。
 function AssetSection({ assetId }: { assetId: string }) {
-  const fetchAsset = useStore((s) => s.fetchAsset)
   const [asset, setAsset] = useState<Asset | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
@@ -36,12 +37,12 @@ function AssetSection({ assetId }: { assetId: string }) {
     setLoading(true)
     setErr(null)
     setAsset(null)
-    fetchAsset(assetId)
-      .then((a) => { if (!stale) setAsset(a ?? null) })
+    apiGet<Asset>(`/api/assets/${encodeURIComponent(assetId)}`)
+      .then((a) => { if (!stale) setAsset(a) })
       .catch((e) => { if (!stale) setErr(String(e)) })
       .finally(() => { if (!stale) setLoading(false) })
     return () => { stale = true }
-  }, [assetId, fetchAsset])
+  }, [assetId])
 
   if (loading) return <Spin style={{ display: 'block', margin: '40px auto' }} />
   if (err) return <Alert type="error" message="资产读取失败" description={err} showIcon />
