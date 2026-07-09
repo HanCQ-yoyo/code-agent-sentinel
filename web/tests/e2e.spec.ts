@@ -134,6 +134,9 @@ test('发现页扫描后展示 finding 行', async ({ page }) => {
   await page.getByRole('menuitem', { name: /发现/i }).click()
   // fixture 含 Bash(*) → 至少一条 finding
   await expect(page.locator('[data-testid="finding-row"]').first()).toBeVisible({ timeout: 15000 })
+  // 点击行打开风险详情抽屉(抽屉内可见「风险信息」标题或 asset-detail-name)。
+  await page.locator('[data-testid="finding-row"]').first().click()
+  await expect(page.locator('.finding-drawer')).toBeVisible({ timeout: 10000 })
 })
 
 test('md 资产预览渲染 markdown', async ({ page }) => {
