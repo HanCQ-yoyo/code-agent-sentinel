@@ -3,6 +3,8 @@ package configengine
 import (
 	"encoding/json"
 	"os"
+	"path/filepath"
+	"strings"
 )
 
 type rawHook struct {
@@ -27,7 +29,12 @@ type rawSettings struct {
 	// 其余字段未单独建模;通过 base.Fields["raw"] 保留原始 JSON 供后续检测器使用。
 }
 
-// parseSettings 解析 settings.json,产出 settings + permissions + 每个 hook 一条资产。
+// parseSettings 解析 settings.json / settings.local.json,产出 settings + permissions +
+// 每个 hook 一条资产。
+//
+// baseName 按源文件名推导(settings.json→"settings",settings.local.json→"settings.local"),
+// 使本地覆盖层资产有独立 Name,避免与 settings.json 同 scope 同 source_path 同名导致 ID
+// 冲突(被去重静默丢弃),并在树视图里成为独立文件节点。
 //
 // 损坏文件不致失败:返回一条带 parse_error 的 settings 占位资产,供上层作为 Finding 暴露。
 func parseSettings(path string, scope Scope) ([]Asset, error) {
@@ -35,18 +42,19 @@ func parseSettings(path string, scope Scope) ([]Asset, error) {
 	if err != nil {
 		return nil, err
 	}
+	baseName := settingsBaseName(path)
 	var rs rawSettings
 	if err := json.Unmarshal(data, &rs); err != nil {
 		// 损坏文件:产出一条带 parse_error 的 settings 占位资产。
 		// 文件本身可读,故仍填 hash/mtime(与 placeholder 行为一致);fillHash 内部会设 ID。
-		a := Asset{Type: AssetSettings, Scope: scope, SourcePath: path, Name: "settings", ParseError: err.Error()}
+		a := Asset{Type: AssetSettings, Scope: scope, SourcePath: path, Name: baseName, ParseError: err.Error()}
 		fillHash(&a)
 		return []Asset{a}, nil
 	}
 	var out []Asset
 
 	// settings 主体:保留 model/env 及原始 JSON。
-	base := Asset{Type: AssetSettings, Scope: scope, SourcePath: path, Name: "settings"}
+	base := Asset{Type: AssetSettings, Scope: scope, SourcePath: path, Name: baseName}
 	base.Fields = map[string]any{
 		"model": rs.Model,
 		"env":   rs.Env,
@@ -74,6 +82,24 @@ func parseSettings(path string, scope Scope) ([]Asset, error) {
 	// 故 ID 跨运行可复现。
 	out = append(out, parseHooksFromData(data, path, scope)...)
 	return out, nil
+}
+
+// settingsBaseName 按文件名推导 settings 资产 base 名:
+// settings.json → "settings";settings.local.json → "settings.local";其余按去扩展名处理。
+// 使 settings + settings.local 同存时 Name 不同 → ID 不同(防去重丢弃)+ 树独立节点。
+func settingsBaseName(path string) string {
+	base := filepath.Base(path)
+	switch base {
+	case "settings.json":
+		return "settings"
+	case "settings.local.json":
+		return "settings.local"
+	}
+	// 兜底:其他同名文件按去 .json 扩展名处理。
+	if ext := filepath.Ext(base); ext != "" {
+		return strings.TrimSuffix(base, ext)
+	}
+	return base
 }
 
 // fillHash 填充 Hash/MTime(来自源文件)与 ID。

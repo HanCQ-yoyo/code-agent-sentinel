@@ -38,6 +38,14 @@ func (e *Engine) discoverOneProject(inv *Inventory, p Project) {
 			inv.Assets = append(inv.Assets, a...)
 		}
 	}
+	// settings.local.json:项目级本地覆盖(与全局 settings.local.json 同理)。
+	// 很多项目只有 settings.local.json 而无 settings.json,此前项目 tab 列表为空、
+	// 但文件树(走真实 fs)却显示该文件 → 列表/树不一致。发现它使两者对齐。
+	if slp := filepath.Join(d, "settings.local.json"); fileExists(slp) {
+		if a, _ := parseSettings(slp, ScopeProject); a != nil {
+			inv.Assets = append(inv.Assets, a...)
+		}
+	}
 	if mp := filepath.Join(p.Path, ".mcp.json"); fileExists(mp) {
 		if a, _ := parseMCPJSON(mp, ScopeProject); a != nil {
 			inv.Assets = append(inv.Assets, a...)

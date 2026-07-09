@@ -157,6 +157,55 @@ func TestParseSettingsMultipleHooksSameMatcherAcrossEntries(t *testing.T) {
 	}
 }
 
+// TestParseSettingsLocalJSON 验证 settings.local.json 的 baseName 推导:
+// settings.local.json → Name "settings.local"(而非 "settings"),使它与
+// settings.json 同存时 ID 不同(防去重丢弃)+ 树独立节点。
+func TestParseSettingsLocalJSON(t *testing.T) {
+	f := newFixture(t)
+	f.write("settings.local.json", `{"model":"sonnet"}`)
+	assets, err := parseSettings(f.claudePath("settings.local.json"), ScopeGlobal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var settings Asset
+	for _, a := range assets {
+		if a.Type == AssetSettings {
+			settings = a
+		}
+	}
+	if settings.Name != "settings.local" {
+		t.Errorf("settings.local.json 的 Name = %q, 期望 \"settings.local\"", settings.Name)
+	}
+}
+
+// TestDiscoverSettingsAndSettingsLocalCoexist 验证 settings.json 与 settings.local.json
+// 同存时,Discover 产出两条 settings 资产(各自独立 ID,不被去重丢弃)。
+func TestDiscoverSettingsAndSettingsLocalCoexist(t *testing.T) {
+	f := newFixture(t)
+	f.write("settings.json", `{"model":"opus"}`)
+	f.write("settings.local.json", `{"model":"sonnet"}`)
+	eng := NewEngine(f.home)
+	inv, err := eng.Discover()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var settingsAssets []Asset
+	for _, a := range inv.Assets {
+		if a.Type == AssetSettings {
+			settingsAssets = append(settingsAssets, a)
+		}
+	}
+	if len(settingsAssets) != 2 {
+		t.Fatalf("want 2 settings assets (settings + settings.local), got %d", len(settingsAssets))
+	}
+	names := map[string]bool{}
+	for _, a := range settingsAssets {
+		names[a.Name] = true
+	}
+	if !names["settings"] || !names["settings.local"] {
+		t.Errorf("期望 Name 集合含 settings 与 settings.local, 实际 %v", names)
+	}
+}
 // TestParseSettingsCorrupted 验证:损坏的 JSON 不致全盘失败,而是产出一条
 // 带 parse_error 的 settings 占位资产(有 ID,可被上层当作 Finding 暴露)。
 // 文件可读,故 hash 也应填充(与 placeholder 行为一致)。

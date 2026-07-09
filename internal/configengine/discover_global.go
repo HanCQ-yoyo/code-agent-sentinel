@@ -16,10 +16,14 @@ func (e *Engine) Discover() (Inventory, error) {
 	claude := filepath.Join(e.HomeDir, ".claude")
 
 	// settings.json:真实解析,拆成 settings + permissions + 每个 hook 一条。
-	// CLAUDE.md 不在此处处理,改由 parseMemory 覆盖(含 memory/ 目录)。
-	if p := filepath.Join(claude, "settings.json"); fileExists(p) {
-		parsed, _ := parseSettings(p, ScopeGlobal)
-		inv.Assets = append(inv.Assets, parsed...)
+	// settings.local.json:本地覆盖层(Claude Code 在此写 project-scoped 覆盖,
+	// 与 settings.json 同结构,优先级更高)。两者都发现,Name 区分(settings /
+	// settings.local)以避免 ID 冲突。CLAUDE.md 不在此处处理,改由 parseMemory 覆盖。
+	for _, sf := range []string{"settings.json", "settings.local.json"} {
+		if p := filepath.Join(claude, sf); fileExists(p) {
+			parsed, _ := parseSettings(p, ScopeGlobal)
+			inv.Assets = append(inv.Assets, parsed...)
+		}
 	}
 
 	// 目录资产:skills/commands/agents,每个含 .md 的顶层条目产出一条资产。
