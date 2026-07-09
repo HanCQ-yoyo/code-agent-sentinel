@@ -16,29 +16,20 @@ import { useStore } from './store'
 
 const { Content } = Layout
 
-const titles: Record<string, string> = {
-  '/': '态势看板',
-  '/dashboard': '态势看板',
-  '/assets': '资产浏览',
-  '/findings': '安全发现',
-  '/history': '历史扫描',
-  '/settings': '设置',
-}
-
 export default function App() {
   const { theme } = useTheme()
   const { runScan, loading, detectors, fetchLatestScan } = useStore()
-  const loc = useLocation()
-  const title = titles[loc.pathname] ?? 'Sentinel'
   useEffect(() => { fetchLatestScan() }, [fetchLatestScan])
 
+  // 布局:Sider 直接挂根 Layout → 全高;品牌落最左上角。
+  // 内层 Layout 顶 TopBar(面包屑 + 操作)+ Content。
   return (
     <ConfigProvider theme={antdTheme(theme)}>
       <AuthGate>
         <Layout style={{ minHeight: '100vh' }}>
-          <TopBar title={title} onScan={() => runScan()} loading={loading} detectors={detectors} />
+          <Sidebar />
           <Layout>
-            <Sidebar />
+            <TopBar onScan={() => runScan()} loading={loading} detectors={detectors} />
             <Content style={{ overflow: 'auto', padding: 24 }}>
               <Routes>
                 <Route path="/" element={<Dashboard />} />

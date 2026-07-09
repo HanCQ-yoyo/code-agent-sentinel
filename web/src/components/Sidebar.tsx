@@ -1,4 +1,5 @@
 import { Layout, Menu } from 'antd'
+import { SafetyCertificateOutlined } from '@ant-design/icons'
 import {
   DashboardOutlined,
   AppstoreOutlined,
@@ -7,16 +8,19 @@ import {
   SettingOutlined,
 } from '@ant-design/icons'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { navItems } from '../lib/nav'
 
 const { Sider } = Layout
 
-const items = [
-  { key: '/dashboard', icon: <DashboardOutlined />, label: '看板' },
-  { key: '/assets', icon: <AppstoreOutlined />, label: '资产' },
-  { key: '/findings', icon: <WarningOutlined />, label: '发现' },
-  { key: '/history', icon: <ClockCircleOutlined />, label: '历史' },
-  { key: '/settings', icon: <SettingOutlined />, label: '设置' },
-]
+const iconByPath: Record<string, React.ReactNode> = {
+  '/dashboard': <DashboardOutlined />,
+  '/assets': <AppstoreOutlined />,
+  '/findings': <WarningOutlined />,
+  '/history': <ClockCircleOutlined />,
+  '/settings': <SettingOutlined />,
+}
+
+const items = navItems.map((i) => ({ key: i.path, icon: iconByPath[i.path], label: i.label }))
 
 export function Sidebar() {
   const nav = useNavigate()
@@ -25,8 +29,15 @@ export function Sidebar() {
   const selected = loc.pathname === '/' ? '/dashboard' : loc.pathname
   return (
     <Sider width={208} breakpoint="lg" collapsedWidth={0} style={{ background: 'var(--bg-card)' }}>
-      <div style={{ color: 'var(--accent)', fontWeight: 700, padding: '20px 24px', fontSize: 18 }}>
-        Sentinel
+      {/* 品牌:落侧边栏最上方 = 平台最左上角 */}
+      <div
+        data-testid="brand"
+        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 24px' }}
+      >
+        <SafetyCertificateOutlined style={{ color: 'var(--accent)', fontSize: 20 }} />
+        <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: 15, lineHeight: '20px' }}>
+          Code Agent Sentinel
+        </span>
       </div>
       <Menu
         mode="inline"
