@@ -31,8 +31,13 @@ export function clearAuthToken(): void {
 
 export class AuthError extends Error {}
 
-async function req(path: string, method = 'GET'): Promise<Response> {
-  const r = await fetch(path, { method, headers: { Authorization: `Bearer ${getAuthToken()}` } })
+async function req(path: string, method = 'GET', body?: unknown): Promise<Response> {
+  const init: RequestInit = { method, headers: { Authorization: `Bearer ${getAuthToken()}` } }
+  if (body !== undefined) {
+    init.headers = { ...init.headers, 'Content-Type': 'application/json' }
+    init.body = JSON.stringify(body)
+  }
+  const r = await fetch(path, init)
   if (r.status === 401) {
     // token 失效:清缓存,触发 AuthGate 重新提示
     clearAuthToken()
@@ -44,4 +49,5 @@ async function req(path: string, method = 'GET'): Promise<Response> {
 
 export const apiGet = <T>(p: string) => req(p).then(r => r.json() as Promise<T>)
 export const apiPost = <T>(p: string) => req(p, 'POST').then(r => r.json() as Promise<T>)
+export const apiPut = <T>(p: string, body: unknown) => req(p, 'PUT', body).then(r => r.json() as Promise<T>)
 export const apiDelete = (p: string) => req(p, 'DELETE').then(r => r.json() as Promise<unknown>)

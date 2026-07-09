@@ -1,6 +1,7 @@
 import { create } from 'zustand'
-import { apiGet, apiPost, apiDelete, AuthError } from '../api/client'
-import type { Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, TreeNode, Project } from '../types'
+import { apiGet, apiPost, apiPut, apiDelete, AuthError } from '../api/client'
+import type { Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, TreeNode, Project, DirTagsResponse, RawFile } from '../types'
+import { type DirTag, type DirTagsMap } from '../lib/dirTags'
 
 type ProjectTab = { kind: 'global' } | { kind: 'project'; path: string }
 
@@ -20,6 +21,12 @@ interface State {
   projects: Project[]
   // 当前选中的项目 tab(纯视图,默认全局)
   activeProjectTab: ProjectTab
+  // 目录标签:默认 + 用户覆盖 + 当前筛选选中标签(空集=显示全部)
+  dirTagsDefaults: DirTagsMap
+  dirTagsOverrides: DirTagsMap
+  // selectedTagFilter:null = 不过滤;否则只显示该标签(untagged 项在「全部」时显示,
+  // 选 config/runtime 时隐藏非选中)。前端 Assets 用。
+  selectedTagFilter: DirTag | null
   fetchAssets: () => Promise<void>
   runScan: (detectors?: string) => Promise<void>
   fetchDetectors: () => Promise<void>
@@ -31,6 +38,10 @@ interface State {
   fetchProjects: () => Promise<void>
   fetchTree: (tab: ProjectTab) => Promise<void>
   setActiveProjectTab: (tab: ProjectTab) => void
+  fetchDirTags: () => Promise<void>
+  saveDirTags: (overrides: DirTagsMap) => Promise<void>
+  setSelectedTagFilter: (tag: DirTag | null) => void
+  fetchRaw: (path: string) => Promise<RawFile | undefined>
   clearError: () => void
 }
 
@@ -50,6 +61,7 @@ const wrap = async <T>(fn: () => Promise<T>, set: (p: Partial<State>) => void): 
 export const useStore = create<State>((set, get) => ({
   assets: null, scan: null, detectors: [], history: [], loading: false, error: null, authError: false,
   agents: null, tree: null, projects: [], activeProjectTab: { kind: 'global' },
+  dirTagsDefaults: {}, dirTagsOverrides: {}, selectedTagFilter: null,
   fetchAssets: async () => {
     const inv = await wrap(() => apiGet<Inventory>('/api/assets'), set)
     if (inv) set({ assets: inv })
@@ -108,5 +120,15 @@ export const useStore = create<State>((set, get) => ({
   setActiveProjectTab: (tab) => {
     set({ activeProjectTab: tab })
   },
+  fetchDirTags: async () => {
+    const res = await wrap(() => apiGet<DirTagsResponse>('/api/dir-tags'), set)
+    if (res) set({ dirTagsDefaults: res.defaults ?? {}, dirTagsOverrides: res.overrides ?? {} })
+  },
+  saveDirTags: async (overrides) => {
+    const res = await wrap(() => apiPut<DirTagsResponse>('/api/dir-tags', { overrides }), set)
+    if (res) set({ dirTagsOverrides: res.overrides ?? {} })
+  },
+  setSelectedTagFilter: (tag) => set({ selectedTagFilter: tag }),
+  fetchRaw: async (path) => wrap(() => apiGet<RawFile>(`/api/raw?path=${encodeURIComponent(path)}`), set),
   clearError: () => set({ error: null, authError: false }),
 }))

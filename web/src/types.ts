@@ -46,6 +46,21 @@ export interface TreeNode {
   children?: TreeNode[]
 }
 
+// 目录标签(dir tag)响应:GET /api/dir-tags。defaults 为内置默认,overrides 为用户覆盖。
+export interface DirTagsResponse {
+  defaults: Record<string, 'config' | 'runtime'>
+  overrides: Record<string, 'config' | 'runtime'>
+}
+
+// /api/raw 响应:单文件原始内容(无资产文件点开时读取)。
+export interface RawFile {
+  path: string
+  name: string
+  size: number
+  content: string
+  is_text: boolean
+}
+
 export interface ScanSummary {
   id: string; started_at: string; health_score: number; band: string
   finding_count: number; detector_avail: number; detector_total: number

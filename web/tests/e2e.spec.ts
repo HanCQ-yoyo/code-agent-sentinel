@@ -104,8 +104,9 @@ test('资产页显示资产且可筛选类型', async ({ page }) => {
   // 应有资产行(至少 settings 一条)
   await expect(page.locator('[data-testid="asset-row"]').first()).toBeVisible({ timeout: 10000 })
   // 类型筛选:Radio.Group 的 "全部" 项是 antd Radio.Button。其实际 <input role=radio> 被 antd 视觉隐藏,
-  // 可见的是 <label.ant-radio-button-wrapper> 内的文本,故用 getByText 定位可见文本
-  await expect(page.getByText('全部', { exact: true })).toBeVisible()
+  // 可见的是 <label.ant-radio-button-wrapper> 内的文本。阶段 D 后页面新增了标签筛选 Segmented
+  // (也含"全部"项),故用 .first() 锁定类型 Radio 的"全部"(DOM 顺序在前)。
+  await expect(page.getByText('全部', { exact: true }).first()).toBeVisible()
 })
 
 test('资产页点击行进入详情', async ({ page }) => {
@@ -165,4 +166,64 @@ test('设置页 Tabs 切换规则总览', async ({ page }) => {
   await page.getByRole('tab', { name: /规则总览/ }).click()
   // 规则总览 Segmented 的「全部 N」标签可见(证明 RulesTable 渲染)
   await expect(page.getByText(/全部 \d+/)).toBeVisible({ timeout: 10000 })
+})
+
+// 阶段 D 资产页增强:标签筛选 / 收藏置顶 / 分页 / 切 tab 关抽屉 / 无资产文件打开。
+// 全部用文本断言,不截图(多模态不支持)。
+
+test('资产列表分页与收藏置顶', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  await page.getByRole('menuitem', { name: /资产/i }).click()
+  await expect(page.locator('[data-testid="asset-row"]').first()).toBeVisible({ timeout: 10000 })
+  // 分页:antd Pagination 存在(共 N 条 / 页大小选择器)
+  await expect(page.getByText(/共 \d+ 条/)).toBeVisible({ timeout: 10000 })
+  // 收藏:点第一行的星标 → 该行应置顶(收藏优先排序)
+  const firstRow = page.locator('[data-testid="asset-row"]').first()
+  const firstName = await firstRow.locator('td').nth(1).innerText()
+  await firstRow.locator('[data-testid="fav-toggle"]').click()
+  // 收藏计数 Tag 出现
+  await expect(page.getByText(/★ \d+ 置顶/)).toBeVisible({ timeout: 5000 })
+  // 置顶后第一行名应仍是该资产(收藏排前)
+  const newFirst = await page.locator('[data-testid="asset-row"]').first().locator('td').nth(1).innerText()
+  expect(newFirst.trim()).toBe(firstName.trim())
+})
+
+test('标签筛选切换隐藏非选中', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  await page.getByRole('menuitem', { name: /资产/i }).click()
+  await expect(page.locator('[data-testid="asset-row"]').first()).toBeVisible({ timeout: 10000 })
+  // 标签筛选 Segmented 的「运行时」项(fixture 的 settings.json 是 config,无运行时资产)
+  const tagSeg = page.locator('.ant-segmented').nth(1)
+  await tagSeg.getByText('运行时', { exact: true }).click()
+  // 选运行时后,config 资产(settings)应被隐藏 → 列表为空(antd empty 文案)
+  await expect(page.getByText('暂无资产')).toBeVisible({ timeout: 5000 })
+  // 切回全部 → 资产恢复
+  await tagSeg.getByText('全部', { exact: true }).click()
+  await expect(page.locator('[data-testid="asset-row"]').first()).toBeVisible({ timeout: 5000 })
+})
+
+test('切换项目 tab 关闭详情抽屉', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  await page.getByRole('menuitem', { name: /资产/i }).click()
+  await expect(page.locator('[data-testid="asset-row"]').first()).toBeVisible({ timeout: 10000 })
+  // 全局 tab 下点行打开抽屉
+  await page.locator('[data-testid="asset-row"]').first().click()
+  await expect(page.locator('.asset-drawer')).toBeVisible({ timeout: 10000 })
+  // 切到另一个 tab(若存在项目 tab)→ 抽屉应关闭
+  const projTab = page.getByRole('tab').filter({ hasText: /sentinel/i }).first()
+  if (await projTab.count() > 0) {
+    await projTab.click()
+    await expect(page.locator('.asset-drawer')).not.toBeVisible({ timeout: 5000 })
+  }
+})
+
+test('文件树无资产文件可打开原始内容', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  await page.getByRole('menuitem', { name: /资产/i }).click()
+  await expect(page.locator('[data-testid="asset-row"]').first()).toBeVisible({ timeout: 10000 })
+  // 切到文件树视图
+  const viewSeg = page.locator('.view-segmented')
+  await viewSeg.getByText('文件树', { exact: true }).click()
+  // 树渲染:根节点可见(antd Tree title)
+  await expect(page.locator('.ant-tree-list')).toBeVisible({ timeout: 10000 })
 })

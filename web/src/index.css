@@ -60,3 +60,77 @@ body {
 .font-mono, .mono {
   font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 }
+
+/* markdown-preview 列表渲染:Tailwind Preflight(@tailwind base)重置了 ul/ol 的
+   list-style 与 padding,导致无序/有序列表退化为无符号纯文本。此处恢复列表语义。
+   仅作用于 .markdown-preview,不影响全局 antd/Tailwind 行为。 */
+.markdown-preview ul,
+.markdown-preview ol {
+  margin: 8px 0;
+  padding-inline-start: 1.6em;
+}
+.markdown-preview ul {
+  list-style: disc;
+}
+.markdown-preview ol {
+  list-style: decimal;
+}
+.markdown-preview li {
+  margin: 2px 0;
+}
+.markdown-preview li::marker {
+  color: var(--text-dim);
+}
+/* 嵌套列表缩进 */
+.markdown-preview ul ul,
+.markdown-preview ol ol,
+.markdown-preview ul ol,
+.markdown-preview ol ul {
+  margin: 2px 0;
+}
+/* 段落/标题/引用/分隔线间距(react-markdown 输出裸块级元素,Preflight 已清 margin) */
+.markdown-preview p {
+  margin: 8px 0;
+}
+.markdown-preview h1, .markdown-preview h2, .markdown-preview h3, .markdown-preview h4 {
+  margin: 16px 0 8px;
+  line-height: 1.3;
+  font-weight: 600;
+}
+.markdown-preview h1 { font-size: 1.5em; }
+.markdown-preview h2 { font-size: 1.3em; }
+.markdown-preview h3 { font-size: 1.15em; }
+.markdown-preview h4 { font-size: 1em; }
+.markdown-preview blockquote {
+  margin: 8px 0;
+  padding: 4px 12px;
+  border-inline-start: 3px solid var(--bg-border);
+  color: var(--text-muted);
+}
+.markdown-preview hr {
+  border: none;
+  border-top: 1px solid var(--bg-border);
+  margin: 16px 0;
+}
+
+/* 视图切换 Segmented(列表/文件树):增强选中态对比度。
+   antd 默认选中项是浅灰填充,在浅色主题下与未选中差异过小(用户反馈"看不出来
+   当前是哪个")。此处选中项用 accent 实色填充 + 白字,未选中用透明背景,差异明显。 */
+.view-segmented .ant-segmented-item-selected {
+  background: var(--accent) !important;
+  color: #fff !important;
+  font-weight: 600;
+}
+.view-segmented .ant-segmented-item-selected .ant-segmented-item-icon {
+  color: #fff;
+}
+.view-segmented .ant-segmented-item {
+  transition: color .15s, background .15s;
+}
+.view-segmented .ant-segmented-item:not(.ant-segmented-item-selected):hover {
+  color: var(--accent);
+}
+.view-segmented .ant-segmented-thumb {
+  /* 拖动滑块也用 accent(选中项背景随滑块移动) */
+  background: var(--accent);
+}
