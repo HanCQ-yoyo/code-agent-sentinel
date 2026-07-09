@@ -19,6 +19,7 @@ type Server struct {
 	Engine          *configengine.Engine
 	Orchestrator    *security.Orchestrator
 	Config          *config.Config
+	ConfigPath      string // 配置文件路径(/api/dir-tags 回写用)
 	Token           string
 	History         *history.Store
 	Agents          []configengine.Agent
@@ -96,6 +97,9 @@ func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	api.GET("/assets", s.getAssets)
 	api.GET("/assets/:id", s.getAsset)
 	api.GET("/tree", s.getTree)
+	api.GET("/dir-tags", s.getDirTags)
+	api.PUT("/dir-tags", s.putDirTags)
+	api.GET("/raw", s.getRaw)
 	api.POST("/scan", s.postScan)
 	api.GET("/scan/result", s.getScanResult)
 	api.GET("/findings", s.getFindings)

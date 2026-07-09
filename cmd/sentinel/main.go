@@ -105,6 +105,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	histPath := filepath.Join(home, ".claude-sentinel", "history")
 	hist := history.NewStore(histPath)
 	srv := api.NewServer(eng, orch, cfg, token, hist, configengine.DefaultAgents(home))
+	srv.ConfigPath = cfgPath
 	httpSrv := &http.Server{Handler: srv.Router()}
 
 	ln, err := net.Listen("tcp", api.ResolveListenAddr(cfg))
