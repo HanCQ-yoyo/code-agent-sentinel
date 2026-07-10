@@ -36,3 +36,29 @@ func TestErrorsAreSentinels(t *testing.T) {
 		t.Fatal("sentinel errors must be non-nil")
 	}
 }
+
+func TestValidateContentJSONOk(t *testing.T) {
+	e := New(configengine.NewEngine(t.TempDir()), "", 0)
+	a := configengine.Asset{Type: configengine.AssetSettings}
+	if err := e.validateContent(a, `{"model":"opus"}`); err != nil {
+		t.Fatalf("valid JSON should pass: %v", err)
+	}
+}
+
+func TestValidateContentJSONBad(t *testing.T) {
+	e := New(configengine.NewEngine(t.TempDir()), "", 0)
+	a := configengine.Asset{Type: configengine.AssetSettings}
+	err := e.validateContent(a, `{not json`)
+	if err != ErrBadContent {
+		t.Fatalf("bad JSON want ErrBadContent got %v", err)
+	}
+}
+
+func TestValidateContentMarkdownNotJSONChecked(t *testing.T) {
+	e := New(configengine.NewEngine(t.TempDir()), "", 0)
+	a := configengine.Asset{Type: configengine.AssetSkill}
+	// markdown 不做 JSON 校验,任意文本通过
+	if err := e.validateContent(a, "# title\nnot json {"); err != nil {
+		t.Fatalf("markdown should not be JSON-validated: %v", err)
+	}
+}

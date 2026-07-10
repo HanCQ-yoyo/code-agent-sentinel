@@ -1,6 +1,7 @@
 package editor
 
 import (
+	"encoding/json"
 	"path/filepath"
 
 	"code-agent-sentinel/internal/configengine"
@@ -54,6 +55,19 @@ func New(engine *configengine.Engine, backupDir string, maxBackups int) *Editor 
 		maxBackups = 20
 	}
 	return &Editor{Engine: engine, BackupDir: backupDir, MaxBackups: maxBackups}
+}
+
+// validateContent 校验新内容语法。JSON 资产须可解析,其余不校验语法。
+func (e *Editor) validateContent(a configengine.Asset, content string) error {
+	switch a.Type {
+	case configengine.AssetSettings, configengine.AssetPermissions,
+		configengine.AssetMCPServer, configengine.AssetKeybinding, configengine.AssetHook:
+		var v any
+		if err := json.Unmarshal([]byte(content), &v); err != nil {
+			return ErrBadContent
+		}
+	}
+	return nil
 }
 
 // Preview 与 Commit 在后续任务实现。
