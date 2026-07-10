@@ -2,8 +2,7 @@ import { Descriptions, Typography, Alert } from 'antd'
 import type { Asset } from '../types'
 import { Badge, type BadgeTone } from './Badge'
 import { relativeClaudePath } from '../lib/path'
-import { ContentArea } from './ContentArea'
-import { useTheme } from '../theme'
+import { AssetEditor } from './AssetEditor'
 
 // AssetDetailPanel:资产详情。三消费方(Assets 列表抽屉 50% / 树右栏 480px sticky / /assets/:id 全页)
 // 共用此组件,签名 { asset } 不变。阶段 C 重排:
@@ -12,7 +11,6 @@ import { useTheme } from '../theme'
 //  3. 内容撑满:ContentArea flex:1。
 // header h2 保留 data-testid="asset-detail-name"(e2e 钩子,阶段 A 硬规则延续)。
 export function AssetDetailPanel({ asset }: { asset: Asset }) {
-  const { theme } = useTheme()
   const description = (asset.fields as Record<string, unknown> | undefined)?.description
   const isMarkdown = ['memory', 'skill', 'command', 'agent'].includes(asset.type)
 
@@ -45,9 +43,9 @@ export function AssetDetailPanel({ asset }: { asset: Asset }) {
         </Descriptions.Item>
       </Descriptions>
 
-      {/* key={asset.id}:切资产时重挂载 ContentArea,使其 Segmented view state 回默认(预览/结构化),
-          修阶段 C defer「view state carryover」(切某 md 资产到源码后选另一 md 资产仍是源码视图)。 */}
-      <ContentArea key={asset.id} asset={asset} theme={theme} />
+      {/* key={asset.id}:切资产时重挂载 AssetEditor(含 ContentArea),使其 Segmented view state
+          和编辑态(editing/draft/preview)回默认,避免上一资产的草稿/视图泄漏到新资产。 */}
+      <AssetEditor key={asset.id} asset={asset} />
     </div>
   )
 }

@@ -16,21 +16,50 @@ const MARKDOWN_TYPES = new Set(['memory', 'skill', 'command', 'agent'])
 // 其余序列化 JSON.stringify)。Monaco json 高亮。
 const STRUCTURED_TYPES = new Set(['settings', 'permissions', 'mcp_server', 'hook', 'keybinding', 'plugin'])
 
+// editableText:返回资产的可编辑文本(与只读态 Monaco 渲染一致)。
+// markdown/script → asset.content;structured → fields.raw ?? JSON.stringify(fields);兜底 → content ?? JSON.stringify(fields)。
+// AssetEditor 用此初始化 draft,确保编辑起点 = 用户在只读态所见文本。
+// 关键:structured 资产无 asset.content(configengine 仅给 memory/script 设 content),
+// 必须从 fields.raw 取原始文本,否则 draft 为空 → 编辑 silently 无效。
+export function editableText(asset: Asset): string {
+  const isMarkdown = MARKDOWN_TYPES.has(asset.type)
+  const isScript = asset.type === 'script'
+  const isStructured = STRUCTURED_TYPES.has(asset.type)
+  if (isMarkdown || isScript) return asset.content ?? ''
+  if (isStructured) {
+    const raw = (asset.fields as Record<string, unknown> | undefined)?.raw
+    return typeof raw === 'string' ? raw : JSON.stringify(asset.fields ?? {}, null, 2)
+  }
+  return asset.content ?? JSON.stringify(asset.fields ?? {}, null, 2)
+}
+
 // ContentArea 按 asset.type 分派渲染:
-// - markdown → Segmented[预览|源码],默认预览
+// - markdown → Segmented[预览|源码],默认预览(编辑态默认源码)
 // - script → Monaco(langByExt(source_path))
 // - structured → Monaco json(fields.raw ?? JSON.stringify(fields))
 // - 空 content+空 fields → antd Empty
-// theme 由 AssetDetailPanel 从 useTheme() 取后透传给 Monaco。
-export function ContentArea({ asset, theme }: { asset: Asset; theme: 'light' | 'dark' }) {
-  const [view, setView] = useState<'preview' | 'source'>('preview')
+// theme 由调用方(AssetEditor)从 useTheme() 取后透传给 Monaco。
+// readOnly/onChange:P2 编辑模式透传给 MonacoViewer。onChange 存在 = 编辑态。
+export function ContentArea({
+  asset,
+  theme,
+  readOnly,
+  onChange,
+}: {
+  asset: Asset
+  theme: 'light' | 'dark'
+  readOnly?: boolean
+  onChange?: (v: string) => void
+}) {
+  // 编辑态默认源码视图(让用户进入编辑即可直接修改,无需手动切「源码」)。
+  const [view, setView] = useState<'preview' | 'source'>(onChange ? 'source' : 'preview')
 
   const isMarkdown = MARKDOWN_TYPES.has(asset.type)
   const isScript = asset.type === 'script'
   const isStructured = STRUCTURED_TYPES.has(asset.type)
 
-  // markdown:有 content 才渲染预览/源码
-  if (isMarkdown && asset.content) {
+  // markdown:有 content 才渲染预览/源码;编辑态(content 可为空)也进入此分支
+  if (isMarkdown && (onChange || asset.content)) {
     return (
       <Card
         size="small"
@@ -48,12 +77,12 @@ export function ContentArea({ asset, theme }: { asset: Asset; theme: 'light' | '
       >
         {view === 'preview' ? (
           <div style={{ padding: 12, flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
-            <MarkdownPreview content={asset.content} />
+            <MarkdownPreview content={asset.content ?? ''} />
           </div>
         ) : (
           <div style={{ padding: 12 }}>
             <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
-              <MonacoViewer value={asset.content} language="markdown" theme={theme} />
+              <MonacoViewer value={asset.content ?? ''} language="markdown" theme={theme} readOnly={readOnly} onChange={onChange} />
             </Suspense>
           </div>
         )}
@@ -61,8 +90,8 @@ export function ContentArea({ asset, theme }: { asset: Asset; theme: 'light' | '
     )
   }
 
-  // script:Monaco(按扩展名选语言)
-  if (isScript && asset.content) {
+  // script:Monaco(按扩展名选语言);编辑态(content 可为空)也进入此分支
+  if (isScript && (onChange || asset.content)) {
     return (
       <Card
         size="small"
@@ -71,7 +100,7 @@ export function ContentArea({ asset, theme }: { asset: Asset; theme: 'light' | '
         styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
       >
         <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
-          <MonacoViewer value={asset.content} language={langByExt(asset.source_path)} theme={theme} />
+          <MonacoViewer value={asset.content ?? ''} language={langByExt(asset.source_path)} theme={theme} readOnly={readOnly} onChange={onChange} />
         </Suspense>
       </Card>
     )
@@ -79,13 +108,19 @@ export function ContentArea({ asset, theme }: { asset: Asset; theme: 'light' | '
 
   // structured:JSON 类资产不做结构化预览,直接 Monaco JSON 源码
   //(settings/permissions/mcp_server/hook/keybinding/plugin)。fields.raw 为原始文本,
-  // 否则 JSON.stringify(fields)。空对象 → Empty。
+  // 否则 JSON.stringify(fields)。空对象 → Empty(只读态)。
+  //
+  // 编辑态(onChange 提供):用 asset.content 作为 Monaco 值。AssetEditor 传 {...asset, content: draft}
+  // 覆盖 content,使编辑态 Monaco 显示 draft 而非 fields.raw。
+  // 原因:structured 资产无 asset.content,若编辑态仍从 fields.raw 取值,则 onChange 更新 draft 后
+  // fields.raw 不变,Monaco 始终显示旧值 → 编辑 silently revert。改用 asset.content(= draft)解决。
   if (isStructured) {
     const raw = (asset.fields as Record<string, unknown> | undefined)?.raw
-    const value = typeof raw === 'string'
+    const readOnlyValue = typeof raw === 'string'
       ? raw
       : JSON.stringify(asset.fields ?? {}, null, 2)
-    if (value === '{}' || value === '') {
+    const value = onChange ? (asset.content ?? '') : readOnlyValue
+    if (!onChange && (value === '{}' || value === '')) {
       return <Card size="small" title="内容"><Empty description="该资产无解析字段" /></Card>
     }
     return (
@@ -96,7 +131,7 @@ export function ContentArea({ asset, theme }: { asset: Asset; theme: 'light' | '
         styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
       >
         <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
-          <MonacoViewer value={value} language="json" theme={theme} />
+          <MonacoViewer value={value} language="json" theme={theme} readOnly={readOnly} onChange={onChange} />
         </Suspense>
       </Card>
     )
@@ -117,7 +152,7 @@ export function ContentArea({ asset, theme }: { asset: Asset; theme: 'light' | '
         styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
       >
         <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
-          <MonacoViewer value={asset.content} language="plaintext" theme={theme} />
+          <MonacoViewer value={asset.content} language="plaintext" theme={theme} readOnly={readOnly} onChange={onChange} />
         </Suspense>
       </Card>
     )
@@ -133,7 +168,7 @@ export function ContentArea({ asset, theme }: { asset: Asset; theme: 'light' | '
       styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
     >
       <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
-        <MonacoViewer value={value} language="json" theme={theme} />
+        <MonacoViewer value={value} language="json" theme={theme} readOnly={readOnly} onChange={onChange} />
       </Suspense>
     </Card>
   )

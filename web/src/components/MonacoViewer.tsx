@@ -28,6 +28,10 @@ export default function MonacoViewer({
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
+  // onChange ref:始终持有最新 onChange,避免 mount effect 捕获首渲染闭包(stale closure)。
+  // 调用方传内联箭头或 undefined→defined 切换时,编辑回调不会失效(P2 编辑路径不可丢编辑)。
+  const onChangeRef = useRef(onChange)
+  useEffect(() => { onChangeRef.current = onChange })
 
   // 创建 editor(仅一次,依 mount)
   useEffect(() => {
@@ -45,10 +49,9 @@ export default function MonacoViewer({
       lineNumbers: 'on',
       wordWrap: 'on',
     })
-    // 编辑回调
-    if (onChange) {
-      editor.onDidChangeModelContent(() => onChange(editor.getValue()))
-    }
+    // 编辑回调:通过 ref 调用最新 onChange,无 stale closure 风险。
+    // 无需 if(onChange) 守卫——ref 为 undefined 时 ?. 安全跳过。
+    editor.onDidChangeModelContent(() => onChangeRef.current?.(editor.getValue()))
     editorRef.current = editor
     return () => {
       editor.dispose()
