@@ -139,3 +139,118 @@ func TestFindAssetByID(t *testing.T) {
 		t.Fatal("findAsset should miss nonexistent id")
 	}
 }
+
+// TestEditableProjectMCPJSON:项目 .mcp.json 在项目根(<p>/.mcp.json,非 <p>/.claude/),
+// 须可编辑。configengine discover_project.go:49 直接用 filepath.Join(p.Path, ".mcp.json")。
+func TestEditableProjectMCPJSON(t *testing.T) {
+	home, _ := newFixture(t)
+	projDir := filepath.Join(home, "myproj")
+	writeFile(t, filepath.Join(home, ".claude.json"),
+		`{"projects":{"`+projDir+`":{}}}`)
+	writeFile(t, filepath.Join(projDir, ".mcp.json"),
+		`{"mcpServers":{"foo":{"command":"bar"}}}`)
+	e := New(configengine.NewEngine(home), "", 0)
+	inv, err := e.Engine.Discover()
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(projDir, ".mcp.json")
+	for _, a := range inv.Assets {
+		if a.Type == configengine.AssetMCPServer && a.SourcePath == target {
+			ok, reason := e.editable(a)
+			if !ok {
+				t.Fatalf("project .mcp.json asset should be editable: %s", reason)
+			}
+			return
+		}
+	}
+	t.Fatal("test setup: no project .mcp.json MCP asset found")
+}
+
+// TestEditableProjectScript:项目 hook 引用 <p>/scripts/deploy.sh(项目根下、.claude 外),
+// 须可编辑。parseScripts base = filepath.Dir(<p>/.claude) = <p>。
+func TestEditableProjectScript(t *testing.T) {
+	home, _ := newFixture(t)
+	projDir := filepath.Join(home, "myproj")
+	writeFile(t, filepath.Join(home, ".claude.json"),
+		`{"projects":{"`+projDir+`":{}}}`)
+	writeFile(t, filepath.Join(projDir, ".claude", "settings.json"),
+		`{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"bash scripts/deploy.sh"}]}]}}`)
+	writeFile(t, filepath.Join(projDir, "scripts", "deploy.sh"), `#!/bin/sh
+echo deploy`)
+	e := New(configengine.NewEngine(home), "", 0)
+	inv, err := e.Engine.Discover()
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(projDir, "scripts", "deploy.sh")
+	for _, a := range inv.Assets {
+		if a.Type == configengine.AssetScript && a.SourcePath == target {
+			if a.Scope != configengine.ScopeProject {
+				t.Fatalf("script scope = %s, want project", a.Scope)
+			}
+			ok, reason := e.editable(a)
+			if !ok {
+				t.Fatalf("project script asset should be editable: %s", reason)
+			}
+			return
+		}
+	}
+	t.Fatal("test setup: no project script asset found")
+}
+
+// TestEditableGlobalScript:全局 hook 引用 ~/scripts/x.sh(home 下、.claude 外),
+// 须可编辑。parseScripts base = filepath.Dir(~/.claude) = home。
+func TestEditableGlobalScript(t *testing.T) {
+	home, claude := newFixture(t)
+	writeFile(t, filepath.Join(claude, "settings.json"),
+		`{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"bash scripts/x.sh"}]}]}}`)
+	writeFile(t, filepath.Join(home, "scripts", "x.sh"), `#!/bin/sh
+echo x`)
+	e := New(configengine.NewEngine(home), "", 0)
+	inv, err := e.Engine.Discover()
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(home, "scripts", "x.sh")
+	for _, a := range inv.Assets {
+		if a.Type == configengine.AssetScript && a.SourcePath == target {
+			if a.Scope != configengine.ScopeGlobal {
+				t.Fatalf("script scope = %s, want global", a.Scope)
+			}
+			ok, reason := e.editable(a)
+			if !ok {
+				t.Fatalf("global script asset should be editable: %s", reason)
+			}
+			return
+		}
+	}
+	t.Fatal("test setup: no global script asset found")
+}
+
+// TestEditableRejectsSymlink:symlink 目标不下钻,editable=false。
+// 合法根先通过(home 下),symlink 检查拒绝。
+func TestEditableRejectsSymlink(t *testing.T) {
+	home, claude := newFixture(t)
+	realFile := filepath.Join(home, "real-settings.json")
+	writeFile(t, realFile, `{"model":"opus"}`)
+	linkPath := filepath.Join(claude, "settings.json")
+	if err := os.Symlink(realFile, linkPath); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+	e := New(configengine.NewEngine(home), "", 0)
+	inv, err := e.Engine.Discover()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range inv.Assets {
+		if a.Type == configengine.AssetSettings && a.SourcePath == linkPath {
+			ok, _ := e.editable(a)
+			if ok {
+				t.Fatal("symlinked settings must not be editable")
+			}
+			return
+		}
+	}
+	t.Fatal("test setup: no symlinked settings asset found")
+}

@@ -54,21 +54,27 @@ func (e *Editor) editable(a configengine.Asset) (bool, string) {
 	if strings.Contains(sp, string(filepath.Separator)+"plugins"+string(filepath.Separator)+"cache"+string(filepath.Separator)) {
 		return false, "plugins cache is third-party (read-only)"
 	}
-	// 合法根校验:全局 ~/.claude 或 已知项目 <p>/.claude
-	claudeDir := filepath.Join(e.Engine.HomeDir, ".claude")
+	// 合法根校验:编辑器只能编辑 configengine 发现的资产(findAsset → Discover),
+	// 而 configengine 在 home / 项目根下发现脚本与 .mcp.json(不止 .claude/):
+	//   - 全局:parseScripts 以 ~/.claude 的父目录(home)为 base,故全局 hook 引用
+	//     的脚本可能落在 ~/scripts/...(home 下、.claude 外)。
+	//   - 项目:.mcp.json 直接在 <p>/ 下(discover_project.go),项目 hook 引用的
+	//     脚本以 <p>/.claude 的父目录(<p>)为 base,落在 <p>/scripts/...。
+	// 故合法根为 home(全局)/ <p>(项目);~/.claude.json 与 plugins cache 检查仍是
+	// 机器管理/第三方文件的守门员。fail-closed:未知根一律拒绝。
 	switch a.Scope {
 	case configengine.ScopeGlobal, configengine.ScopeManaged:
-		// managed 应只读;global 须在 ~/.claude 下
+		// managed 应只读;global 须在 home 下
 		if a.Scope == configengine.ScopeManaged {
 			return false, "managed policy is read-only"
 		}
-		if !pathInDir(sp, claudeDir) {
-			return false, "global asset out of ~/.claude"
+		if !pathInDir(sp, e.Engine.HomeDir) {
+			return false, "global asset out of home"
 		}
 	case configengine.ScopeProject:
 		ok, root := e.projectRootFor(sp)
 		if !ok {
-			return false, "project not known or path out of project .claude"
+			return false, "project not known or path out of project root"
 		}
 		_ = root
 	case configengine.ScopePlugin:
@@ -83,14 +89,15 @@ func (e *Editor) editable(a configengine.Asset) (bool, string) {
 	return true, ""
 }
 
-// projectRootFor 校验 project scope 资产:SourcePath 须落在某已知项目 <p>/.claude 下。
-// 返回 (ok, <p>/.claude)。项目须 ListProjects 精确 == 匹配(非前缀/包含)。
+// projectRootFor 校验 project scope 资产:SourcePath 须落在某已知项目 <p> 下。
+// 返回 (ok, <p>)。项目须 ListProjects 精确 == 匹配(非前缀/包含)。
+// 合法根是项目根 <p>(非 <p>/.claude),因为 configengine 在 <p>/ 下发现 .mcp.json
+// 与 <p>/scripts/...(parseScripts base = <p>/.claude 的父目录 = <p>)。
 func (e *Editor) projectRootFor(sp string) (bool, string) {
 	known, _ := e.Engine.ListProjects()
 	for _, p := range known {
-		root := filepath.Join(p.Path, ".claude")
-		if pathInDir(sp, root) {
-			return true, root
+		if pathInDir(sp, p.Path) {
+			return true, p.Path
 		}
 	}
 	return false, ""
