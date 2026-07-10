@@ -16,7 +16,7 @@ func TestGetAgents(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	eng := configengine.NewEngine(dir)
 	agents := configengine.DefaultAgents(dir)
-	s := NewServer(eng, nil, config.DefaultConfig(), "tok", nil, agents)
+	s := NewServer(eng, nil, config.DefaultConfig(), "tok", nil, agents, nil)
 	r := s.Router()
 	req := httptest.NewRequest("GET", "/api/agents", nil)
 	req.Host = "127.0.0.1"

@@ -22,10 +22,12 @@ type Config struct {
 	// 默认标签见 DefaultDirTags();生效标签由 ResolveDirTag 合并。
 	// 空表示用户未自定义,全用默认。见 dir_tags.go。
 	DirTags DirTags `yaml:"dir_tags"`
+	BackupDir  string `yaml:"backup_dir"`   // 空=默认 ~/.claude-sentinel/backups
+	MaxBackups int    `yaml:"max_backups"`  // 0=默认 20
 }
 
 func DefaultConfig() *Config {
-	return &Config{Bind: "127.0.0.1", Port: 0}
+	return &Config{Bind: "127.0.0.1", Port: 0, MaxBackups: 20}
 }
 
 // DefaultPath 返回 ~/.claude-sentinel/config.yaml。
