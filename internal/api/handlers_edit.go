@@ -179,25 +179,6 @@ func (s *Server) priorFindingsForSourcePath(sourcePath string, detectorIDs []str
 	return out
 }
 
-// priorFindingsForAsset 从 latest scan 取该资产 + 指定检测器的 findings。
-func (s *Server) priorFindingsForAsset(assetID string, detectorIDs []string) []security.Finding {
-	latest := s.latestScan()
-	if latest == nil {
-		return nil
-	}
-	allow := map[string]bool{}
-	for _, d := range detectorIDs {
-		allow[d] = true
-	}
-	var out []security.Finding
-	for _, f := range latest.Findings {
-		if f.AssetID == assetID && allow[f.DetectorID] {
-			out = append(out, f)
-		}
-	}
-	return out
-}
-
 // findingKey 生成 finding 去重键。Finding.ID 是 P1 遗留死字段(检测器从未设值),
 // 故用 (DetectorID, RuleID, AssetID, Evidence) 复合键:同一规则在同一资产上
 // 触发且 evidence 不变视为同一条;编辑使 evidence 变化(如 Bash(git:*)→Bash(*))

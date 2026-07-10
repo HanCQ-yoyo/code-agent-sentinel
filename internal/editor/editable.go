@@ -85,6 +85,11 @@ func (e *Editor) editable(a configengine.Asset) (bool, string) {
 		return false, "unknown scope"
 	}
 	// symlink 不下钻:目标须是真实文件(os.Lstat 非 symlink)
+	//
+	// 注意:editable() 是 snapshot 判定,实际 os.ReadFile/os.Rename 在 Commit 中稍后发生
+	// (见 editor.go)。该时间窗内若有人新建符号链接,理论上可绕过此处校验(TOCTOU)。
+	// 这是本地单用户工具的有意权衡,非安全边界:本地用户本就有任意写权限,
+	// 编辑器只做防呆而非防对抗。若未来引入多用户/远程,须在写盘前重做该校验。
 	if isSymlink(sp) {
 		return false, "symlink targets not editable"
 	}
