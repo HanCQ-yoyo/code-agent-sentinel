@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -79,21 +80,34 @@ func (s *Server) commitAsset(c *gin.Context) {
 		return
 	}
 	// 部分重扫:受影响资产(同 source_path)+ baseline/injection 检测器。
-	newFindings := s.partialRescan(res.Asset)
-	c.JSON(http.StatusOK, gin.H{
+	newFindings, rescanErr := s.partialRescan(res.Asset)
+	resp := gin.H{
 		"asset":        res.Asset,
 		"backup_path":  res.BackupPath,
 		"diff":         res.Diff,
 		"dangerous":    res.Dangerous,
 		"new_findings": newFindings,
-	})
+	}
+	if rescanErr != "" {
+		resp["rescan_error"] = rescanErr
+	}
+	c.JSON(http.StatusOK, resp)
 }
 
 // partialRescan 跑受影响资产(同 source_path)的 baseline+injection,对比 latest 同检测器 findings 返回新增。
-func (s *Server) partialRescan(updated configengine.Asset) []security.Finding {
+// 返回 (newFindings, rescanError):rescanError 非空时表示重扫失败(Discover/Scan 错误或 fresh=nil),
+// 前端据此提示用户手动全量重扫,而非误报"无新增风险"。
+func (s *Server) partialRescan(updated configengine.Asset) (fresh []security.Finding, rescanError string) {
+	// rescan 不应 panic 崩溃整个 commit 响应(写入已成功);recover 兜底。
+	defer func() {
+		if r := recover(); r != nil {
+			fresh = make([]security.Finding, 0)
+			rescanError = fmt.Sprintf("partial rescan failed: panic %v", r)
+		}
+	}()
 	inv, err := s.Engine.Discover()
 	if err != nil {
-		return nil
+		return make([]security.Finding, 0), "partial rescan failed: " + err.Error()
 	}
 	var affected []configengine.Asset
 	for _, a := range inv.Assets {
@@ -102,27 +116,67 @@ func (s *Server) partialRescan(updated configengine.Asset) []security.Finding {
 		}
 	}
 	if len(affected) == 0 {
-		return nil
+		return make([]security.Finding, 0), "partial rescan failed: no affected assets found"
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	res, err := s.Orchestrator.Scan(ctx, affected, []string{"baseline", "content.injection"})
 	if err != nil || res == nil {
-		return nil
+		msg := "partial rescan failed: scan returned nil"
+		if err != nil {
+			msg = "partial rescan failed: " + err.Error()
+		}
+		return make([]security.Finding, 0), msg
 	}
-	// 该资产在 latest 同检测器的 findings 集合(对比基线)
-	prior := s.priorFindingsForAsset(updated.ID, []string{"baseline", "content.injection"})
+	// 该资产在 latest 同检测器的 findings 集合(对比基线)。
+	// 同 source_path 的所有 sibling 资产(settings + permissions + per-hook)都参与重扫,
+	// baseline/injection findings 的 AssetID 是被扫 sibling 的 ID(如 permissions.ID),
+	// 而非编辑资产的 ID,故 prior 须收集 ALL sibling AssetID。
+	prior := s.priorFindingsForSourcePath(updated.SourcePath, []string{"baseline", "content.injection"})
 	priorKeys := map[string]bool{}
 	for _, f := range prior {
 		priorKeys[findingKey(f)] = true
 	}
-	var fresh []security.Finding
+	fresh = make([]security.Finding, 0)
 	for _, f := range res.Findings {
 		if !priorKeys[findingKey(f)] {
 			fresh = append(fresh, f)
 		}
 	}
-	return fresh
+	return fresh, ""
+}
+
+// priorFindingsForSourcePath 从 latest scan 取同 source_path 的所有 sibling 资产
+// + 指定检测器的 findings。同 source_path 的资产(settings + permissions + per-hook)
+// 共享一个物理文件,重扫覆盖全部 sibling,但 baseline/injection findings 的 AssetID
+// 是被扫 sibling 的 ID(如 permissions.ID),故须用全部 sibling AssetID 过滤 prior。
+func (s *Server) priorFindingsForSourcePath(sourcePath string, detectorIDs []string) []security.Finding {
+	latest := s.latestScan()
+	if latest == nil {
+		return nil
+	}
+	// 收集同 source_path 的全部 AssetID。
+	siblingIDs := map[string]bool{}
+	if latest.Inventory != nil {
+		for _, a := range latest.Inventory.Assets {
+			if a.SourcePath == sourcePath {
+				siblingIDs[a.ID] = true
+			}
+		}
+	}
+	// 若 latest 无 inventory(旧历史记录),回退:从 latest findings 的 AssetID 无法
+	// 推断 source_path,此时 prior 为空(可能少量误报新增,但不影响安全性)。
+	allow := map[string]bool{}
+	for _, d := range detectorIDs {
+		allow[d] = true
+	}
+	out := make([]security.Finding, 0)
+	for _, f := range latest.Findings {
+		if siblingIDs[f.AssetID] && allow[f.DetectorID] {
+			out = append(out, f)
+		}
+	}
+	return out
 }
 
 // priorFindingsForAsset 从 latest scan 取该资产 + 指定检测器的 findings。

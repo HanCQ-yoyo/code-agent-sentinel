@@ -208,3 +208,61 @@ func TestCommitNotEditable(t *testing.T) {
 		t.Fatalf("want ErrNotEditable got %v", err)
 	}
 }
+
+// TestStructuredEditPreservesFileContent 验证结构化资产(settings → permissions
+// sibling)编辑不损坏文件。旧 bug:前端用 JSON.stringify(fields) 做 draft(fields.raw
+// 是 json.RawMessage → marshal 为对象;permissions/hooks/mcp_server/keybinding 无 raw),
+// Commit 把 fields 包装写回磁盘 → 损坏文件(权限被擦除)。
+//
+// 修复(Reviewer Fix 1):Preview 返回 OriginalContent = os.ReadFile(SourcePath) 的
+// 原始磁盘内容,前端用它初始化 draft。本测试模拟该流程:Preview 拿 OriginalContent,
+// 再以它作 NewContent Commit → 盘上文件须与原始字节一致(无包装/无缩进归一化)。
+//
+// 同时验证 Fix 5:detectDanger 无危险变更时 Dangerous 是 [] 而非 null。
+func TestStructuredEditPreservesFileContent(t *testing.T) {
+	home, claude := newFixture(t)
+	src := filepath.Join(claude, "settings.json")
+	// 用非平凡格式(嵌套 permissions + 特定缩进)以便检测格式归一化损坏。
+	original := `{"permissions":{"allow":["Bash(git:*)"],"deny":["Read(**)"]},"model":"opus"}`
+	writeFile(t, src, original)
+	e := New(configengine.NewEngine(home), "", 0)
+	inv, _ := e.Engine.Discover()
+	// 找 settings 资产(首个;permissions 同 source_path)。
+	var a configengine.Asset
+	for _, x := range inv.Assets {
+		if x.Type == configengine.AssetSettings {
+			a = x
+			break
+		}
+	}
+	if a.ID == "" {
+		t.Fatal("no settings asset found")
+	}
+	h, _, _ := configengine.HashAndMTime(src)
+	// 1. Preview 返回 OriginalContent(= 原始文件内容)。
+	pr, err := e.Preview(context.Background(), EditRequest{AssetID: a.ID, NewContent: original, BaseHash: h})
+	if err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	if pr.OriginalContent != original {
+		t.Fatalf("OriginalContent mismatch:\nwant %q\ngot  %q", original, pr.OriginalContent)
+	}
+	// Fix 5:无危险变更时 Dangerous 须是 [] 非 null(json marshal 后)。
+	if pr.Dangerous == nil {
+		t.Fatal("Dangerous should be non-nil (Fix 5: [] not null)")
+	}
+	// 2. 用 OriginalContent 作 NewContent Commit(= 前端 draft 初始化后的 no-op 编辑)。
+	res, err := e.Commit(context.Background(), EditRequest{AssetID: a.ID, NewContent: pr.OriginalContent, BaseHash: h})
+	if err != nil {
+		t.Fatalf("commit: %v", err)
+	}
+	// 3. 盘上文件须与原始字节完全一致(无 fields 包装、无缩进归一化)。
+	got, _ := os.ReadFile(src)
+	if string(got) != original {
+		t.Fatalf("file corrupted after structured edit:\nwant %q\ngot  %q", original, string(got))
+	}
+	// Fix 5:Commit 的 Dangerous 亦须非 nil。
+	if res.Dangerous == nil {
+		t.Fatal("Commit Dangerous should be non-nil (Fix 5: [] not null)")
+	}
+}

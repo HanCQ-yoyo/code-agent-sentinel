@@ -83,6 +83,7 @@ export interface PreviewResult {
   current_hash: string
   editable: boolean
   not_editable_reason?: string
+  original_content: string
 }
 
 export interface EditResult {
@@ -91,4 +92,5 @@ export interface EditResult {
   diff: string
   dangerous: Danger[]
   new_findings: Finding[]
+  rescan_error?: string
 }

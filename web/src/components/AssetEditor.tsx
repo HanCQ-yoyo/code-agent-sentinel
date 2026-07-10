@@ -27,8 +27,12 @@ export function AssetEditor({ asset }: { asset: Asset }) {
 
   // 进入编辑:先 preview 探测可编辑性 + 乐观锁(base_hash_ok),
   // 不可编辑或已被外部修改则提示并拒绝进入编辑态,避免给用户一个编辑不了的 UI。
-  // draft 仍用 editableText(asset) 快照——structured 资产无 content,
-  // 须从 fields.raw 取,否则 draft 为空导致编辑 silently 无效。
+  // draft 从 pr.original_content 初始化——后端直接读源文件的原始磁盘内容,
+  // 保证编辑起点 = 真实文件内容(对所有资产类型一致)。
+  // structured 资产(settings/permissions/hooks/mcp_server/keybinding)的 fields.raw
+  // 是 json.RawMessage(marshal 为对象)或根本没有 raw 字段,用 JSON.stringify(fields)
+  // 会导致 draft 是整个 fields 包装而非文件内容 → commit 损坏文件。
+  // editableText(asset) 仅作为 original_content 缺失时的防御性回退。
   // probe 的 new_content 传空(asset.content ?? '')是安全的:后端 Preview 先跑 editable() 判定,
   // 不可编辑时直接返回 {Editable:false},不计算 diff;可编辑时 enterEdit 也不使用返回的 diff。
   const enterEdit = async () => {
@@ -44,7 +48,7 @@ export function AssetEditor({ asset }: { asset: Asset }) {
         message.warning('文件已被外部修改,请重新加载资产后再编辑')
         return
       }
-      setDraft(editableText(asset))
+      setDraft(pr.original_content ?? editableText(asset))
       setEditing(true)
     } finally {
       setSaving(false)
@@ -75,6 +79,10 @@ export function AssetEditor({ asset }: { asset: Asset }) {
       if (res) {
         setPreviewOpen(false)
         setEditing(false)
+        if (res.rescan_error) {
+          message.warning(`已保存,但部分重扫失败,请手动全量重扫(${res.rescan_error})`)
+          return
+        }
         const n = (res.new_findings ?? []).length
         if (n > 0) {
           message.warning(`已保存;部分重扫发现 ${n} 项新增风险。可点「重新扫描」做全量。`)

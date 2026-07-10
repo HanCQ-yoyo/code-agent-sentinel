@@ -254,3 +254,44 @@ func TestEditableRejectsSymlink(t *testing.T) {
 	}
 	t.Fatal("test setup: no symlinked settings asset found")
 }
+
+// TestEditableRejectsParentSymlink 验证父目录符号链接防护(Fix 2)。
+// isSymlink 只检查叶子节点;若 ~/scripts 是指向 home 之外的 symlink,
+// 脚本叶子是真实文件,但 os.ReadFile/os.Rename 会解析符号链接写到 home 之外。
+// EvalSymlinks 解析全路径符号链接后重新校验 root,拒绝越权。
+func TestEditableRejectsParentSymlink(t *testing.T) {
+	home, claude := newFixture(t)
+	// 在 home 之外造真实脚本目录 + 脚本文件。
+	outside := filepath.Join(home, "..", "evil-scripts")
+	writeFile(t, filepath.Join(outside, "deploy.sh"), `#!/bin/sh
+echo pwned`)
+	// ~/scripts 指向 home 之外的 evil-scripts。
+	// configengine parseScripts 以 home 为 base 解析 "scripts/deploy.sh" → ~/scripts/deploy.sh。
+	scriptsLink := filepath.Join(home, "scripts")
+	if err := os.Symlink(outside, scriptsLink); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+	// settings.json 引用 scripts/deploy.sh,使 configengine 发现该脚本资产。
+	writeFile(t, filepath.Join(claude, "settings.json"),
+		`{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"bash scripts/deploy.sh"}]}]}}`)
+	e := New(configengine.NewEngine(home), "", 0)
+	inv, err := e.Engine.Discover()
+	if err != nil {
+		t.Fatal(err)
+	}
+	target := filepath.Join(scriptsLink, "deploy.sh")
+	for _, a := range inv.Assets {
+		if a.Type == configengine.AssetScript && a.SourcePath == target {
+			ok, reason := e.editable(a)
+			if ok {
+				t.Fatal("script under symlinked parent dir must NOT be editable")
+			}
+			if reason == "" {
+				t.Fatal("expected non-empty rejection reason")
+			}
+			t.Logf("correctly rejected: %s", reason)
+			return
+		}
+	}
+	t.Fatalf("test setup: no script asset at %s found; assets: %+v", target, inv.Assets)
+}

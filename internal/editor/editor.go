@@ -24,6 +24,11 @@ type EditRequest struct {
 }
 
 // PreviewResult 是 Preview 的只读输出(不写盘)。
+// OriginalContent 是资产源文件的原始磁盘内容,供前端初始化编辑 draft——
+// structured 资产(settings/permissions/hooks/mcp_server/keybinding)的 fields.raw
+// 是 json.RawMessage(marshal 为 JSON 对象而非字符串)或根本没有 raw 字段,
+// 前端若用 JSON.stringify(fields) 做 draft 会写入整个 fields 包装而非原始文件内容 →
+// 损坏文件。OriginalContent 直接来自 os.ReadFile(SourcePath),保证 draft = 真实文件内容。
 type PreviewResult struct {
 	Diff              string   `json:"diff"`
 	Dangerous         []Danger `json:"dangerous"`
@@ -31,6 +36,7 @@ type PreviewResult struct {
 	CurrentHash       string   `json:"current_hash"`
 	Editable          bool     `json:"editable"`
 	NotEditableReason string   `json:"not_editable_reason,omitempty"`
+	OriginalContent   string   `json:"original_content"`
 }
 
 // EditResult 是 Commit 的写盘输出。
@@ -83,17 +89,18 @@ func (e *Editor) Preview(ctx context.Context, req EditRequest) (*PreviewResult, 
 	current, _ := os.ReadFile(a.SourcePath)
 	currentHash := sha256hex(current)
 	if !editable {
-		return &PreviewResult{Editable: false, NotEditableReason: reason, CurrentHash: currentHash}, nil
+		return &PreviewResult{Editable: false, NotEditableReason: reason, CurrentHash: currentHash, OriginalContent: string(current)}, nil
 	}
 	old := string(current)
 	diff := computeDiff(old, req.NewContent)
 	dangers := detectDanger(a, old, req.NewContent)
 	return &PreviewResult{
-		Diff:        diff,
-		Dangerous:   dangers,
-		BaseHashOK:  currentHash == req.BaseHash,
-		CurrentHash: currentHash,
-		Editable:    true,
+		Diff:            diff,
+		Dangerous:       dangers,
+		BaseHashOK:      currentHash == req.BaseHash,
+		CurrentHash:     currentHash,
+		Editable:        true,
+		OriginalContent: old,
 	}, nil
 }
 

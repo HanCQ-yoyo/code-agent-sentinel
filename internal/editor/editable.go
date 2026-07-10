@@ -62,6 +62,7 @@ func (e *Editor) editable(a configengine.Asset) (bool, string) {
 	//     脚本以 <p>/.claude 的父目录(<p>)为 base,落在 <p>/scripts/...。
 	// 故合法根为 home(全局)/ <p>(项目);~/.claude.json 与 plugins cache 检查仍是
 	// 机器管理/第三方文件的守门员。fail-closed:未知根一律拒绝。
+	var root string
 	switch a.Scope {
 	case configengine.ScopeGlobal, configengine.ScopeManaged:
 		// managed 应只读;global 须在 home 下
@@ -71,12 +72,13 @@ func (e *Editor) editable(a configengine.Asset) (bool, string) {
 		if !pathInDir(sp, e.Engine.HomeDir) {
 			return false, "global asset out of home"
 		}
+		root = e.Engine.HomeDir
 	case configengine.ScopeProject:
-		ok, root := e.projectRootFor(sp)
+		ok, r := e.projectRootFor(sp)
 		if !ok {
 			return false, "project not known or path out of project root"
 		}
-		_ = root
+		root = r
 	case configengine.ScopePlugin:
 		return false, "plugin assets are read-only"
 	default:
@@ -85,6 +87,16 @@ func (e *Editor) editable(a configengine.Asset) (bool, string) {
 	// symlink 不下钻:目标须是真实文件(os.Lstat 非 symlink)
 	if isSymlink(sp) {
 		return false, "symlink targets not editable"
+	}
+	// 父目录符号链接防护:isSymlink 只检查叶子节点,若父目录(如 ~/.claude/scripts)
+	// 是指向 root 之外的 symlink,os.ReadFile/os.Rename 会解析符号链接写入 root 之外。
+	// EvalSymlinks 解析路径上的所有符号链接(含父目录),再用真实路径重新校验 root。
+	resolved, err := filepath.EvalSymlinks(sp)
+	if err != nil {
+		return false, "path resolve failed"
+	}
+	if !pathInDir(resolved, root) {
+		return false, "out of root (symlink resolved)"
 	}
 	return true, ""
 }

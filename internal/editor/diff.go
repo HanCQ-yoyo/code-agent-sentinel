@@ -64,7 +64,7 @@ var secretRe = regexp.MustCompile(`(ghp_[A-Za-z0-9]{20,}|sk-[A-Za-z0-9]{20,}|AKI
 // 非 JSON 资产(skill/command/memory 等纯文本)解析失败时跳过结构化检查,
 // 仅 secret_like 正则扫描仍生效(对原始文本)。
 func detectDanger(a configengine.Asset, old, new string) []Danger {
-	var out []Danger
+	out := make([]Danger, 0)
 
 	oldObj := parseJSONMap(old)
 	newObj := parseJSONMap(new)

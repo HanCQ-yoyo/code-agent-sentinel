@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"code-agent-sentinel/internal/configengine"
+	"code-agent-sentinel/internal/security"
 )
 
 func TestPreviewAsset(t *testing.T) {
@@ -269,5 +270,117 @@ func TestPartialRescanDedup(t *testing.T) {
 	if len(nf) == 0 {
 		t.Fatalf("expected new_findings (Bash(*) is a new danger), got empty; dedup dropped it.\n"+
 			"latest findings=%d, response=%+v", len(latest.Findings), res)
+	}
+}
+
+// TestPartialRescanDedupSettingsEdit 验证编辑 SETTINGS 资产(非 permissions)时,
+// 同 source_path 的 permissions sibling 的既有 finding 不被误报为新增(Fix 3)。
+//
+// 旧 bug:partialRescan 的 prior 只用 updated.ID(= settings.ID),但 baseline
+// findings 的 AssetID = permissions.ID(sibling),prior 为空 → 全部 sibling findings
+// 报为"新增"(包括编辑前就存在的)→ 过度报告。
+//
+// 修复:priorFindingsForSourcePath 收集同 source_path 全部 sibling AssetID 过滤。
+// 本测试:BEFORE 有 Read(**) → baseline.dangerous-read-all(AssetID=permissions.ID);
+// 编辑 settings(不改 permissions 内容,如改 model)→ new_findings 须为空(无新增)。
+func TestPartialRescanDedupSettingsEdit(t *testing.T) {
+	dir := t.TempDir()
+	claude := filepath.Join(dir, ".claude")
+	// BEFORE:Read(**) 触发 baseline.dangerous-read-all(AssetID=permissions.ID)。
+	writeFile(t, filepath.Join(claude, "settings.json"),
+		`{"permissions":{"allow":["Read(**)"]},"model":"opus"}`)
+	s := newTestServer(t, dir)
+	r := s.Router()
+
+	// 1. 全量扫描,使 latestScan() 非 nil。
+	scanReq := httptest.NewRequest("POST", "/api/scan", nil)
+	scanReq.Host = "127.0.0.1"
+	scanReq.Header.Set("Authorization", "Bearer tok")
+	scanW := httptest.NewRecorder()
+	r.ServeHTTP(scanW, scanReq)
+	if scanW.Code != 200 {
+		t.Fatalf("POST /api/scan: got %d: %s", scanW.Code, scanW.Body)
+	}
+	latest := s.latestScan()
+	if latest == nil || len(latest.Findings) == 0 {
+		t.Fatal("expected baseline findings in latest scan")
+	}
+
+	// 2. 找 settings 资产(非 permissions)。
+	inv := getInventory(t, s)
+	var settingsID, settingsHash string
+	for _, a := range inv.Assets {
+		if a.Type == configengine.AssetSettings {
+			settingsID = a.ID
+			settingsHash = a.Hash
+			break
+		}
+	}
+	if settingsID == "" {
+		t.Fatal("no settings asset found")
+	}
+
+	// 3. 编辑 settings 的 model 字段(不动 permissions)→ 不应引入新 finding。
+	//    permissions sibling 的 Read(**) finding 已在 latest 中,prior 须含它 → 去重。
+	body := `{"new_content":"{\"permissions\":{\"allow\":[\"Read(**)\"]},\"model\":\"sonnet\"}","base_hash":"` + settingsHash + `"}`
+	req := httptest.NewRequest("PUT", "/api/assets/"+settingsID+"/content", strings.NewReader(body))
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("PUT settings: got %d: %s", w.Code, w.Body)
+	}
+	var res map[string]any
+	json.Unmarshal(w.Body.Bytes(), &res)
+	nf, _ := res["new_findings"].([]any)
+	// 旧 bug:permissions 的 Read(**) finding 被误报为新增(因为 prior 用 settings.ID,
+	// 而 finding 的 AssetID 是 permissions.ID)。
+	if len(nf) > 0 {
+		t.Fatalf("expected NO new_findings (permissions finding is pre-existing, not new), got %d: %+v", len(nf), nf)
+	}
+	// Fix 5:new_findings 须是 [] 非 null。
+	if res["new_findings"] == nil {
+		t.Fatal("Fix 5: new_findings should be [] not null")
+	}
+}
+
+// TestPartialRescanErrorSurfaced 验证重扫失败时 rescan_error 字段被设置(Fix 4)。
+// 旧 bug:partialRescan 失败返回 nil → new_findings: null → 前端误报"无新增风险"。
+//
+// 本测试通过让 Orchestrator.Registry 为 nil(无法 Scan)强制重扫失败,
+// 断言响应含 rescan_error 非空字符串。
+func TestPartialRescanErrorSurfaced(t *testing.T) {
+	dir := t.TempDir()
+	claude := filepath.Join(dir, ".claude")
+	writeFile(t, filepath.Join(claude, "settings.json"), `{"model":"opus"}`)
+	s := newTestServer(t, dir)
+	// 破坏 Orchestrator 使 Scan 必失败:nil Registry → Detectors() panic 或 nil deref。
+	// 用一个无 Registry 的 Orchestrator 替换。
+	s.Orchestrator = &security.Orchestrator{Registry: nil}
+	r := s.Router()
+	inv := getInventory(t, s)
+	id := inv.Assets[0].ID
+	body := `{"new_content":"{\"model\":\"sonnet\"}","base_hash":"` + inv.Assets[0].Hash + `"}`
+	req := httptest.NewRequest("PUT", "/api/assets/"+id+"/content", strings.NewReader(body))
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("commit should succeed (write ok), got %d: %s", w.Code, w.Body)
+	}
+	var res map[string]any
+	json.Unmarshal(w.Body.Bytes(), &res)
+	re, ok := res["rescan_error"]
+	if !ok || re == nil || re == "" {
+		t.Fatalf("expected non-empty rescan_error, got %+v", res)
+	}
+	// new_findings 仍须是 [](非 null),因 partialRescan 失败时返 make([]Finding,0)。
+	nf, _ := res["new_findings"].([]any)
+	if nf == nil {
+		t.Fatal("Fix 5: new_findings should be [] not null even on rescan failure")
 	}
 }
