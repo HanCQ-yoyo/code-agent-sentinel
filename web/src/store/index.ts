@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { apiGet, apiPost, apiPut, apiDelete, AuthError } from '../api/client'
-import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, TreeNode, Project, DirTagsResponse, RawFile } from '../types'
+import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, TreeNode, Project, DirTagsResponse, RawFile, PreviewResult, EditResult } from '../types'
 import { type DirTag, type DirTagsMap } from '../lib/dirTags'
 
 type ProjectTab = { kind: 'global' } | { kind: 'project'; path: string }
@@ -44,6 +44,12 @@ interface State {
   fetchRaw: (path: string) => Promise<RawFile | undefined>
   // 拉单资产(含 content),供发现页详情抽屉按 finding.asset_id 展示资产文件内容。
   fetchAsset: (id: string) => Promise<Asset | undefined>
+  // P2 写编辑
+  previewResult: PreviewResult | null
+  editError: string | null
+  previewAssetEdit: (id: string, newContent: string, baseHash: string) => Promise<PreviewResult | undefined>
+  commitAssetEdit: (id: string, newContent: string, baseHash: string) => Promise<EditResult | undefined>
+  clearEditError: () => void
   clearError: () => void
 }
 
@@ -64,6 +70,7 @@ export const useStore = create<State>((set, get) => ({
   assets: null, scan: null, detectors: [], history: [], loading: false, error: null, authError: false,
   agents: null, tree: null, projects: [], activeProjectTab: { kind: 'global' },
   dirTagsDefaults: {}, dirTagsOverrides: {}, selectedTagFilter: null,
+  previewResult: null, editError: null,
   fetchAssets: async () => {
     const inv = await wrap(() => apiGet<Inventory>('/api/assets'), set)
     if (inv) set({ assets: inv })
@@ -133,5 +140,20 @@ export const useStore = create<State>((set, get) => ({
   setSelectedTagFilter: (tag) => set({ selectedTagFilter: tag }),
   fetchRaw: async (path) => wrap(() => apiGet<RawFile>(`/api/raw?path=${encodeURIComponent(path)}`), set),
   fetchAsset: async (id) => wrap(() => apiGet<Asset>(`/api/assets/${encodeURIComponent(id)}`), set),
+  // P2 写编辑:preview 走 POST,commit 走 PUT(后端 Task 9 注册为 PUT /api/assets/:id/content)。
+  previewAssetEdit: async (id, newContent, baseHash) => {
+    const r = await wrap(() => apiPost<PreviewResult>(`/api/assets/${encodeURIComponent(id)}/preview`, { new_content: newContent, base_hash: baseHash }), set)
+    set({ previewResult: r ?? null })
+    return r
+  },
+  commitAssetEdit: async (id, newContent, baseHash) => {
+    const r = await wrap(() => apiPut<EditResult>(`/api/assets/${encodeURIComponent(id)}/content`, { new_content: newContent, base_hash: baseHash }), set)
+    if (r) {
+      // 刷新资产(new_findings 反映到资产 content/hash/mtime)
+      get().fetchAssets()
+    }
+    return r
+  },
+  clearEditError: () => set({ editError: null }),
   clearError: () => set({ error: null, authError: false }),
 }))

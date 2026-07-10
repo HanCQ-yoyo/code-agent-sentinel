@@ -47,3 +47,13 @@ func TestConfigHasNoProjectField(t *testing.T) {
 		t.Fatal("Config 不应再有 Project 字段(--project 已移除)")
 	}
 }
+
+func TestConfigBackupDefaults(t *testing.T) {
+	c := DefaultConfig()
+	if c.MaxBackups != 20 {
+		t.Fatalf("default MaxBackups want 20 got %d", c.MaxBackups)
+	}
+	if c.BackupDir != "" {
+		t.Fatalf("default BackupDir want empty(resolved at editor.New) got %q", c.BackupDir)
+	}
+}

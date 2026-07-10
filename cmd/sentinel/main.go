@@ -18,6 +18,7 @@ import (
 	"code-agent-sentinel/internal/api"
 	"code-agent-sentinel/internal/config"
 	"code-agent-sentinel/internal/configengine"
+	"code-agent-sentinel/internal/editor"
 	"code-agent-sentinel/internal/history"
 	"code-agent-sentinel/internal/security"
 )
@@ -104,7 +105,8 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	}
 	histPath := filepath.Join(home, ".claude-sentinel", "history")
 	hist := history.NewStore(histPath)
-	srv := api.NewServer(eng, orch, cfg, token, hist, configengine.DefaultAgents(home))
+	ed := editor.New(eng, cfg.BackupDir, cfg.MaxBackups)
+	srv := api.NewServer(eng, orch, cfg, token, hist, configengine.DefaultAgents(home), ed)
 	srv.ConfigPath = cfgPath
 	httpSrv := &http.Server{Handler: srv.Router()}
 

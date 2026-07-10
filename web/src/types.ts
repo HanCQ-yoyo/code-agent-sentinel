@@ -68,3 +68,29 @@ export interface ScanSummary {
   finding_count: number; detector_avail: number; detector_total: number
 }
 export interface AgentsResponse { agents: Agent[]; current: string }
+
+// P2 写编辑:预览/提交结果
+export interface Danger {
+  line: number
+  kind: string
+  message: string
+}
+
+export interface PreviewResult {
+  diff: string
+  dangerous: Danger[]
+  base_hash_ok: boolean
+  current_hash: string
+  editable: boolean
+  not_editable_reason?: string
+  original_content: string
+}
+
+export interface EditResult {
+  asset: Asset
+  backup_path: string
+  diff: string
+  dangerous: Danger[]
+  new_findings: Finding[]
+  rescan_error?: string
+}

@@ -11,6 +11,7 @@ import (
 
 	"code-agent-sentinel/internal/config"
 	"code-agent-sentinel/internal/configengine"
+	"code-agent-sentinel/internal/editor"
 	"code-agent-sentinel/internal/history"
 	"code-agent-sentinel/internal/security"
 )
@@ -24,9 +25,10 @@ type Server struct {
 	History         *history.Store
 	Agents          []configengine.Agent
 	SelectedAgentID string
+	Editor          *editor.Editor
 }
 
-func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *config.Config, token string, hist *history.Store, agents []configengine.Agent) *Server {
+func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *config.Config, token string, hist *history.Store, agents []configengine.Agent, ed *editor.Editor) *Server {
 	if len(agents) == 0 {
 		agents = configengine.DefaultAgents(eng.HomeDir)
 	}
@@ -34,7 +36,7 @@ func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *confi
 	if len(agents) > 0 {
 		current = agents[0].ID
 	}
-	return &Server{Engine: eng, Orchestrator: orch, Config: cfg, Token: token, History: hist, Agents: agents, SelectedAgentID: current}
+	return &Server{Engine: eng, Orchestrator: orch, Config: cfg, Token: token, History: hist, Agents: agents, SelectedAgentID: current, Editor: ed}
 }
 
 func (s *Server) Router() *gin.Engine {
@@ -96,6 +98,8 @@ func (s *Server) Router() *gin.Engine {
 func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	api.GET("/assets", s.getAssets)
 	api.GET("/assets/:id", s.getAsset)
+	api.POST("/assets/:id/preview", s.previewAsset)
+	api.PUT("/assets/:id/content", s.commitAsset)
 	api.GET("/tree", s.getTree)
 	api.GET("/dir-tags", s.getDirTags)
 	api.PUT("/dir-tags", s.putDirTags)
