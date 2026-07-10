@@ -1,7 +1,9 @@
 package editor
 
 import (
+	"context"
 	"encoding/json"
+	"os"
 	"path/filepath"
 
 	"code-agent-sentinel/internal/configengine"
@@ -70,4 +72,95 @@ func (e *Editor) validateContent(a configengine.Asset, content string) error {
 	return nil
 }
 
-// Preview 与 Commit 在后续任务实现。
+// Preview 只读:算 diff + 危险检测 + 乐观锁校验,不写盘。
+// 资产不存在 → 返回 (nil, ErrNotFound);不可编辑 → PreviewResult{Editable:false}。
+func (e *Editor) Preview(ctx context.Context, req EditRequest) (*PreviewResult, error) {
+	a, ok := e.findAsset(req.AssetID)
+	if !ok {
+		return nil, ErrNotFound
+	}
+	editable, reason := e.editable(a)
+	current, _ := os.ReadFile(a.SourcePath)
+	currentHash := sha256hex(current)
+	if !editable {
+		return &PreviewResult{Editable: false, NotEditableReason: reason, CurrentHash: currentHash}, nil
+	}
+	old := string(current)
+	diff := computeDiff(old, req.NewContent)
+	dangers := detectDanger(a, old, req.NewContent)
+	return &PreviewResult{
+		Diff:        diff,
+		Dangerous:   dangers,
+		BaseHashOK:  currentHash == req.BaseHash,
+		CurrentHash: currentHash,
+		Editable:    true,
+	}, nil
+}
+
+// Commit 写盘:可编辑校验 + 乐观锁 + 内容校验 + 备份 + 原子写 + 重算。
+func (e *Editor) Commit(ctx context.Context, req EditRequest) (*EditResult, error) {
+	a, ok := e.findAsset(req.AssetID)
+	if !ok {
+		return nil, ErrNotFound
+	}
+	editable, reason := e.editable(a)
+	if !editable {
+		_ = reason
+		return nil, ErrNotEditable
+	}
+	current, err := os.ReadFile(a.SourcePath)
+	if err != nil {
+		return nil, err
+	}
+	currentHash := sha256hex(current)
+	if currentHash != req.BaseHash {
+		return nil, ErrConcurrentModification
+	}
+	if err := e.validateContent(a, req.NewContent); err != nil {
+		return nil, err
+	}
+	// 备份旧内容
+	bp, err := e.backup(a, current)
+	if err != nil {
+		return nil, err
+	}
+	// 原子写(tmp 同目录 + rename),0o600
+	if err := atomicWrite(a.SourcePath, []byte(req.NewContent)); err != nil {
+		return nil, err
+	}
+	// 重算 hash/mtime
+	hash, mtime, _ := configengine.HashAndMTime(a.SourcePath)
+	a.Hash = hash
+	a.MTime = mtime
+	a.Content = req.NewContent
+	diff := computeDiff(string(current), req.NewContent)
+	dangers := detectDanger(a, string(current), req.NewContent)
+	return &EditResult{
+		Asset:      a,
+		BackupPath: bp,
+		Diff:       diff,
+		Dangerous:  dangers,
+	}, nil
+}
+
+// atomicWrite 用 tmp+rename 原子写入 path,文件 0o600。tmp 与目标同目录。
+func atomicWrite(path string, data []byte) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".sentinel-edit-*")
+	if err != nil {
+		return err
+	}
+	tmpName := tmp.Name()
+	defer os.Remove(tmpName)
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		return err
+	}
+	if err := os.Chmod(tmpName, 0o600); err != nil {
+		return err
+	}
+	return os.Rename(tmpName, path)
+}

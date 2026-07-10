@@ -8,4 +8,5 @@ var (
 	ErrNotEditable            = errors.New("editor: asset not editable")
 	ErrOutOfRoot              = errors.New("editor: source path out of allowed root")
 	ErrBadContent             = errors.New("editor: bad content")
+	ErrNotFound               = errors.New("editor: asset not found")
 )
