@@ -21,9 +21,9 @@ type Config struct {
 	// DirTags 用户对「目录标签」的显式覆盖:key=相对 .claude 根的路径,value=标签。
 	// 默认标签见 DefaultDirTags();生效标签由 ResolveDirTag 合并。
 	// 空表示用户未自定义,全用默认。见 dir_tags.go。
-	DirTags DirTags `yaml:"dir_tags"`
-	BackupDir  string `yaml:"backup_dir"`   // 空=默认 ~/.claude-sentinel/backups
-	MaxBackups int    `yaml:"max_backups"`  // 0=默认 20
+	DirTags    DirTags `yaml:"dir_tags"`
+	BackupDir  string  `yaml:"backup_dir"`  // 空=默认 ~/.claude-sentinel/backups
+	MaxBackups int     `yaml:"max_backups"` // 0=默认 20
 }
 
 func DefaultConfig() *Config {
