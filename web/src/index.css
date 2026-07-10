@@ -134,3 +134,39 @@ body {
   /* 拖动滑块也用 accent(选中项背景随滑块移动) */
   background: var(--accent);
 }
+
+/* 风险管理级别筛选 Segmented:按级别配色 + 选中态明显区别于未选中。
+   未选中:透明底,仅色点带级别色;选中:整块填级别实色 + 白字,色点转白。
+   「全部」用 accent。滑块跟随选中项填充同色(随选项移动)。 */
+.sev-seg .ant-segmented-item {
+  transition: color .15s, background .15s;
+}
+.sev-seg .ant-segmented-item:not(.ant-segmented-item-selected):hover {
+  color: var(--accent);
+}
+.sev-seg .ant-segmented-item-selected.sev-tab-all {
+  background: var(--accent) !important; color: #fff !important; font-weight: 600;
+}
+.sev-seg .ant-segmented-item-selected.sev-tab-critical {
+  background: var(--sev-critical) !important; color: #fff !important; font-weight: 600;
+}
+.sev-seg .ant-segmented-item-selected.sev-tab-high {
+  background: var(--sev-high) !important; color: #fff !important; font-weight: 600;
+}
+.sev-seg .ant-segmented-item-selected.sev-tab-medium {
+  background: var(--sev-medium) !important; color: #1a1a1a !important; font-weight: 600;
+}
+.sev-seg .ant-segmented-item-selected.sev-tab-low {
+  background: var(--sev-low) !important; color: #fff !important; font-weight: 600;
+}
+/* 选中时色点转白(中等级别用深字,点也转深);未选中保留级别色点。 */
+.sev-seg .ant-segmented-item-selected .sev-seg-dot {
+  background: #fff !important;
+}
+.sev-seg .ant-segmented-item-selected.sev-tab-medium .sev-seg-dot {
+  background: #1a1a1a !important;
+}
+/* 滑块底色随选中项级别;默认透明,选中态由上面的规则直接填实色,滑块设透明避免双层。 */
+.sev-seg .ant-segmented-thumb {
+  background: transparent;
+}

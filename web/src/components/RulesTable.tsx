@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react'
-import { Table, Segmented, Empty, Typography } from 'antd'
+import { Table, Segmented, Empty, Typography, Card, Tooltip } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import type { DetectorMeta, Severity } from '../types'
-import { Badge, type BadgeTone } from './Badge'
+import { Badge as SevBadge, type BadgeTone } from './Badge'
 
-type FlatRule = { id: string; severity: Severity; description: string; detector: string; detector_id: string }
+const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低' }
+type FlatRule = { id: string; severity: Severity; description: string; syntax?: string; detector: string; detector_id: string }
 
 // 规则总览:汇总所有检测器的规则,按 sev + 检测器筛选。规则号 mono,sev 标签,检测器名,说明。
 // detectorFilter(可选):外部胶囊行点击检测器后传入,只显示该检测器规则。
@@ -32,11 +33,24 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
   // 合并筛选:在 byDetector 基础上再按 sev。
   const filtered = sev === 'all' ? byDetector : byDetector.filter((r) => r.severity === sev)
 
+  // 列顺序与风险管理列表对齐:规则名称(说明)居首 → 级别 → 检测器 → 规则号 → 规则语法。
   const columns: ColumnsType<FlatRule> = [
-    { title: '级别', width: 90, dataIndex: 'severity', render: (s: Severity) => <Badge tone={`sev-${s}` as BadgeTone}>{s}</Badge> },
+    {
+      title: '规则名称', ellipsis: true, render: (_: unknown, r: FlatRule) => (
+        <Tooltip title={r.description}>
+          <span>{r.description}</span>
+        </Tooltip>
+      ),
+    },
+    { title: '级别', width: 80, render: (_: unknown, r: FlatRule) => <SevBadge tone={`sev-${r.severity}` as BadgeTone}>{sevLabel[r.severity]}</SevBadge> },
     { title: '检测器', width: 120, dataIndex: 'detector' },
-    { title: '规则号', width: 200, dataIndex: 'id', render: (id: string) => <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{id}</Typography.Text> },
-    { title: '说明', dataIndex: 'description' },
+    { title: '规则号', width: 220, dataIndex: 'id', render: (id: string) => <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{id}</Typography.Text> },
+    {
+      // 规则语法:baseline 按 op 拼、injection 为正则原文;无则 '--'。与风险管理抽屉的「规则语法」一致。
+      title: '规则语法', width: 280, render: (_: unknown, r: FlatRule) => (
+        <Typography.Text style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{r.syntax || '--'}</Typography.Text>
+      ),
+    },
   ]
 
   const options = [
@@ -50,9 +64,15 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
   if (allRules.length === 0) return <Empty description="暂无规则" />
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <Segmented value={sev} onChange={(v) => setSev(v as string)} options={options} />
-      <Table<FlatRule> rowKey={(r) => `${r.detector_id}:${r.id}`} columns={columns} dataSource={filtered} pagination={{ pageSize: 50, size: 'small' }} size="small" />
-    </div>
+    <Card>
+      <Segmented style={{ marginBottom: 12 }} value={sev} onChange={(v) => setSev(v as string)} options={options} />
+      <Table<FlatRule>
+        rowKey={(r) => `${r.detector_id}:${r.id}`}
+        columns={columns}
+        dataSource={filtered}
+        pagination={{ pageSize: 20, size: 'default' }}
+        size="middle"
+      />
+    </Card>
   )
 }

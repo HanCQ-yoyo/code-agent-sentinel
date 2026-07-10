@@ -118,7 +118,7 @@ export default function Settings() {
   )
 
   const items = [
-    { key: 'detectors-rules', label: '检测器与规则', children: detectorsAndRules },
+    { key: 'detectors-rules', label: '规则配置', children: detectorsAndRules },
     { key: 'about', label: '关于', children: (
       <Card size="small">
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>规则版本随二进制内嵌;密钥检测依赖 gitleaks 子进程,依赖检测依赖 govulncheck/npm-audit。</Typography.Text>
@@ -127,7 +127,7 @@ export default function Settings() {
   ]
 
   return (
-    <div style={{ maxWidth: 900 }}>
+    <div>
       <Card size="small" style={{ marginBottom: 16 }}><Typography.Text type="secondary">设置(只读)——检测引擎与规则。编辑能力在后续阶段。</Typography.Text></Card>
       <Tabs defaultActiveKey="detectors-rules" items={items} />
     </div>

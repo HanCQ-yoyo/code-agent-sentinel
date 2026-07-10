@@ -52,13 +52,13 @@ export default function History() {
   }
 
   const columns: ColumnsType<ScanSummary> = [
-    { title: '时间', dataIndex: 'started_at', width: 110, render: (t: string, h: ScanSummary) => <Link to={`/history/${h.id}`}><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{formatDateTimeShort(t)}</span></Link> },
+    { title: '时间', dataIndex: 'started_at', width: 150, render: (t: string, h: ScanSummary) => <Link to={`/history/${h.id}`}><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{formatDateTimeShort(t)}</span></Link> },
     { title: '风险指数', width: 90, render: (_: unknown, h: ScanSummary) => (
       <span title={h.band} style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: riskColor(h.health_score) }}>{h.health_score}</span>
     ) },
     { title: '发现', dataIndex: 'finding_count', width: 80 },
     { title: '检测器', width: 120, render: (_: unknown, h: ScanSummary) => <span style={{ fontFamily: 'var(--font-mono)' }}>{h.detector_avail}/{h.detector_total}</span> },
-    { title: '', width: 80, render: (_: unknown, h: ScanSummary) => (
+    { title: '操作', width: 80, render: (_: unknown, h: ScanSummary) => (
       <Popconfirm title="确认删除此扫描记录?" okText="删除" okButtonProps={{ danger: true }} cancelText="取消" onConfirm={() => deleteHistory(h.id)}>
         <Button danger size="small" icon={<DeleteOutlined />} aria-label="删除" />
       </Popconfirm>

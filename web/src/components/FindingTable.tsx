@@ -7,6 +7,25 @@ import { formatDateTime } from '../lib/format'
 
 const order: Severity[] = ['critical', 'high', 'medium', 'low']
 const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低' }
+// 筛选标签内的色点颜色(复用 sev token);「全部」用 accent。
+const sevDot: Record<Severity, string> = {
+  critical: 'var(--sev-critical)', high: 'var(--sev-high)', medium: 'var(--sev-medium)', low: 'var(--sev-low)',
+}
+
+// 级别筛选标签:左侧色点 + 文本 + 计数。色点颜色对应级别,选中时整块填该级别色(见 .sev-seg CSS),
+// 与未选中的透明底+色点形成明显差别。
+function SevSegLabel({ text, count, sev }: { text: string; count: number; sev?: Severity }) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+      <span
+        className="sev-seg-dot"
+        style={{ width: 8, height: 8, borderRadius: '50%', background: sev ? sevDot[sev] : 'var(--accent)' }}
+      />
+      <span>{text}</span>
+      <span className="sev-seg-count" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{count}</span>
+    </span>
+  )
+}
 
 interface FindingTableProps {
   findings: Finding[]
@@ -33,7 +52,7 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
 
   const columns: ColumnsType<Finding> = [
     {
-      title: '风险名称', render: (_: unknown, f: Finding) => (
+      title: '风险名称', width: 340, ellipsis: true, render: (_: unknown, f: Finding) => (
         <Tooltip title={f.message}>
           <span>{f.message}</span>
         </Tooltip>
@@ -51,7 +70,8 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
       ),
     },
     {
-      title: '规则', width: 160, render: (_: unknown, f: Finding) => (
+      // 规则列加宽 1 倍(160→320),容纳完整 rule_id mono 文本,不再截断。
+      title: '规则', width: 320, render: (_: unknown, f: Finding) => (
         <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{f.rule_id}</Typography.Text>
       ),
     },
@@ -65,10 +85,18 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
   return (
     <Card>
       <Segmented
+        className="sev-seg"
         style={{ marginBottom: 12 }}
         value={filter}
         onChange={(v) => setFilter(v as Severity | 'all')}
-        options={[{ value: 'all', label: `全部 ${counts.all}` }, ...order.map((s) => ({ value: s, label: `${sevLabel[s]} ${counts[s]}` }))]}
+        options={[
+          { value: 'all', label: <SevSegLabel text="全部" count={counts.all} />, className: 'sev-tab-all' },
+          ...order.map((s) => ({
+            value: s,
+            label: <SevSegLabel text={sevLabel[s]} count={counts[s]} sev={s} />,
+            className: `sev-tab-${s}`,
+          })),
+        ]}
       />
       <Table<Finding>
         rowKey={(_f, i) => String(i)}
