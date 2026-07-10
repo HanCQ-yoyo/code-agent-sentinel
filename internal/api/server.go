@@ -98,6 +98,7 @@ func (s *Server) Router() *gin.Engine {
 func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	api.GET("/assets", s.getAssets)
 	api.GET("/assets/:id", s.getAsset)
+	api.POST("/assets/:id/preview", s.previewAsset)
 	api.GET("/tree", s.getTree)
 	api.GET("/dir-tags", s.getDirTags)
 	api.PUT("/dir-tags", s.putDirTags)
