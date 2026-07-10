@@ -75,7 +75,7 @@ export function AssetEditor({ asset }: { asset: Asset }) {
       if (res) {
         setPreviewOpen(false)
         setEditing(false)
-        const n = res.new_findings.length
+        const n = (res.new_findings ?? []).length
         if (n > 0) {
           message.warning(`已保存;部分重扫发现 ${n} 项新增风险。可点「重新扫描」做全量。`)
         } else {

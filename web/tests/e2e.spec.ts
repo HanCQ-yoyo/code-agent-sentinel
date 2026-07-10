@@ -234,3 +234,27 @@ test('文件树无资产文件可打开原始内容', async ({ page }) => {
   // 树渲染:根节点可见(antd Tree title)
   await expect(page.locator('.ant-tree-list')).toBeVisible({ timeout: 10000 })
 })
+
+// P2 编辑流程 e2e:进资产抽屉 → 编辑 → 预览 → 确认保存 → 部分重扫反馈 toast。
+// 选 memory 资产(CLAUDE.md):editableText 返回 asset.content = 原始文件内容,
+// 故不修改 draft 即为 no-op 编辑,commit 写回相同内容,fixture 不变,
+// 不影响依赖 Bash(*) finding 存在的其他测试。后端 Commit 不短路:backup+原子写+重算+部分重扫照跑。
+test('编辑 CLAUDE.md 保存后部分重扫反馈', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  await page.getByRole('menuitem', { name: /资产/i }).click()
+  // 选 memory 资产行开抽屉(fixture 全局 CLAUDE.md 可编辑)
+  const mdRow = page.locator('[data-testid="asset-row"]').filter({ hasText: /memory/ }).first()
+  await mdRow.click()
+  await expect(page.locator('.asset-drawer')).toBeVisible({ timeout: 10000 })
+  // 点编辑(抽屉内):T13 enterEdit 异步 preview 探测可编辑性+乐观锁,通过后才进编辑态
+  await page.locator('.asset-drawer').getByRole('button', { name: /编辑/ }).click()
+  // 「预览变更」按钮出现 = enterEdit 通过(可编辑 + base_hash_ok)
+  await expect(page.getByTestId('preview-edit')).toBeVisible({ timeout: 10000 })
+  // 不改 draft(no-op):draft 初值 = editableText(asset) = asset.content = 原始文件内容
+  await page.getByTestId('preview-edit').click()
+  // 预览 Modal 弹出:标题「预览变更」可见
+  await expect(page.locator('.ant-modal-title', { hasText: '预览变更' })).toBeVisible({ timeout: 10000 })
+  // 确认保存 → doCommit(备份+原子写+部分重扫)→ 反馈 toast(no-op → new_findings=[] → 成功 toast)
+  await page.getByRole('button', { name: /确认保存/ }).click()
+  await expect(page.locator('.ant-message-notice')).toBeVisible({ timeout: 10000 })
+})

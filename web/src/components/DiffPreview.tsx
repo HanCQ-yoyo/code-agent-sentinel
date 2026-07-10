@@ -36,14 +36,14 @@ export function DiffPreview({
           style={{ marginBottom: 12 }}
         />
       )}
-      {preview.dangerous.length > 0 && (
+      {(preview.dangerous ?? []).length > 0 && (
         <Alert
           type="error"
           showIcon
           message="检测到危险变更"
           description={
             <ul style={{ margin: 0, paddingLeft: 18 }}>
-              {preview.dangerous.map((d, i) => (
+              {(preview.dangerous ?? []).map((d, i) => (
                 <li key={i}>
                   <Typography.Text type="danger">[{d.kind}]</Typography.Text> {d.message}(行 {d.line})
                 </li>
