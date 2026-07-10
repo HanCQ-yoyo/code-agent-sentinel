@@ -144,7 +144,10 @@ func (s *Server) priorFindingsForAsset(assetID string, detectorIDs []string) []s
 	return out
 }
 
-// findingKey 生成 finding 去重键(Finding.ID 唯一,最稳)。
+// findingKey 生成 finding 去重键。Finding.ID 是 P1 遗留死字段(检测器从未设值),
+// 故用 (DetectorID, RuleID, AssetID, Evidence) 复合键:同一规则在同一资产上
+// 触发且 evidence 不变视为同一条;编辑使 evidence 变化(如 Bash(git:*)→Bash(*))
+// 则 key 变 → 报为新增,符合部分重扫「标出新危险」语义。
 func findingKey(f security.Finding) string {
-	return f.ID
+	return f.DetectorID + "\x00" + f.RuleID + "\x00" + f.AssetID + "\x00" + f.Evidence
 }
