@@ -25,11 +25,30 @@ export function AssetEditor({ asset }: { asset: Asset }) {
   const [previewOpen, setPreviewOpen] = useState(false)
   const [saving, setSaving] = useState(false)
 
-  // 进入编辑:快照当前渲染文本为草稿。用 editableText(非 asset.content)——
-  // structured 资产无 content,须从 fields.raw 取,否则 draft 为空导致编辑 silently 无效。
-  const enterEdit = () => {
-    setDraft(editableText(asset))
-    setEditing(true)
+  // 进入编辑:先 preview 探测可编辑性 + 乐观锁(base_hash_ok),
+  // 不可编辑或已被外部修改则提示并拒绝进入编辑态,避免给用户一个编辑不了的 UI。
+  // draft 仍用 editableText(asset) 快照——structured 资产无 content,
+  // 须从 fields.raw 取,否则 draft 为空导致编辑 silently 无效。
+  // probe 的 new_content 传空(asset.content ?? '')是安全的:后端 Preview 先跑 editable() 判定,
+  // 不可编辑时直接返回 {Editable:false},不计算 diff;可编辑时 enterEdit 也不使用返回的 diff。
+  const enterEdit = async () => {
+    setSaving(true)
+    try {
+      const pr = await previewAssetEdit(asset.id, asset.content ?? '', asset.hash)
+      if (!pr) return
+      if (!pr.editable) {
+        message.warning(pr.not_editable_reason || '该资产不可编辑')
+        return
+      }
+      if (!pr.base_hash_ok) {
+        message.warning('文件已被外部修改,请重新加载资产后再编辑')
+        return
+      }
+      setDraft(editableText(asset))
+      setEditing(true)
+    } finally {
+      setSaving(false)
+    }
   }
 
   const doPreview = async () => {
@@ -71,7 +90,7 @@ export function AssetEditor({ asset }: { asset: Asset }) {
   if (!editing) {
     return (
       <>
-        <Button icon={<EditOutlined />} onClick={enterEdit} size="small" style={{ marginBottom: 8 }}>
+        <Button icon={<EditOutlined />} onClick={enterEdit} loading={saving} size="small" style={{ marginBottom: 8 }}>
           编辑
         </Button>
         <ContentArea key="view" asset={asset} theme={theme} />
