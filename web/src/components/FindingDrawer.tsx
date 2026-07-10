@@ -74,12 +74,13 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
             </Descriptions.Item>
             <Descriptions.Item label="检测器">{detName(finding.detector_id)}</Descriptions.Item>
             <Descriptions.Item label="规则 ID">
-              <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{finding.rule_id}</Typography.Text>
+              <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 14 }}>{finding.rule_id}</Typography.Text>
             </Descriptions.Item>
             <Descriptions.Item label="规则语法">
-              <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>
+              {/* 规则语法用纯代码格式(monospace 等宽、无标签背景框),字体放大到 14 便于阅读;长语法换行不撑破布局。 */}
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, wordBreak: 'break-all', color: 'var(--text)' }}>
                 {findSyntax(detectors, finding.detector_id, finding.rule_id) ?? '--'}
-              </Typography.Text>
+              </span>
             </Descriptions.Item>
             <Descriptions.Item label="扫描时间">
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>

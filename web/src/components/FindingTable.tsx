@@ -52,15 +52,19 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
 
   const columns: ColumnsType<Finding> = [
     {
-      title: '风险名称', width: 340, ellipsis: true, render: (_: unknown, f: Finding) => (
+      // 风险名称:不设固定宽度,作为弹性主列占据剩余空间并省略;资产列收窄后这里更宽。
+      title: '风险名称', ellipsis: true, render: (_: unknown, f: Finding) => (
         <Tooltip title={f.message}>
           <span>{f.message}</span>
         </Tooltip>
       ),
     },
     {
-      title: '资产', render: (_: unknown, f: Finding) => (
-        <span>{f.asset_name} <Typography.Text type="secondary" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{f.asset_type}</Typography.Text></span>
+      // 资产:文件名 + 类型两词,收窄到 140;长名省略,Tooltip 兜底。
+      title: '资产', width: 140, ellipsis: true, render: (_: unknown, f: Finding) => (
+        <Tooltip title={`${f.asset_name} ${f.asset_type}`}>
+          <span>{f.asset_name} <Typography.Text type="secondary" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{f.asset_type}</Typography.Text></span>
+        </Tooltip>
       ),
     },
     { title: '级别', width: 80, render: (_: unknown, f: Finding) => <SevBadge tone={`sev-${f.severity}` as BadgeTone}>{sevLabel[f.severity]}</SevBadge> },
@@ -70,9 +74,9 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
       ),
     },
     {
-      // 规则列加宽 1 倍(160→320),容纳完整 rule_id mono 文本,不再截断。
+      // 规则列加宽 1 倍(160→320),容纳完整 rule_id mono 文本,不再截断;字体放大到 13 便于阅读。
       title: '规则', width: 320, render: (_: unknown, f: Finding) => (
-        <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{f.rule_id}</Typography.Text>
+        <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{f.rule_id}</Typography.Text>
       ),
     },
     {
