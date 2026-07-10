@@ -60,7 +60,7 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
       width="50%"
       open={finding !== null}
       onClose={onClose}
-      mask={false}
+      maskClosable
       keyboard
       rootClassName="finding-drawer"
       styles={{ body: { padding: 16, overflow: 'auto' } }}
