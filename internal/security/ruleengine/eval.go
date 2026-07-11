@@ -90,10 +90,12 @@ func evalLeaf(node map[string]any, a configengine.Asset, rule *Rule) (bool, stri
 		return false, ""
 	}
 
-	// 特殊求值模式(Task 5 实现)
-	if opStr == SpecialRepeat || opStr == SpecialHomoglyph {
-		// TODO(Task 5): 实现 repeat_check / homoglyph_check
-		return false, ""
+	// 特殊求值模式(repeat_check / homoglyph_check):非用户 op,但 evalLeaf 可路由
+	if opStr == SpecialRepeat {
+		return evalSpecialRepeat(fieldStr, a, rule)
+	}
+	if opStr == SpecialHomoglyph {
+		return evalSpecialHomoglyph(fieldStr, a)
 	}
 
 	// 取字段值
@@ -204,10 +206,21 @@ func evalRegexMatch(field string, fieldVal any, value any, rule *Rule, op string
 		return false, ""
 	}
 
-	// 无反混淆:直接对原始文本跑
 	text := stringify(fieldVal)
+
+	// post_exclude 编译(若规则有 post_exclude 模式)
+	var excludePats []*regexp.Regexp
+	if len(rule.PostExclude) > 0 {
+		excludePats = compilePostExcludePatterns(rule)
+	}
+
+	// 无反混淆:直接对原始文本跑
 	if re.MatchString(text) {
-		return true, re.FindString(text)
+		hitStr := re.FindString(text)
+		// post_exclude:命中上下文匹配排除模式 → 降级(继续尝试反混淆)
+		if !applyPostExclude(hitStr, excludePats) {
+			return true, hitStr
+		}
 	}
 
 	// 有反混淆且 field==content:对每个 candidate 跑(不链式)
@@ -218,7 +231,11 @@ func evalRegexMatch(field string, fieldVal any, value any, rule *Rule, op string
 				continue // 原始文本,已跑过
 			}
 			if re.MatchString(c.Text) {
-				return true, fmt.Sprintf("[%s] %s", c.Method, re.FindString(c.Text))
+				hitStr := re.FindString(c.Text)
+				// post_exclude 同样作用于反混淆命中
+				if !applyPostExclude(hitStr, excludePats) {
+					return true, fmt.Sprintf("[%s] %s", c.Method, hitStr)
+				}
 			}
 		}
 	}
