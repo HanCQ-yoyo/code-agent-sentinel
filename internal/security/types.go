@@ -14,6 +14,7 @@ const (
 	SeverityHigh     Severity = "high"
 	SeverityMedium   Severity = "medium"
 	SeverityLow      Severity = "low"
+	SeverityInfo     Severity = "info" // 低置信度 finding,系数 0.0 不影响健康分
 )
 
 // Finding 是一条检测结果。
@@ -28,6 +29,9 @@ type Finding struct {
 	Message     string                 `json:"message"`
 	Evidence    string                 `json:"evidence"`
 	Remediation string                 `json:"remediation"`
+	Suppressed   bool   `json:"suppressed,omitempty"`
+	Suppression  string `json:"suppression,omitempty"` // "baseline" / "inline"
+	Reason       string `json:"reason,omitempty"`
 }
 
 // DetectorStatus 是一个检测器的运行状态。

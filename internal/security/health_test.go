@@ -108,3 +108,65 @@ func TestHealthReducibilityCappedAsset(t *testing.T) {
 	}
 	assertReducible(t, h)
 }
+
+// deductionsSumTo 验证可还原不变式:Σ Deduction.Points ≈ 100 − Score。
+// Score 是 int(score+0.5) 四舍五入,与浮点 ΣPoints 之间有 ≤0.5 的舍入差,
+// 容差 0.6(与 assertReducible 一致)。
+func deductionsSumTo(h *HealthScore) bool {
+	var sum float64
+	for _, d := range h.Deductions {
+		sum += d.Points
+	}
+	want := 100.0 - float64(h.Score)
+	return math.Abs(sum-want) <= 0.6
+}
+
+// TestHealthSuppressedFindingsDiscounted 验证抑制 finding 打 0.3 折后分数更高,
+// 且可还原性在抑制/未抑制两种情况下都成立。
+func TestHealthSuppressedFindingsDiscounted(t *testing.T) {
+	assets := []configengine.Asset{{ID: "a", Type: configengine.AssetPermissions}}
+	finding := Finding{AssetID: "a", Severity: SeverityHigh, DetectorID: "rules"}
+	full := ComputeHealth(assets, []Finding{finding})
+	suppressed := finding
+	suppressed.Suppressed = true
+	disc := ComputeHealth(assets, []Finding{suppressed})
+	if disc.Score <= full.Score {
+		t.Fatalf("suppressed should score higher: full=%d disc=%d", full.Score, disc.Score)
+	}
+	if !deductionsSumTo(full) {
+		t.Error("full not restorable")
+	}
+	if !deductionsSumTo(disc) {
+		t.Error("disc not restorable")
+	}
+}
+
+// TestHealthInfoSeverityZero 验证 info 级 finding 不影响分数(系数 0.0)。
+func TestHealthInfoSeverityZero(t *testing.T) {
+	assets := []configengine.Asset{{ID: "a", Type: configengine.AssetPermissions}}
+	f := Finding{AssetID: "a", Severity: SeverityInfo, DetectorID: "rules"}
+	h := ComputeHealth(assets, []Finding{f})
+	if h.Score != 100 {
+		t.Fatalf("info finding should not affect score, got %d", h.Score)
+	}
+}
+
+// TestHealthInfoMixedReducibility 验证 info finding 与 high finding 混合时,
+// 可还原性仍成立(info 贡献 0 Points,high 贡献全额)。
+func TestHealthInfoMixedReducibility(t *testing.T) {
+	assets := []configengine.Asset{{ID: "a", Type: configengine.AssetPermissions, Name: "p"}}
+	findings := []Finding{
+		{AssetID: "a", AssetType: configengine.AssetPermissions, Severity: SeverityHigh, RuleID: "r1"},
+		{AssetID: "a", AssetType: configengine.AssetPermissions, Severity: SeverityInfo, RuleID: "r2"},
+	}
+	h := ComputeHealth(assets, findings)
+	if !deductionsSumTo(h) {
+		t.Error("mixed info+high not restorable")
+	}
+	// info finding 应分到 0 Points
+	for _, d := range h.Deductions {
+		if d.RuleID == "r2" && d.Points != 0 {
+			t.Errorf("info finding should have 0 points, got %f", d.Points)
+		}
+	}
+}

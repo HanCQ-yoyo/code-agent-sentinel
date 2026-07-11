@@ -25,6 +25,21 @@ var severityCoeff = map[Severity]float64{
 	SeverityHigh:     2.5,
 	SeverityMedium:   1.5,
 	SeverityLow:      0.5,
+	SeverityInfo:     0.0, // 低置信度 finding 不影响健康分
+}
+
+// findingWeight 返回单条 finding 的有效严重度系数。
+// 未知 severity(map 中不存在)→ 兜底 0.5;info(显式 0.0)→ 保持 0.0。
+// 抑制 finding 打 0.3 折(决策 #12:残值 30% 扣分)。
+func findingWeight(f Finding) float64 {
+	p, ok := severityCoeff[f.Severity]
+	if !ok {
+		p = 0.5 // 未知 severity 兜底
+	}
+	if f.Suppressed {
+		p *= 0.3
+	}
+	return p
 }
 
 // ComputeHealth 按规格公式计算健康分。
@@ -61,10 +76,7 @@ func ComputeHealth(assets []configengine.Asset, findings []Finding) *HealthScore
 			order = append(order, f.AssetID)
 		}
 		findingsByID[f.AssetID] = append(findingsByID[f.AssetID], f)
-		p := severityCoeff[f.Severity]
-		if p == 0 {
-			p = 0.5
-		}
+		p := findingWeight(f)
 		risk[f.AssetID] += p
 	}
 	var ded []Deduction
@@ -82,17 +94,10 @@ func ComputeHealth(assets []configengine.Asset, findings []Finding) *HealthScore
 		// 按各 finding 的 p 比例分配 assetDeduction:严重度高者占更大份额。
 		var sumP float64
 		for _, f := range findingsByID[id] {
-			p := severityCoeff[f.Severity]
-			if p == 0 {
-				p = 0.5
-			}
-			sumP += p
+			sumP += findingWeight(f)
 		}
 		for _, f := range findingsByID[id] {
-			p := severityCoeff[f.Severity]
-			if p == 0 {
-				p = 0.5
-			}
+			p := findingWeight(f)
 			var points float64
 			if sumP == 0 {
 				// 理论不发生(p 默认 0.5);防御性:均分。
