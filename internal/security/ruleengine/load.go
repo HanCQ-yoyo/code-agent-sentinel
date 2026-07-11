@@ -58,7 +58,7 @@ func LoadDir(dir, source string) ([]Rule, []RuleLoadError) {
 		return nil, []RuleLoadError{{Source: source + ":" + dir, Reason: fmt.Sprintf("stat dir: %v", err)}}
 	}
 	if !info.IsDir() {
-		return nil, nil
+		return nil, []RuleLoadError{{Source: source + ":" + dir, Reason: fmt.Sprintf("not a directory: %s", dir)}}
 	}
 
 	entries, err := os.ReadDir(dir)
@@ -85,18 +85,20 @@ func LoadDir(dir, source string) ([]Rule, []RuleLoadError) {
 	return rules, errs
 }
 
-// Merge 按层合并规则:同 id 后者整条替换前者(保持首次出现位置);
-// 新 id 按各层 encounter 顺序追加到末尾。
+// Merge 按层合并规则:同 (id, projectPath) 后者整条替换前者(保持首次出现位置);
+// 新 id 按各层 encounter 顺序追加到末尾。不同 projectPath 的同名规则各自保留
+// (builtin/global projectPath 为空,仍按 id 覆盖)。
 func Merge(layers ...[]Rule) []Rule {
 	var merged []Rule
-	index := make(map[string]int) // id → 在 merged 中的位置
+	index := make(map[string]int) // id+"|"+projectPath → 在 merged 中的位置
 
 	for _, layer := range layers {
 		for _, r := range layer {
-			if pos, ok := index[r.ID]; ok {
-				merged[pos] = r // 整条替换(包括 projectPath)
+			key := r.ID + "|" + r.ProjectPath
+			if pos, ok := index[key]; ok {
+				merged[pos] = r // 整条替换
 			} else {
-				index[r.ID] = len(merged)
+				index[key] = len(merged)
 				merged = append(merged, r)
 			}
 		}
@@ -122,7 +124,7 @@ func LoadForScan(home string, inventory *configengine.Inventory) ([]Rule, []Rule
 			prules, perrs := LoadDir(dir, "project")
 			errs = append(errs, perrs...)
 			for i := range prules {
-				prules[i].projectPath = p.Path
+				prules[i].ProjectPath = p.Path
 			}
 			projectRules = append(projectRules, prules...)
 		}

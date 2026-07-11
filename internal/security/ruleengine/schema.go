@@ -52,9 +52,10 @@ type Rule struct {
 	Description   string         `yaml:"description"`
 	Metadata      map[string]any `yaml:"metadata"`
 	Source        string         `yaml:"-"` // 来源文件路径(加载时填)
-	// projectPath 用于项目隔离:项目规则带此字段,求值时只对 SourcePath 在该项目下的资产生效。
-	// 内置/全局规则此字段为空,对所有资产生效。(Task 11 RulesDetector 检查)
-	projectPath string
+	// ProjectPath 用于项目隔离:项目规则带此字段,求值时只对 SourcePath 在该项目下的资产生效。
+	// 内置/全局规则此字段为空,对所有资产生效。由加载器按规则来源目录设置,非 YAML 字段。
+	// (Task 11 RulesDetector 在 Scan 循环里检查 pathInProject(asset.SourcePath, r.ProjectPath)。)
+	ProjectPath string `yaml:"-"`
 	// 编译态(校验时填,不序列化)
 	assetType configengine.AssetType
 	regexes   map[string]*regexp.Regexp // key=op:field:value,规则级正则编译缓存

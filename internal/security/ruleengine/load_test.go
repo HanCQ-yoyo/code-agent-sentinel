@@ -241,14 +241,14 @@ func TestLoadForScanProjectIsolation(t *testing.T) {
 	if projectRule == nil {
 		t.Fatal("project-isolated-001 not found in merged rules")
 	}
-	if projectRule.projectPath != projectDir {
-		t.Errorf("projectPath = %q, want %q", projectRule.projectPath, projectDir)
+	if projectRule.ProjectPath != projectDir {
+		t.Errorf("ProjectPath = %q, want %q", projectRule.ProjectPath, projectDir)
 	}
 
 	// builtin 和 global 规则不应有 projectPath
 	for i := range rules {
-		if rules[i].ID != "project-isolated-001" && rules[i].projectPath != "" {
-			t.Errorf("rule %q has projectPath %q, want empty", rules[i].ID, rules[i].projectPath)
+		if rules[i].ID != "project-isolated-001" && rules[i].ProjectPath != "" {
+			t.Errorf("rule %q has ProjectPath %q, want empty", rules[i].ID, rules[i].ProjectPath)
 		}
 	}
 }
@@ -298,5 +298,50 @@ func TestLoadForScanNoInventoryProjects(t *testing.T) {
 	}
 	if len(rules) == 0 {
 		t.Fatal("should have at least builtin rules")
+	}
+}
+
+func TestLoadForScanMultiProjectSameIDCoexists(t *testing.T) {
+	home := t.TempDir()
+
+	mkProject := func(dir, ruleValue string) {
+		rdir := filepath.Join(dir, ".sentinel", "rules")
+		if err := os.MkdirAll(rdir, 0755); err != nil {
+			t.Fatal(err)
+		}
+		yaml := "rules:\n  - id: shared-rule\n    severity: high\n    asset_type: permissions\n    match:\n      field: allow\n      op: contains\n      value: \"" + ruleValue + "\"\n"
+		if err := os.WriteFile(filepath.Join(rdir, "r.yaml"), []byte(yaml), 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	projA := t.TempDir()
+	projB := t.TempDir()
+	mkProject(projA, "Bash(rm:*)")
+	mkProject(projB, "Bash(curl:*)")
+
+	inv := &configengine.Inventory{
+		Projects: []configengine.Project{{Path: projA, Name: "a"}, {Path: projB, Name: "b"}},
+	}
+	rules, errs := LoadForScan(home, inv)
+	if len(errs) != 0 {
+		t.Fatalf("LoadForScan should have no errors, got %v", errs)
+	}
+
+	// 两条 shared-rule 都应存活,分别带各自的 ProjectPath
+	var aRule, bRule *Rule
+	for i := range rules {
+		if rules[i].ID != "shared-rule" {
+			continue
+		}
+		switch rules[i].ProjectPath {
+		case projA:
+			aRule = &rules[i]
+		case projB:
+			bRule = &rules[i]
+		}
+	}
+	if aRule == nil || bRule == nil {
+		t.Fatalf("both projects' shared-rule must survive; got aRule=%v bRule=%v", aRule != nil, bRule != nil)
 	}
 }
