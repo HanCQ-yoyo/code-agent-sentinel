@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"code-agent-sentinel/internal/configengine"
+	"code-agent-sentinel/internal/security/ruleengine"
 )
 
 type InjectionDetector struct{ rules []InjectionRule }
@@ -56,7 +57,7 @@ func (d *InjectionDetector) Scan(ctx context.Context, assets []configengine.Asse
 			continue
 		}
 		for _, r := range d.rules {
-			for _, variant := range deobfuscate(text, r.Deobfuscation) {
+			for _, variant := range ruleengine.Deobfuscate(text, r.Deobfuscation) {
 				if r.re != nil && r.re.MatchString(variant) {
 					out = append(out, Finding{
 						DetectorID:  d.ID(),

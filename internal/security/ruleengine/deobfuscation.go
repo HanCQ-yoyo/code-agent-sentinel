@@ -1,4 +1,4 @@
-package security
+package ruleengine
 
 import (
 	"encoding/base64"
@@ -6,8 +6,10 @@ import (
 	"strings"
 )
 
-// deobfuscate 返回原始文本 + 各反混淆变体。
-func deobfuscate(text string, methods []string) []string {
+// Deobfuscate 返回原始文本 + 各反混淆变体。
+// 原始文本始终是 out[0],后续元素按 methods 顺序追加(不链式,每种独立)。
+// 方法:zero_width / html_comment / base64 / leetspeak。
+func Deobfuscate(text string, methods []string) []string {
 	out := []string{text}
 	for _, m := range methods {
 		switch m {
