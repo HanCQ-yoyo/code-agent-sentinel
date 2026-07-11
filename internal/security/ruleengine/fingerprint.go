@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"sort"
+	"strings"
 )
 
 // Fingerprint 计算一条规则在一个资产上的确定性指纹(sha256 hex,64 字符)。
@@ -91,23 +92,11 @@ func leafAnchor(op string, value any) string {
 			parts = append(parts, stringify(v))
 		}
 		sort.Strings(parts) // 排序使不同顺序的同集数组产生相同锚点
-		return joinComma(parts)
+		return strings.Join(parts, ",")
 
 	default:
 		return "" // exists / not_exists / 未知 op
 	}
-}
-
-// joinComma 用逗号拼接字符串切片(无空格)。
-func joinComma(parts []string) string {
-	if len(parts) == 0 {
-		return ""
-	}
-	out := parts[0]
-	for _, p := range parts[1:] {
-		out += "," + p
-	}
-	return out
 }
 
 // sha256hex 返回输入的 sha256 十六进制摘要(64 字符)。
