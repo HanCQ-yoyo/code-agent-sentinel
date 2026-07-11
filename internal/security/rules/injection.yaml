@@ -52,42 +52,42 @@ rules:
     severity: critical
     description: "检测到数据外发指令(读取敏感文件并外传)"
     asset_type: skill
-    match: { field: content, op: regex_match, value: "(?i)(curl|wget|fetch).+\\$\\(|(~?\\/\\.ssh|~?\\/\\.aws|\\/etc\\/passwd)" }
+    match: { field: content, op: regex_match, value: "(curl|wget|fetch).+\\$\\(|(~?\\/\\.ssh|~?\\/\\.aws|\\/etc\\/passwd)" }
     deobfuscation: [base64, leetspeak]
     remediation: "该指令疑似外发敏感数据,立即移除"
   - id: injection.exfiltration.command
     severity: critical
     description: "检测到数据外发指令(读取敏感文件并外传)"
     asset_type: command
-    match: { field: content, op: regex_match, value: "(?i)(curl|wget|fetch).+\\$\\(|(~?\\/\\.ssh|~?\\/\\.aws|\\/etc\\/passwd)" }
+    match: { field: content, op: regex_match, value: "(curl|wget|fetch).+\\$\\(|(~?\\/\\.ssh|~?\\/\\.aws|\\/etc\\/passwd)" }
     deobfuscation: [base64, leetspeak]
     remediation: "该指令疑似外发敏感数据,立即移除"
   - id: injection.exfiltration.agent
     severity: critical
     description: "检测到数据外发指令(读取敏感文件并外传)"
     asset_type: agent
-    match: { field: content, op: regex_match, value: "(?i)(curl|wget|fetch).+\\$\\(|(~?\\/\\.ssh|~?\\/\\.aws|\\/etc\\/passwd)" }
+    match: { field: content, op: regex_match, value: "(curl|wget|fetch).+\\$\\(|(~?\\/\\.ssh|~?\\/\\.aws|\\/etc\\/passwd)" }
     deobfuscation: [base64, leetspeak]
     remediation: "该指令疑似外发敏感数据,立即移除"
   - id: injection.exfiltration.memory
     severity: critical
     description: "检测到数据外发指令(读取敏感文件并外传)"
     asset_type: memory
-    match: { field: content, op: regex_match, value: "(?i)(curl|wget|fetch).+\\$\\(|(~?\\/\\.ssh|~?\\/\\.aws|\\/etc\\/passwd)" }
+    match: { field: content, op: regex_match, value: "(curl|wget|fetch).+\\$\\(|(~?\\/\\.ssh|~?\\/\\.aws|\\/etc\\/passwd)" }
     deobfuscation: [base64, leetspeak]
     remediation: "该指令疑似外发敏感数据,立即移除"
   - id: injection.exfiltration.mcp_server
     severity: critical
     description: "检测到数据外发指令(读取敏感文件并外传)"
     asset_type: mcp_server
-    match: { field: content, op: regex_match, value: "(?i)(curl|wget|fetch).+\\$\\(|(~?\\/\\.ssh|~?\\/\\.aws|\\/etc\\/passwd)" }
+    match: { field: content, op: regex_match, value: "(curl|wget|fetch).+\\$\\(|(~?\\/\\.ssh|~?\\/\\.aws|\\/etc\\/passwd)" }
     deobfuscation: [base64, leetspeak]
     remediation: "该指令疑似外发敏感数据,立即移除"
   - id: injection.exfiltration.script
     severity: critical
     description: "检测到数据外发指令(读取敏感文件并外传)"
     asset_type: script
-    match: { field: content, op: regex_match, value: "(?i)(curl|wget|fetch).+\\$\\(|(~?\\/\\.ssh|~?\\/\\.aws|\\/etc\\/passwd)" }
+    match: { field: content, op: regex_match, value: "(curl|wget|fetch).+\\$\\(|(~?\\/\\.ssh|~?\\/\\.aws|\\/etc\\/passwd)" }
     deobfuscation: [base64, leetspeak]
     remediation: "该指令疑似外发敏感数据,立即移除"
 

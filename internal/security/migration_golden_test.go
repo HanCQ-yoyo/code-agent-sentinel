@@ -30,16 +30,23 @@ import (
 
 // ── 辅助:规则 ID 前缀(去最后一个 . 后的部分) ──
 
-// ruleIDPrefix 去掉规则 ID 最后一个 . 后的部分。
+// ruleIDPrefix 去掉注入规则 ID 的 asset_type 后缀,使新旧可比。
 // 旧检测器:injection.hidden-instruction(一条规则扫所有文本类资产)
 // 新引擎:injection.hidden-instruction.skill / .command / .agent / .memory / .mcp_server / .script
-// 去后缀后两者可比。
+// 只剥离这些已知后缀——不能盲目去掉最后一个 "." 后的内容,否则会把
+// baseline.api-key-in-env 误剥成 baseline.api-key-in(规则名里的点被错裁)。
+// baseline 规则 id 原样返回。
+var injectionAssetSuffixes = []string{
+	".skill", ".command", ".agent", ".memory", ".mcp_server", ".script",
+}
+
 func ruleIDPrefix(id string) string {
-	idx := strings.LastIndex(id, ".")
-	if idx <= 0 { // 无 . 或在首位(不裁)
-		return id
+	for _, suf := range injectionAssetSuffixes {
+		if strings.HasSuffix(id, suf) {
+			return id[:len(id)-len(suf)]
+		}
 	}
-	return id[:idx]
+	return id
 }
 
 // ── 辅助:ruleAssetPair 用于比较 ──
