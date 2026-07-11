@@ -1,0 +1,12 @@
+# 内置规则占位文件(Task 8 将替换为真实迁移规则)
+# 每条规则使用新 schema(id/severity/asset_type/match 树)
+rules:
+  - id: builtin-permissions-deny-git-push
+    severity: high
+    asset_type: permissions
+    match:
+      field: deny
+      op: contains
+      value: "Bash(git push:*)"
+    description: "内置示例:检测 permissions.deny 是否包含 git push 限制(Task 8 替换)"
+    remediation: "确保 permissions.deny 包含 Bash(git push:*) 以防止意外推送"
