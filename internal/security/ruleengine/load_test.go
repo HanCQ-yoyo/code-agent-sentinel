@@ -301,6 +301,22 @@ func TestLoadForScanNoInventoryProjects(t *testing.T) {
 	}
 }
 
+func TestLoadDirNonDirectoryErrors(t *testing.T) {
+	// 路径存在但不是目录(如用户误把 rules 建成普通文件)→ 报错而非静默返回空
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "not-a-dir")
+	if err := os.WriteFile(filePath, []byte("x"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	rules, errs := LoadDir(filePath, "global")
+	if len(errs) != 1 {
+		t.Fatalf("non-directory path should report 1 error, got %d: %v", len(errs), errs)
+	}
+	if len(rules) != 0 {
+		t.Errorf("non-directory path should yield 0 rules, got %d", len(rules))
+	}
+}
+
 func TestLoadForScanMultiProjectSameIDCoexists(t *testing.T) {
 	home := t.TempDir()
 

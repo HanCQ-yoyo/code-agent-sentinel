@@ -107,9 +107,10 @@ func Merge(layers ...[]Rule) []Rule {
 }
 
 // LoadForScan 加载全部规则(builtin → global → 各 project),合并后跑 Validate。
-// 项目规则带 projectPath 字段(求值时只对该项目资产生效,Task 11 RulesDetector 检查)。
-// projectPath 在 Merge 前设置:Merge 的整条替换会保留带 projectPath 的项目版本,
-// 使其覆盖 builtin/global 的同 id 规则时 projectPath 随之生效。
+// 项目规则带 ProjectPath 字段(求值时只对该项目资产生效,Task 11 RulesDetector 检查)。
+// ProjectPath 在 Merge 前设置:Merge 用 (id, ProjectPath) 复合键去重,因此不同项目的
+// 同 id 规则各自共存(不互相覆盖),而 builtin/global(ProjectPath 为空)仍按 id 覆盖;
+// 项目规则的 ProjectPath 被保留,供 Task 11 RulesDetector 按项目对规则作用域收窄。
 func LoadForScan(home string, inventory *configengine.Inventory) ([]Rule, []RuleLoadError) {
 	builtin, errs := LoadBuiltin()
 
