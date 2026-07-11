@@ -20,8 +20,8 @@ import (
 // 扫描产出 / detector_id=rules / Covers=nil / load-error 不进健康分 / 抑制施加。
 // fixture 资产沿用旧 golden test 的 dangerousAssets(触发全部 7 条迁移规则),逻辑内联于此。
 
-// rulesFixtureAssets 构造触发全部 7 条内置规则(4 baseline + 3 injection×6 asset_type=18)
-// 的资产集。逻辑来自旧 migration_golden_test.go 的 newMigrationFixtureAssets。
+// rulesFixtureAssets 构造触发内置 baseline + injection 规则的资产集。
+// 逻辑来自旧 migration_golden_test.go 的 newMigrationFixtureAssets。
 func rulesFixtureAssets() []configengine.Asset {
 	var assets []configengine.Asset
 
@@ -154,9 +154,9 @@ func TestRulesDetectorMeta(t *testing.T) {
 	if len(m.Engines) != 1 || m.Engines[0].Kind != "embedded" || !m.Engines[0].Available {
 		t.Errorf("Engines = %+v", m.Engines)
 	}
-	// 4 baseline + 18 injection = 22 条内置规则
-	if len(m.Rules) != 22 {
-		t.Errorf("Rules 数 = %d, want 22 (4 baseline + 18 injection)", len(m.Rules))
+	// 11 baseline + 18 injection = 29 条内置规则
+	if len(m.Rules) != 29 {
+		t.Errorf("Rules 数 = %d, want 29 (11 baseline + 18 injection)", len(m.Rules))
 	}
 	if m.Covers != nil {
 		t.Errorf("Covers 应为 nil, got %v", m.Covers)

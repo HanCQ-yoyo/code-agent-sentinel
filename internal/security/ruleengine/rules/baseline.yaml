@@ -19,7 +19,64 @@ rules:
     remediation: "收窄 Read 权限范围"
   - id: baseline.api-key-in-env
     severity: medium
-    description: "settings env 中疑似 API key"
+    description: "settings env 中疑似凭据(API key/token/secret/password/GH_TOKEN 等)"
     asset_type: settings
-    match: { field: env, op: key_matches, value: "(?i)(api[_-]?key|token|secret)" }
+    match: { field: env, op: key_matches, value: "(?i)(api[_-]?key|token|secret|password|passwd|gh[_-]?token|git[_-]?token|npm[_-]?token|pypi[_-]?token)" }
     remediation: "从 settings env 移除凭据,改用系统 keyring/环境注入"
+  - id: baseline.dangerous-hook
+    severity: high
+    description: "hook command 含危险命令(curl|sh、rm -rf、base64 exec、eval)"
+    asset_type: hook
+    match: { field: command, op: regex_match, value: "(?i)(curl|wget).*(\\|\\s*sh|bash)|rm\\s+-rf|base64\\s+-[ed]|eval\\b" }
+    remediation: "审查 hook command,移除远程脚本执行和破坏性命令"
+  - id: baseline.wildcard-write-edit
+    severity: high
+    description: "存在通配写权限 Edit(**) 或 Write(**)"
+    asset_type: permissions
+    match:
+      or:
+        - { field: allow, op: contains, value: "Edit(**)" }
+        - { field: allow, op: contains, value: "Write(**)" }
+    remediation: "收窄 Edit/Write 权限到具体路径"
+  - id: baseline.unrestricted-webfetch
+    severity: medium
+    description: "存在通配 WebFetch(*) 权限,可任意外发请求"
+    asset_type: permissions
+    match: { field: allow, op: contains, value: "WebFetch(*)" }
+    remediation: "收窄 WebFetch 权限到具体域名"
+  - id: baseline.remote-script-in-settings
+    severity: high
+    description: "settings 引用远程脚本执行(curl/wget 拉取 https URL)"
+    asset_type: settings
+    match: { field: raw, op: regex_match, value: "(?i)(curl|wget)\\b.*https?://" }
+    remediation: "移除 settings 中的远程脚本执行,改用本地受控脚本"
+  - id: baseline.mcp-unpinned
+    severity: medium
+    description: "MCP server 使用 npx/uvx/docker 但未固定版本(@version 或 @sha256)"
+    asset_type: mcp_server
+    match:
+      and:
+        - { field: command, op: within, value: ["npx", "uvx", "docker"] }
+        - not:
+            field: args
+            op: regex_match
+            value: "@(sha256:)?[a-f0-9]"
+    remediation: "固定 MCP server 版本,使用 @version 或 @sha256 摘要"
+  - id: baseline.mcp-env-credentials
+    severity: medium
+    description: "MCP server env 含疑似凭据(TOKEN/SECRET/KEY/PASSWORD)"
+    asset_type: mcp_server
+    match: { field: env, op: key_matches, value: "(?i)(token|secret|key|password|credential)" }
+    remediation: "从 MCP server env 移除凭据,改用系统 keyring/环境注入"
+  - id: baseline.dangerous-skip-with-network
+    severity: critical
+    description: "skipDangerousModePermissionPrompt 与网络/写命令同时存在,极高风险"
+    asset_type: settings
+    # 注:permissions 侧的通配权限在另一资产(permissions 类型),跨资产组合
+    # 难以在单条规则表达。此处仅检测 settings.raw 同时含 skip 和网络命令。
+    # permissions 部分由 wildcard-bash / unrestricted-webfetch 等规则覆盖。
+    match:
+      and:
+        - { field: raw, op: contains, value: "skipDangerousModePermissionPrompt" }
+        - { field: raw, op: regex_match, value: "(?i)(WebFetch|curl|wget|bash)" }
+    remediation: "关闭 skipDangerousModePermissionPrompt,或移除网络/写命令"

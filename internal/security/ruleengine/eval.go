@@ -172,16 +172,28 @@ func evalLeaf(node map[string]any, a configengine.Asset, rule *Rule) (bool, stri
 
 // evalContains:字段值是 slice → 检查成员(任一元素 stringify 后含 value,或等于 value);
 // 非 slice → stringify 后子串检查。
+// 支持 []any(YAML 解析默认)和 []string(configengine parse_settings/parse_mcp 的真实类型)。
 func evalContains(fieldVal any, value any) (bool, string) {
 	valStr, ok := value.(string)
 	if !ok {
 		return false, ""
 	}
-	if arr, isSlice := fieldVal.([]any); isSlice {
+	// configengine 把 permissions allow/deny/ask 存为 []string(非 []any),
+	// mcp args 也是 []string。逐元素检查,而非 stringify 整个 slice 后子串匹配
+	// (后者会因 fmt.Sprint 在元素间插入空格而跨元素边界误命中)。
+	switch arr := fieldVal.(type) {
+	case []any:
 		for _, elem := range arr {
 			s := stringify(elem)
 			if s == valStr || strings.Contains(s, valStr) {
 				return true, s
+			}
+		}
+		return false, ""
+	case []string:
+		for _, elem := range arr {
+			if elem == valStr || strings.Contains(elem, valStr) {
+				return true, elem
 			}
 		}
 		return false, ""
@@ -279,6 +291,7 @@ func evalKeyMatches(field string, fieldVal any, value any, rule *Rule) (bool, st
 
 // evalWithin:字段值是 slice → 所有元素都在 value 数组内(subset);
 // 字段值是标量 → 标量等于 value 数组中某个元素。
+// 支持 []any(YAML 解析默认)和 []string(configengine parse_mcp 的 args 真实类型)。
 func evalWithin(fieldVal any, value any) (bool, string) {
 	arr, ok := value.([]any)
 	if !ok {
@@ -290,12 +303,29 @@ func evalWithin(fieldVal any, value any) (bool, string) {
 		whitelist = append(whitelist, stringify(v))
 	}
 
-	if fieldArr, isSlice := fieldVal.([]any); isSlice {
+	// configengine 把 mcp args 存为 []string(非 []any),permissions allow 也是 []string。
+	// 逐元素检查 subset,而非 stringify 整个 slice(后者产生 "[a b]" 永远不在白名单)。
+	switch fieldArr := fieldVal.(type) {
+	case []any:
 		for _, elem := range fieldArr {
 			s := stringify(elem)
 			found := false
 			for _, w := range whitelist {
 				if s == w {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return false, ""
+			}
+		}
+		return true, fmt.Sprintf("all in [%s]", strings.Join(whitelist, ", "))
+	case []string:
+		for _, elem := range fieldArr {
+			found := false
+			for _, w := range whitelist {
+				if elem == w {
 					found = true
 					break
 				}
