@@ -155,9 +155,9 @@ func TestValidateCompilesRegex(t *testing.T) {
 	if valid[0].regexes == nil {
 		t.Fatal("regexes should be compiled and stored")
 	}
-	r, ok := valid[0].regexes["regex_match:content"]
+	r, ok := valid[0].regexes["regex_match:content:bash"]
 	if !ok || r == nil {
-		t.Fatal("regex should be stored under key 'regex_match:content'")
+		t.Fatal("regex should be stored under key 'regex_match:content:bash'")
 	}
 	if !r.MatchString("Run BASH now") {
 		t.Error("compiled regex should be case-insensitive (prefix (?i))")
@@ -172,7 +172,7 @@ func TestValidateDotallRegex(t *testing.T) {
 	if len(errs) != 0 || len(valid) != 1 {
 		t.Fatalf("want 1 valid 0 err, got %d %v", len(valid), errs)
 	}
-	r := valid[0].regexes["regex_match:content"]
+	r := valid[0].regexes["regex_match:content:a.b"]
 	// (?s) 使 . 匹配换行
 	if !r.MatchString("a\nb") {
 		t.Error("dotall regex should match newline with .")
@@ -231,5 +231,51 @@ func TestValidateNotMultipleBoolKeysFails(t *testing.T) {
 	_, errs := Validate(rules)
 	if len(errs) == 0 {
 		t.Fatal("not child with multiple boolean keys should fail")
+	}
+}
+
+// 回归:or 树含两个 regex_match 叶子,同 field 但不同 value pattern,
+// 两者的编译结果应各自存入 regexes(不互相覆盖)。
+// 旧 key=op:field 会碰撞,新 key=op:field:value 修复此问题。
+func TestValidateRegexCacheKeyCollision(t *testing.T) {
+	rules := []Rule{{ID: "x", Severity: "high", AssetType: "skill",
+		Match: MatchNode{raw: map[string]any{"or": []any{
+			map[string]any{"field": "content", "op": "regex_match", "value": "bash"},
+			map[string]any{"field": "content", "op": "regex_match", "value": "python"},
+		}}}}}
+	valid, errs := Validate(rules)
+	if len(errs) != 0 || len(valid) != 1 {
+		t.Fatalf("want 1 valid 0 err, got %d %v", len(valid), errs)
+	}
+	r := valid[0]
+	if r.regexes == nil {
+		t.Fatal("regexes should be compiled")
+	}
+	if len(r.regexes) != 2 {
+		t.Fatalf("want 2 regex entries (two distinct patterns), got %d: %v", len(r.regexes), r.regexes)
+	}
+	reBash, ok := r.regexes["regex_match:content:bash"]
+	if !ok || reBash == nil {
+		t.Error("missing regex_match:content:bash entry")
+	}
+	rePython, ok := r.regexes["regex_match:content:python"]
+	if !ok || rePython == nil {
+		t.Error("missing regex_match:content:python entry")
+	}
+	if reBash != nil && !reBash.MatchString("run BASH script") {
+		t.Error("bash regex should match case-insensitively")
+	}
+	if rePython != nil && !rePython.MatchString("execute PYTHON code") {
+		t.Error("python regex should match case-insensitively")
+	}
+}
+
+// 回归:禁用规则(无 match)的 post_exclude 正则仍需校验。
+func TestValidateDisabledRulePostExcludeStillValidated(t *testing.T) {
+	rules := []Rule{{ID: "x", Severity: "high", AssetType: "skill",
+		PostExclude: []string{"(?P<bad"}}}
+	_, errs := Validate(rules)
+	if len(errs) == 0 {
+		t.Fatal("bad post_exclude regex should fail even for disabled rule")
 	}
 }

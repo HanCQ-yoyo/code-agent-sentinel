@@ -54,7 +54,7 @@ type Rule struct {
 	Source        string         `yaml:"-"` // 来源文件路径(加载时填)
 	// 编译态(校验时填,不序列化)
 	assetType configengine.AssetType
-	regexes   map[string]*regexp.Regexp // key=op+field,规则级正则编译缓存
+	regexes   map[string]*regexp.Regexp // key=op:field:value,规则级正则编译缓存
 }
 
 // MatchNode 保留 YAML 原始结构:叶子是 map{field,op,value},

@@ -80,21 +80,21 @@ func validateRule(r *Rule) error {
 	// 填充编译态 assetType
 	r.assetType = configengine.AssetType(r.AssetType)
 
-	// 2. match 可空(禁用,合法)
-	if len(r.Match.raw) == 0 {
-		return nil
-	}
-
-	// 3. 递归校验 match 树(同时编译正则存入 r.regexes)
-	if err := validateMatchRaw(r.Match.raw, r); err != nil {
-		return err
-	}
-
-	// 4. post_exclude 正则编译验证(仅校验可行性,不缓存——Task 5 求值器重建)
+	// 2. post_exclude 正则编译验证(全量校验:即使规则禁用也验证,不缓存——Task 5 求值器重建)
 	for _, pat := range r.PostExclude {
 		if _, err := compileRegexPattern(pat, r.Dotall); err != nil {
 			return fmt.Errorf("post_exclude regex %q compile failed: %v", pat, err)
 		}
+	}
+
+	// 3. match 可空(禁用,合法)
+	if len(r.Match.raw) == 0 {
+		return nil
+	}
+
+	// 4. 递归校验 match 树(同时编译正则存入 r.regexes)
+	if err := validateMatchRaw(r.Match.raw, r); err != nil {
+		return err
 	}
 
 	return nil
@@ -140,6 +140,7 @@ func validateMatchRaw(raw map[string]any, r *Rule) error {
 		// boolKeys == 0:叶子节点
 		return validateLeaf(raw, r)
 	}
+	// unreachable: boolKeys==1 guarantees one of and/or/not fires
 	return nil
 }
 
@@ -209,8 +210,9 @@ func validateLeaf(raw map[string]any, r *Rule) error {
 		if r.regexes == nil {
 			r.regexes = make(map[string]*regexp.Regexp)
 		}
-		// key = op:field,Task 4 求值器按同样规则构造 key 读取
-		r.regexes[opStr+":"+fieldStr] = compiled
+		// key = op:field:value,Task 4 求值器按同样规则构造 key 读取。
+		// 含 value 避免同 op+field 不同 pattern 的叶子互相覆盖。
+		r.regexes[opStr+":"+fieldStr+":"+valStr] = compiled
 	}
 
 	return nil
