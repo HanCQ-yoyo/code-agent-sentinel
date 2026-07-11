@@ -146,10 +146,10 @@ func evalLeaf(node map[string]any, a configengine.Asset, rule *Rule) (bool, stri
 		return s != valStr, fmt.Sprintf("%s != %q", fieldStr, valStr)
 
 	case OpRegexMatch:
-		return evalRegexMatch(fieldStr, fieldVal, node["value"], rule)
+		return evalRegexMatch(fieldStr, fieldVal, node["value"], rule, OpRegexMatch)
 
 	case OpNotRegexMatch:
-		matched, ev := evalRegexMatch(fieldStr, fieldVal, node["value"], rule)
+		matched, ev := evalRegexMatch(fieldStr, fieldVal, node["value"], rule, OpNotRegexMatch)
 		return !matched, fmt.Sprintf("NOT(%s)", ev)
 
 	case OpKeyMatches:
@@ -192,33 +192,33 @@ func evalContains(fieldVal any, value any) (bool, string) {
 
 // evalRegexMatch:用 rule.regexes 缓存(键 op:field:value)查找编译好的正则;
 // 若缓存未命中(未跑 Validate),惰性编译并缓存。
+// op 参数用于缓存键区分 regex_match 与 not_regex_match(validate 按 op 分别存储)。
 // 若 rule.Deobfuscation 非空且 field==content,对每个反混淆 candidate 跑正则,任一命中即 matched。
-func evalRegexMatch(field string, fieldVal any, value any, rule *Rule) (bool, string) {
+func evalRegexMatch(field string, fieldVal any, value any, rule *Rule, op string) (bool, string) {
 	pattern, ok := value.(string)
 	if !ok {
 		return false, ""
 	}
-	re := lookupRegex(rule, OpRegexMatch, field, pattern)
+	re := lookupRegex(rule, op, field, pattern)
 	if re == nil {
 		return false, ""
 	}
 
 	// 无反混淆:直接对原始文本跑
 	text := stringify(fieldVal)
-	if matched := re.FindString(text); matched != "" {
-		return true, matched
+	if re.MatchString(text) {
+		return true, re.FindString(text)
 	}
 
 	// 有反混淆且 field==content:对每个 candidate 跑(不链式)
 	if len(rule.Deobfuscation) > 0 && field == "content" {
 		candidates := Deobfuscate(text, rule.Deobfuscation)
-		for i, c := range candidates {
-			if i == 0 {
-				continue // out[0] 是原始文本,已跑过
+		for _, c := range candidates {
+			if c.Method == "" {
+				continue // 原始文本,已跑过
 			}
-			if m := re.FindString(c); m != "" {
-				method := rule.Deobfuscation[i-1]
-				return true, fmt.Sprintf("[%s] %s", method, m)
+			if re.MatchString(c.Text) {
+				return true, fmt.Sprintf("[%s] %s", c.Method, re.FindString(c.Text))
 			}
 		}
 	}

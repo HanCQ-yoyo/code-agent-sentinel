@@ -6,21 +6,32 @@ import (
 	"strings"
 )
 
+// Candidate 是一个反混淆候选变体。
+// Method 是产生该变体的反混淆方法名(空串=原始文本本身)。
+// Text 是反混淆后的文本。
+type Candidate struct {
+	Method string
+	Text   string
+}
+
 // Deobfuscate 返回原始文本 + 各反混淆变体。
-// 原始文本始终是 out[0],后续元素按 methods 顺序追加(不链式,每种独立)。
+// out[0] 始终是原始文本(Method=""),后续按 methods 顺序追加(不链式,每种独立)。
+// base64 方法可能产生多个变体(文本中每个可解码块各一个),所以返回长度可大于 1+len(methods)。
 // 方法:zero_width / html_comment / base64 / leetspeak。
-func Deobfuscate(text string, methods []string) []string {
-	out := []string{text}
+func Deobfuscate(text string, methods []string) []Candidate {
+	out := []Candidate{{Method: "", Text: text}}
 	for _, m := range methods {
 		switch m {
 		case "zero_width":
-			out = append(out, stripZeroWidth(text))
+			out = append(out, Candidate{Method: m, Text: stripZeroWidth(text)})
 		case "html_comment":
-			out = append(out, stripHTMLComments(text))
+			out = append(out, Candidate{Method: m, Text: stripHTMLComments(text)})
 		case "base64":
-			out = append(out, decodeBase64Chunks(text)...)
+			for _, dec := range decodeBase64Chunks(text) {
+				out = append(out, Candidate{Method: m, Text: dec})
+			}
 		case "leetspeak":
-			out = append(out, deleet(text))
+			out = append(out, Candidate{Method: m, Text: deleet(text)})
 		}
 	}
 	return out

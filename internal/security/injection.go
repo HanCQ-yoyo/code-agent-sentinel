@@ -58,7 +58,7 @@ func (d *InjectionDetector) Scan(ctx context.Context, assets []configengine.Asse
 		}
 		for _, r := range d.rules {
 			for _, variant := range ruleengine.Deobfuscate(text, r.Deobfuscation) {
-				if r.re != nil && r.re.MatchString(variant) {
+				if r.re != nil && r.re.MatchString(variant.Text) {
 					out = append(out, Finding{
 						DetectorID:  d.ID(),
 						RuleID:      r.ID,
@@ -67,7 +67,7 @@ func (d *InjectionDetector) Scan(ctx context.Context, assets []configengine.Asse
 						AssetType:   a.Type,
 						AssetName:   a.Name,
 						Message:     r.Description,
-						Evidence:    truncate(r.re.FindString(variant), 200),
+						Evidence:    truncate(r.re.FindString(variant.Text), 200),
 						Remediation: r.Remediation,
 					})
 					break // 同一规则同一资产只报一次
