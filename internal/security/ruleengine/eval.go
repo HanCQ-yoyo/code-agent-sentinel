@@ -1,6 +1,7 @@
 package ruleengine
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
@@ -244,20 +245,31 @@ func evalRegexMatch(field string, fieldVal any, value any, rule *Rule, op string
 }
 
 // evalKeyMatches:字段值是 map,对其 KEY 跑正则。
+// 接受 map[string]any 和 map[string]string(后者是 settings 解析器对 env 的存储类型)。
 func evalKeyMatches(field string, fieldVal any, value any, rule *Rule) (bool, string) {
 	pattern, ok := value.(string)
 	if !ok {
 		return false, ""
 	}
-	m, ok := fieldVal.(map[string]any)
-	if !ok {
+	// 提取 map 的键集合:兼容 map[string]any 和 map[string]string
+	var keys []string
+	switch m := fieldVal.(type) {
+	case map[string]any:
+		for k := range m {
+			keys = append(keys, k)
+		}
+	case map[string]string:
+		for k := range m {
+			keys = append(keys, k)
+		}
+	default:
 		return false, ""
 	}
 	re := lookupRegex(rule, OpKeyMatches, field, pattern)
 	if re == nil {
 		return false, ""
 	}
-	for k := range m {
+	for _, k := range keys {
 		if re.MatchString(k) {
 			return true, k
 		}
@@ -331,6 +343,10 @@ func stringify(v any) string {
 	switch val := v.(type) {
 	case string:
 		return val
+	case []byte:
+		return string(val)
+	case json.RawMessage:
+		return string(val)
 	case nil:
 		return ""
 	default:

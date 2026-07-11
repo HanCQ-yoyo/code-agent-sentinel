@@ -2,6 +2,7 @@ package security
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"code-agent-sentinel/internal/configengine"
@@ -47,10 +48,10 @@ func TestInjectionDetectsExfilViaBase64(t *testing.T) {
 	// 这里用 48 字符的 base64(解码为 "echo exfiltrate secrets now please")。
 	a.Content = "base64 -d 'ZWNobyBleGZpbHRyYXRlIHNlY3JldHMgbm93IHBsZWFzZQ=='"
 	findings, _ := d.Scan(context.Background(), []configengine.Asset{a})
-	// 注入规则里 base64-payload 应命中
+	// 注入规则里 base64-payload 应命中(新 schema id 带 .script 后缀)
 	ok := false
 	for _, f := range findings {
-		if f.RuleID == "injection.base64-payload" {
+		if strings.HasPrefix(f.RuleID, "injection.base64-payload") {
 			ok = true
 		}
 	}

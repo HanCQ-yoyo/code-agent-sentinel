@@ -57,6 +57,10 @@ func (d *InjectionDetector) Scan(ctx context.Context, assets []configengine.Asse
 			continue
 		}
 		for _, r := range d.rules {
+			// 新 schema:每条规则绑定一个 asset_type,按类型路由(与新引擎一致)
+			if r.AssetType != "" && r.AssetType != string(a.Type) {
+				continue
+			}
 			for _, variant := range ruleengine.Deobfuscate(text, r.Deobfuscation) {
 				if r.re != nil && r.re.MatchString(variant.Text) {
 					out = append(out, Finding{

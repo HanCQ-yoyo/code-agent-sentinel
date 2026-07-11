@@ -3,31 +3,23 @@ rules:
     severity: critical
     description: "skipDangerousModePermissionPrompt 已启用,绕过危险操作确认"
     asset_type: settings
-    field: "raw"
-    op: contains
-    value: "skipDangerousModePermissionPrompt"
+    match: { field: raw, op: contains, value: "skipDangerousModePermissionPrompt" }
     remediation: "关闭 skipDangerousModePermissionPrompt"
   - id: baseline.wildcard-bash
     severity: high
     description: "存在通配 Bash 权限 Bash(*)"
     asset_type: permissions
-    field: "allow"
-    op: contains
-    value: "Bash(*)"
+    match: { field: allow, op: contains, value: "Bash(*)" }
     remediation: "收窄 Bash 权限到具体命令"
   - id: baseline.dangerous-read-all
     severity: high
     description: "存在通配读权限 Read(**)"
     asset_type: permissions
-    field: "allow"
-    op: contains
-    value: "Read(**)"
+    match: { field: allow, op: contains, value: "Read(**)" }
     remediation: "收窄 Read 权限范围"
   - id: baseline.api-key-in-env
     severity: medium
     description: "settings env 中疑似 API key"
     asset_type: settings
-    field: "env"
-    op: key_matches
-    value: "(?i)(api[_-]?key|token|secret)"
+    match: { field: env, op: key_matches, value: "(?i)(api[_-]?key|token|secret)" }
     remediation: "从 settings env 移除凭据,改用系统 keyring/环境注入"

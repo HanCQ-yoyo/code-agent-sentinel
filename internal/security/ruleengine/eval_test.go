@@ -1,6 +1,7 @@
 package ruleengine
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -249,6 +250,39 @@ func TestEvalAndShortCircuitFail(t *testing.T) {
 // 不再越界 panic,且能命中匹配的块。
 // 回归 bug:旧 evalRegexMatch 用 rule.Deobfuscation[i-1] 取方法名,但 base64
 // 可能产生 N 个 candidate(每块一个),导致索引越界 panic。
+// ── Task 8 引擎缺口修复测试 ──
+
+// TestEvalContainsJsonRawMessage 验证 stringify 正确处理 json.RawMessage
+// (settings 解析器把 raw 存为 json.RawMessage = []byte)。
+// 旧 stringify 用 fmt.Sprint(json.RawMessage{...}) 产生 "[123 34 ...]" 而非 JSON 文本,
+// 导致 baseline.dangerous-skip-permission 规则 {field: raw, op: contains} 在新引擎下静默失败。
+func TestEvalContainsJsonRawMessage(t *testing.T) {
+	r := mustRule(t, "settings", map[string]any{
+		"field": "raw", "op": "contains", "value": "skipDangerousModePermissionPrompt",
+	})
+	a := configengine.Asset{Type: configengine.AssetSettings,
+		Fields: map[string]any{"raw": json.RawMessage(`{"skipDangerousModePermissionPrompt":true}`)}}
+	matched, _ := Eval(r, a)
+	if !matched {
+		t.Fatal("contains on json.RawMessage field should match; stringify must convert []byte to string")
+	}
+}
+
+// TestEvalKeyMatchesStringMap 验证 evalKeyMatches 接受 map[string]string
+// (settings 解析器把 env 存为 map[string]string,不是 map[string]any)。
+// 旧 evalKeyMatches 只接受 map[string]any,导致 baseline.api-key-in-env 规则在新引擎下静默失败。
+func TestEvalKeyMatchesStringMap(t *testing.T) {
+	r := mustRule(t, "settings", map[string]any{
+		"field": "env", "op": "key_matches", "value": "(?i)(api[_-]?key|token|secret)",
+	})
+	a := configengine.Asset{Type: configengine.AssetSettings,
+		Fields: map[string]any{"env": map[string]string{"ANTHROPIC_API_KEY": "sk-x"}}}
+	matched, _ := Eval(r, a)
+	if !matched {
+		t.Fatal("key_matches on map[string]string should match; evalKeyMatches must accept map[string]string")
+	}
+}
+
 func TestEvalBase64MultiBlockRegression(t *testing.T) {
 	// 两个可独立 base64 解码的块(各 ≥16 字符),非匹配块在前、匹配块在后:
 	// "c29tZSBoYXJtbGVzcyBwYWRkaW5nIHRleHQgaGVyZQ==" → "some harmless padding text here"(44 字符,不匹配 regex)

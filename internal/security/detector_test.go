@@ -48,7 +48,7 @@ func TestDetectorMeta(t *testing.T) {
 		wantCovers  int
 	}{
 		{"baseline", NewBaselineDetector(), "基线检测", 1, 4, 2},
-		{"injection", NewInjectionDetector(), "提示注入检测", 1, 3, 6},
+		{"injection", NewInjectionDetector(), "提示注入检测", 1, 18, 6},
 		{"secret", NewSecretDetector(""), "密钥检测", 1, 0, 0},
 		{"dep", NewDependencyDetector("", ""), "依赖检测", 2, 0, 4},
 	}
