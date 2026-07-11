@@ -1,7 +1,10 @@
 package configengine
 
 import (
+	"fmt"
+	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -60,6 +63,30 @@ func TestParseMarkdownDirMissingDir(t *testing.T) {
 	}
 	if assets != nil {
 		t.Errorf("want nil assets for missing dir, got %d", len(assets))
+	}
+}
+
+func TestParseSkillAllowedTools(t *testing.T) {
+	dir := t.TempDir()
+	skillDir := filepath.Join(dir, "my-skill")
+	os.MkdirAll(skillDir, 0o755)
+	content := "---\nname: my-skill\ndescription: test\nallowed-tools: Bash,Read(*)\n---\nbody\n"
+	os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(content), 0o644)
+
+	assets, err := parseMarkdownDir(dir, AssetSkill, ScopeGlobal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(assets) != 1 {
+		t.Fatalf("want 1 asset, got %d", len(assets))
+	}
+	at, ok := assets[0].Fields["allowed-tools"]
+	if !ok {
+		t.Fatal("allowed-tools 字段未解析进 Fields")
+	}
+	s := fmt.Sprint(at)
+	if !strings.Contains(s, "Bash") {
+		t.Errorf("allowed-tools = %q, want contain Bash", s)
 	}
 }
 

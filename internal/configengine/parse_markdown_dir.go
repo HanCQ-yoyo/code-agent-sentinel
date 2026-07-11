@@ -10,7 +10,7 @@ import (
 //
 // 顶层条目可以是子目录(在其中找 .md)或单个 .md 文件。每个条目产出一条资产,
 // Content 为正文(去掉 frontmatter),Fields 含解析出的 frontmatter
-// name/description。目录不存在时返回 nil, nil(不致错)。
+// name/description/allowed-tools。目录不存在时返回 nil, nil(不致错)。
 func parseMarkdownDir(dir string, typ AssetType, scope Scope) ([]Asset, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -28,7 +28,11 @@ func parseMarkdownDir(dir string, typ AssetType, scope Scope) ([]Asset, error) {
 		}
 		a := Asset{Type: typ, Scope: scope, SourcePath: mdPath, Name: name}
 		fm, body := splitFrontmatter(string(data))
-		a.Fields = map[string]any{"name": fm["name"], "description": fm["description"]}
+		a.Fields = map[string]any{
+			"name":          fm["name"],
+			"description":   fm["description"],
+			"allowed-tools": fm["allowed-tools"],
+		}
 		a.Content = body
 		fillHash(&a)
 		out = append(out, a)
