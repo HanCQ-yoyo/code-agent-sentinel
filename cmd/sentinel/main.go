@@ -92,8 +92,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 
 	eng := configengine.NewEngine(home)
 	r := security.NewRegistry()
-	r.Register(security.NewBaselineDetector())
-	r.Register(security.NewInjectionDetector())
+	r.Register(security.NewRulesDetector(home))
 	r.Register(security.NewSecretDetector(""))
 	r.Register(security.NewDependencyDetector("", ""))
 	orch := &security.Orchestrator{Registry: r}

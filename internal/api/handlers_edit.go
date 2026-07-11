@@ -79,7 +79,7 @@ func (s *Server) commitAsset(c *gin.Context) {
 		}
 		return
 	}
-	// 部分重扫:受影响资产(同 source_path)+ baseline/injection 检测器。
+	// 部分重扫:受影响资产(同 source_path)+ rules 检测器。
 	newFindings, rescanErr := s.partialRescan(res.Asset)
 	resp := gin.H{
 		"asset":        res.Asset,
@@ -94,7 +94,7 @@ func (s *Server) commitAsset(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// partialRescan 跑受影响资产(同 source_path)的 baseline+injection,对比 latest 同检测器 findings 返回新增。
+// partialRescan 跑受影响资产(同 source_path)的 rules 检测器,对比 latest 同检测器 findings 返回新增。
 // 返回 (newFindings, rescanError):rescanError 非空时表示重扫失败(Discover/Scan 错误或 fresh=nil),
 // 前端据此提示用户手动全量重扫,而非误报"无新增风险"。
 func (s *Server) partialRescan(updated configengine.Asset) (fresh []security.Finding, rescanError string) {
@@ -120,7 +120,7 @@ func (s *Server) partialRescan(updated configengine.Asset) (fresh []security.Fin
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	res, err := s.Orchestrator.Scan(ctx, affected, []string{"baseline", "content.injection"})
+	res, err := s.Orchestrator.Scan(ctx, affected, []string{"rules"})
 	if err != nil || res == nil {
 		msg := "partial rescan failed: scan returned nil"
 		if err != nil {
@@ -130,9 +130,9 @@ func (s *Server) partialRescan(updated configengine.Asset) (fresh []security.Fin
 	}
 	// 该资产在 latest 同检测器的 findings 集合(对比基线)。
 	// 同 source_path 的所有 sibling 资产(settings + permissions + per-hook)都参与重扫,
-	// baseline/injection findings 的 AssetID 是被扫 sibling 的 ID(如 permissions.ID),
+	// rules findings 的 AssetID 是被扫 sibling 的 ID(如 permissions.ID),
 	// 而非编辑资产的 ID,故 prior 须收集 ALL sibling AssetID。
-	prior := s.priorFindingsForSourcePath(updated.SourcePath, []string{"baseline", "content.injection"})
+	prior := s.priorFindingsForSourcePath(updated.SourcePath, []string{"rules"})
 	priorKeys := map[string]bool{}
 	for _, f := range prior {
 		priorKeys[findingKey(f)] = true
@@ -148,7 +148,7 @@ func (s *Server) partialRescan(updated configengine.Asset) (fresh []security.Fin
 
 // priorFindingsForSourcePath 从 latest scan 取同 source_path 的所有 sibling 资产
 // + 指定检测器的 findings。同 source_path 的资产(settings + permissions + per-hook)
-// 共享一个物理文件,重扫覆盖全部 sibling,但 baseline/injection findings 的 AssetID
+// 共享一个物理文件,重扫覆盖全部 sibling,但 rules findings 的 AssetID
 // 是被扫 sibling 的 ID(如 permissions.ID),故须用全部 sibling AssetID 过滤 prior。
 func (s *Server) priorFindingsForSourcePath(sourcePath string, detectorIDs []string) []security.Finding {
 	latest := s.latestScan()

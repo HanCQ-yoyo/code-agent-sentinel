@@ -39,6 +39,7 @@ func TestRegistryRegisterAndList(t *testing.T) {
 }
 
 func TestDetectorMeta(t *testing.T) {
+	tmpHome := t.TempDir() // 空 home:NewRulesDetector 不读真实 ~/.claude-sentinel
 	cases := []struct {
 		name        string
 		d           Detector
@@ -47,8 +48,7 @@ func TestDetectorMeta(t *testing.T) {
 		wantRules   int
 		wantCovers  int
 	}{
-		{"baseline", NewBaselineDetector(), "基线检测", 1, 4, 2},
-		{"injection", NewInjectionDetector(), "提示注入检测", 1, 18, 6},
+		{"rules", NewRulesDetector(tmpHome), "声明式规则引擎", 1, 22, 0},
 		{"secret", NewSecretDetector(""), "密钥检测", 1, 0, 0},
 		{"dep", NewDependencyDetector("", ""), "依赖检测", 2, 0, 4},
 	}
@@ -76,7 +76,7 @@ func TestDetectorMeta(t *testing.T) {
 					t.Errorf("引擎 %q kind 非法: %q", e.Name, e.Kind)
 				}
 			}
-			// baseline/injection 每条内嵌规则须含 syntax(可读语法或正则);secret/dep rules 为 nil 不校验。
+			// rules 每条内嵌规则须含 syntax(可读语法或正则);secret/dep rules 为 nil 不校验。
 			if len(m.Rules) > 0 {
 				for _, r := range m.Rules {
 					if r.Syntax == "" {
@@ -90,8 +90,9 @@ func TestDetectorMeta(t *testing.T) {
 
 func TestRuleSyntaxContent(t *testing.T) {
 	// baseline.wildcard-bash 的 syntax 应含 value "Bash(*)"(op=contains 的可读语法含 value)。
-	bd := NewBaselineDetector()
-	m := bd.Meta()
+	tmpHome := t.TempDir()
+	rd := NewRulesDetector(tmpHome)
+	m := rd.Meta()
 	var got string
 	for _, r := range m.Rules {
 		if r.ID == "baseline.wildcard-bash" {
@@ -101,10 +102,17 @@ func TestRuleSyntaxContent(t *testing.T) {
 	if !strings.Contains(got, "Bash(*)") {
 		t.Fatalf("baseline.wildcard-bash syntax = %q, want 含 Bash(*)", got)
 	}
-	// injection 规则 syntax 应为 pattern 正则原文(非空)。
-	id := NewInjectionDetector()
-	im := id.Meta()
-	if len(im.Rules) == 0 || im.Rules[0].Syntax == "" {
-		t.Fatalf("injection 第一条规则 syntax 为空: %+v", im.Rules)
+	// injection 规则 syntax 应为 pattern 正则原文(含 / 包裹,非空)。
+	var injSyntax string
+	for _, r := range m.Rules {
+		if r.ID == "injection.hidden-instruction.skill" {
+			injSyntax = r.Syntax
+		}
+	}
+	if injSyntax == "" {
+		t.Fatalf("injection.hidden-instruction.skill syntax 为空: %+v", m.Rules)
+	}
+	if !strings.Contains(injSyntax, "/") {
+		t.Fatalf("injection syntax 应含 /pattern/ 形式, got %q", injSyntax)
 	}
 }

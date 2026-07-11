@@ -24,7 +24,7 @@ type pluginManifest struct {
 //
 // 修复:旧实现找 <plugin>/package.json,但真实布局多一层版本目录、清单是
 // .claude-plugin/plugin.json —— 旧实现产 0 插件。下钻后 skills/commands/agents
-// 成为 plugin-scope 资产,InjectionDetector.Covers 已含 → 自动被提示注入扫描。
+// 成为 plugin-scope 资产,RulesDetector(Covers=nil,全资产)自动按 asset_type 路由扫描。
 func parsePlugins(claudeDir string, scope Scope) ([]Asset, error) {
 	cache := filepath.Join(claudeDir, "plugins", "cache")
 	mkts, err := os.ReadDir(cache)
