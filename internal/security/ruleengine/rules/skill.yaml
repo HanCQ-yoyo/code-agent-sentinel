@@ -63,7 +63,7 @@ rules:
 
   # LP3: skill 有能力迹象但无 allowed-tools 声明
   # and 树:not_exists allowed-tools + content regex_match 能力关键词。
-  # 能力关键词:network(curl/wget/fetch/http)、shell(bash/sh/exec/subprocess)、file-write(>>)。
+  # 能力关键词(spec 6d):network(curl/wget/fetch/http)、shell(bash/sh/exec/system+subprocess)、file-write(open.*w/write/>>)。
   # 有 allowed-tools 时不报(即便 content 有能力词);无 allowed-tools 且无能力词也不报。
   - id: skill.missing-allowed-tools
     severity: low
@@ -72,7 +72,7 @@ rules:
     match:
       and:
         - { field: allowed-tools, op: not_exists }
-        - { field: content, op: regex_match, value: "(curl|wget|\\bfetch\\b|https?://|\\bbash\\b|\\bsh\\b|\\bexec\\b|subprocess|>>)" }
+        - { field: content, op: regex_match, value: "(\\bcurl\\b|\\bwget\\b|\\bfetch\\b|\\bhttps?\\b|\\bbash\\b|\\bsh\\b|\\bexec\\b|\\bsystem\\b|\\bsubprocess\\b|open.*\\bw\\b|\\bwrite\\b|>>)" }
     remediation: "为 skill 声明 allowed-tools,限制其可用工具范围"
 
   # RA1: skill 脚本自修改($0/__file__/SKILL.md)

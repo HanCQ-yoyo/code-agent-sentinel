@@ -208,7 +208,7 @@ func evalContains(fieldVal any, value any) (bool, string) {
 // evalRegexMatch:用 rule.regexes 缓存(键 op:field:value)查找编译好的正则;
 // 若缓存未命中(未跑 Validate),惰性编译并缓存。
 // op 参数用于缓存键区分 regex_match 与 not_regex_match(validate 按 op 分别存储)。
-// 若 rule.Deobfuscation 非空且 field==content,对每个反混淆 candidate 跑正则,任一命中即 matched。
+// 若 rule.Deobfuscation 非空,对每个反混淆 candidate 跑正则(作用于任意字段),任一命中即 matched。
 func evalRegexMatch(field string, fieldVal any, value any, rule *Rule, op string) (bool, string) {
 	pattern, ok := value.(string)
 	if !ok {

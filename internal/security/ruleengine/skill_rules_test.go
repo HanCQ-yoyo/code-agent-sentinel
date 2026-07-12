@@ -207,25 +207,36 @@ func TestSkillLP3MissingAllowedTools(t *testing.T) {
 		t.Fatal("LP3 should match: curl in content + no allowed-tools")
 	}
 
-	// 负例 1:有 allowed-tools → 不报(即便 content 有能力词)
+	// 正例 2:content 有 file-write 能力词(open.*w)+ 无 allowed-tools
 	a2 := configengine.Asset{
+		Type:    configengine.AssetSkill,
+		Content: "with open('/tmp/result', 'w') as f: f.write(data)",
+		Fields:  map[string]any{"description": "result writer"},
+	}
+	matched2, _ := Eval(r, a2)
+	if !matched2 {
+		t.Fatal("LP3 should match: file-write keyword (open.*w / write) in content + no allowed-tools")
+	}
+
+	// 负例 1:有 allowed-tools → 不报(即便 content 有能力词)
+	a3 := configengine.Asset{
 		Type:    configengine.AssetSkill,
 		Content: "use curl to fetch data from the API",
 		Fields:  map[string]any{"description": "data fetcher", "allowed-tools": "Read, Bash(curl:*)"},
 	}
-	matched2, _ := Eval(r, a2)
-	if matched2 {
+	matched3, _ := Eval(r, a3)
+	if matched3 {
 		t.Fatal("LP3 should not match when allowed-tools present")
 	}
 
 	// 负例 2:无 allowed-tools 但 content 无能力词 → 不报
-	a3 := configengine.Asset{
+	a4 := configengine.Asset{
 		Type:    configengine.AssetSkill,
 		Content: "A helpful skill for formatting markdown",
 		Fields:  map[string]any{"description": "formatter"},
 	}
-	matched3, _ := Eval(r, a3)
-	if matched3 {
+	matched4, _ := Eval(r, a4)
+	if matched4 {
 		t.Fatal("LP3 should not match when no capability keywords in content")
 	}
 }
