@@ -163,6 +163,12 @@ func validateLeaf(raw map[string]any, r *Rule) error {
 	if !ok {
 		return errors.New("'op' must be a string")
 	}
+	// 特殊求值模式(repeat_check / homoglyph_check):非用户 op,但 evalLeaf 可路由。
+	// 不需要 value 字段,只需 field(已校验)。
+	if opStr == SpecialRepeat || opStr == SpecialHomoglyph {
+		return nil
+	}
+
 	if !validOp(opStr) {
 		return fmt.Errorf("invalid op %q", opStr)
 	}

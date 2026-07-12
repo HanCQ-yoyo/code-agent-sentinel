@@ -1,5 +1,8 @@
-# 注入规则:每条规则按 asset_type 复制(skill/command/agent/memory/mcp_server/script),
-# 共 3 条规则 × 6 个 asset_type = 18 条。id 以 .assettype 后缀区分。
+# 注入规则:3 条原始规则 × 6 个 asset_type = 18 条 + 10 条 Task 13 扩充 = 28 条。
+# 原始 3 条(hidden-instruction/exfiltration/base64-payload)按 asset_type 复制:
+# skill/command/agent/memory/mcp_server/script,id 以 .assettype 后缀区分。
+# Task 13 扩充:SkillSpector 10 类威胁,每类 1 条单 asset_type 规则,
+# 含 RE2 改写(AS3/PE2/RA2 用 post_exclude,MP2 用 repeat_check)。
 # 旧 InjectionDetector 扫描 assetText = Content + 所有 string Fields;
 # 新引擎 field: content 只扫 Content。golden test fixture 将注入载荷放在 Content 中保证等价。
 rules:
@@ -134,3 +137,91 @@ rules:
     match: { field: content, op: regex_match, value: "(?:base64|atob)\\s+-d\\s+['\"][A-Za-z0-9+/=]{40,}" }
     deobfuscation: [base64]
     remediation: "解码并审查 base64 载荷"
+
+  # ─── Task 13 扩充:SkillSpector 10 类威胁(每类 1 条,单 asset_type)───
+
+  # P1: Prompt Injection — 指令覆盖/jailbreak 模式
+  - id: injection.prompt-injection.p1
+    severity: high
+    description: "检测到提示注入:指令覆盖/越狱模式"
+    asset_type: skill
+    match: { field: content, op: regex_match, value: "(ignore\\s+(?:all\\s+)?previous\\s+instructions?|you\\s+are\\s+now\\s+(?:in\\s+)?(?:jailbreak|unrestricted|unfiltered)\\s+mode|override\\s+(?:safety|security|system)|bypass\\s+(?:safety|security|restrictions?|constraints?)|do\\s+not\\s+follow\\s+(?:any|your|the)\\s+(?:rules?|guidelines?))" }
+    remediation: "审查该文本中的可疑指令覆盖,确认来源可信"
+
+  # AS1: Agent Snooping — 读取 agent 配置目录(可能窃取 API key/配置)
+  - id: injection.agent-snooping.as1
+    severity: high
+    description: "检测到 agent 配置目录访问(可能窃取 API key/配置)"
+    asset_type: agent
+    match: { field: content, op: regex_match, value: "(?:cat|less|head|tail|grep|find)\\s+[^|&;\\n]*~?/?\\.(?:claude|codex|gemini)/" }
+    remediation: "skill 不应读取 agent 配置目录,移除相关指令"
+
+  # AS3: Agent Snooping — 枚举其他 skill(RE2 改写:post_exclude 排除 CURRENT)
+  - id: injection.agent-snooping.as3
+    severity: high
+    description: "检测到 skill 枚举(读取其他 skill 的 SKILL.md)"
+    asset_type: skill
+    match: { field: content, op: regex_match, value: "skills?/[A-Z][A-Za-z0-9_-]+/SKILL\\.md" }
+    post_exclude: ["CURRENT"]
+    remediation: "skill 不应枚举其他 skill,移除相关路径访问"
+
+  # MP1: Memory Poisoning — 持久上下文注入(跨会话记忆操纵)
+  - id: injection.memory-poisoning.mp1
+    severity: high
+    description: "检测到持久上下文注入(跨会话记忆操纵)"
+    asset_type: memory
+    match: { field: content, op: regex_match, value: "(remember\\s+(?:this|that|the\\s+following)\\s+(?:for|in)\\s+(?:all\\s+)?(?:future|subsequent|every|all)\\s+(?:interactions?|conversations?|sessions?|responses?)|(?:from\\s+now\\s+on|henceforth|going\\s+forward|permanently)\\s*[,:]?\\s*(?:always|you\\s+must|you\\s+should|you\\s+will)|(?:store|save|persist|retain|keep)\\s+(?:this|the\\s+following)\\s+(?:in|to|across)\\s+(?:your\\s+)?(?:memory|context|state|knowledge))" }
+    remediation: "审查记忆/上下文持久化指令,确认非注入"
+
+  # MP2: Memory Poisoning — 上下文填充(RE2 改写:repeat_check 替代反向引用)
+  - id: injection.memory-poisoning.mp2
+    severity: high
+    description: "检测到上下文填充/重复串洪水(可能挤出系统提示)"
+    asset_type: memory
+    match: { field: content, op: repeat_check }
+    metadata:
+      repeat_min_len: 2
+      repeat_min_repeat: 20
+    remediation: "移除重复填充内容,检查是否为上下文注入攻击"
+
+  # AR1: Anti-Refusal — 拒绝抑制(尝试绕过安全拒绝)
+  - id: injection.anti-refusal.ar1
+    severity: medium
+    description: "检测到拒绝抑制指令(尝试绕过安全拒绝)"
+    asset_type: skill
+    match: { field: content, op: regex_match, value: "(\\b(?:never|do\\s+not|don'?t)\\s+(?:ever\\s+)?(?:refuse|decline)\\b|\\byou\\s+(?:must|will|should|can)\\s*(?:not|never)\\s+(?:refuse|decline|say\\s+no)\\b|\\balways\\s+(?:comply|obey|answer|respond|agree)\\b)" }
+    remediation: "移除拒绝抑制指令,保留 agent 安全拒绝能力"
+
+  # EA1: Excessive Agency — 无限制工具访问(tools: ["*"] 或 all tools)
+  - id: injection.excessive-agency.ea1
+    severity: medium
+    description: "检测到无限制工具访问(tools: [\"*\"] 或 all tools)"
+    asset_type: skill
+    match: { field: content, op: regex_match, value: "((?:tools?|permissions?)\\s*:\\s*\\[?\\s*['\"]?\\*['\"]?\\s*\\]?|(?:allow|grant|enable)\\s+(?:access\\s+to\\s+)?(?:all|any|every)\\s+tools?|(?:unrestricted|unlimited|unconstrained)\\s+(?:tool|function|api)\\s+(?:access|use|calls?))" }
+    remediation: "限制工具权限为最小集,避免通配符授权"
+
+  # PE2: Privilege Escalation — sudo 使用(RE2 改写:post_exclude 排除 -v/-l/--version/--list)
+  - id: injection.privilege-escalation.pe2
+    severity: medium
+    description: "检测到 sudo 提权使用(排除安全查询 -v/-l/--version/--list)"
+    asset_type: script
+    match: { field: content, op: regex_match, value: "sudo\\s+\\S+" }
+    post_exclude: ["sudo\\s+(-v|-l|--version|--list)"]
+    remediation: "审查 sudo 使用,确认非过度提权"
+
+  # RA2: Rogue Agent — 隐藏目录持久化(RE2 改写:post_exclude 排除 .git/.ssh/.aws)
+  - id: injection.rogue-agent.ra2
+    severity: medium
+    description: "检测到隐藏目录创建(可能建立未授权持久化)"
+    asset_type: script
+    match: { field: content, op: regex_match, value: "(?:create|write|mkdir)\\s+[^|]*(?:~/|/home/|/tmp/)\\.[a-z_-]+" }
+    post_exclude: ["\\.(git|ssh|aws)\\b"]
+    remediation: "审查隐藏目录创建,确认非持久化后门"
+
+  # OH1: Output Handling — 未校验输出注入(exec/eval of model output)
+  - id: injection.output-handling.oh1
+    severity: high
+    description: "检测到模型输出直接注入危险 sink(exec/eval)"
+    asset_type: script
+    match: { field: content, op: regex_match, value: "(?:exec|eval)\\s*\\(\\s*(?:response|output|result|answer|completion|reply|generated)" }
+    remediation: "对模型输出做校验/沙箱,避免直接 exec/eval"
