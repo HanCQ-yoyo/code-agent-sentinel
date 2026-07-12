@@ -39,6 +39,42 @@ func TestValidateBadRegexFails(t *testing.T) {
 	}
 }
 
+// M1: repeat_check 的 metadata 拼写错误应报错(防止静默回退默认值掩盖意图)
+func TestValidateRepeatCheckBadMetadataFails(t *testing.T) {
+	// 拼写错误的键名(repeat_min_length 而非 repeat_min_len)
+	rules := []Rule{{ID: "x", Severity: "high", AssetType: "memory",
+		Match: MatchNode{raw: map[string]any{"field": "content", "op": "repeat_check"}},
+		Metadata: map[string]any{"repeat_min_length": 3}}}
+	_, errs := Validate(rules)
+	if len(errs) == 0 {
+		t.Fatal("typo'd repeat metadata key should fail")
+	}
+}
+
+// M1: repeat_check 的 metadata 非正整数应报错
+func TestValidateRepeatCheckNonPositiveFails(t *testing.T) {
+	rules := []Rule{{ID: "x", Severity: "high", AssetType: "memory",
+		Match: MatchNode{raw: map[string]any{"field": "content", "op": "repeat_check"}},
+		Metadata: map[string]any{"repeat_min_repeat": 0}}}
+	_, errs := Validate(rules)
+	if len(errs) == 0 {
+		t.Fatal("non-positive repeat_min_repeat should fail")
+	}
+}
+
+// M1: repeat_check 无 metadata 合法(用默认值 2/20)
+func TestValidateRepeatCheckNoMetadataOK(t *testing.T) {
+	rules := []Rule{{ID: "x", Severity: "high", AssetType: "memory",
+		Match: MatchNode{raw: map[string]any{"field": "content", "op": "repeat_check"}}}}
+	valid, errs := Validate(rules)
+	if len(errs) != 0 {
+		t.Fatalf("repeat_check without metadata should pass, got errs: %v", errs)
+	}
+	if len(valid) != 1 {
+		t.Fatalf("want 1 valid rule, got %d", len(valid))
+	}
+}
+
 // ── 补全 brief Step 1 的 8 个覆盖点 ──
 
 // 2. 缺 id 报错

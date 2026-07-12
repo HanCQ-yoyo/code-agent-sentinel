@@ -1,8 +1,10 @@
-# 注入规则:3 条原始规则 × 6 个 asset_type = 18 条 + 10 条 Task 13 扩充 = 28 条。
+# 注入规则:3 条原始规则 × 6 个 asset_type = 18 条 + 28 条 Task 13 扩充 = 46 条。
 # 原始 3 条(hidden-instruction/exfiltration/base64-payload)按 asset_type 复制:
 # skill/command/agent/memory/mcp_server/script,id 以 .assettype 后缀区分。
-# Task 13 扩充:SkillSpector 10 类威胁,每类 1 条单 asset_type 规则,
-# 含 RE2 改写(AS3/PE2/RA2 用 post_exclude,MP2 用 repeat_check)。
+# Task 13 扩充:SkillSpector 10 类威胁(spec 6c 表),共 28 条:
+#   P1-P4(4) / AR1-3(3) / MP1-3(3) / P6-8(3) / AS1-3(3) / RA1-2(2) / TM1-3(3) / PE2-3(2) / E2-4(3) / EA1-2(2) = 28
+# severity 按 SkillSpector 原置信度映射(≥0.9 critical / ≥0.75 high / ≥0.6 medium / ≥0.4 low / <0.4 info),
+# 取规则内最高置信度子模式的档位。RE2 改写:AS3/PE2/RA2 用 post_exclude,MP2 用 repeat_check。
 # 旧 InjectionDetector 扫描 assetText = Content + 所有 string Fields;
 # 新引擎 field: content 只扫 Content。golden test fixture 将注入载荷放在 Content 中保证等价。
 rules:
@@ -138,42 +140,82 @@ rules:
     deobfuscation: [base64]
     remediation: "解码并审查 base64 载荷"
 
-  # ─── Task 13 扩充:SkillSpector 10 类威胁(每类 1 条,单 asset_type)───
+  # ─── Task 13 扩充:SkillSpector 10 类威胁(spec 6c 表,共 28 条)───
+  # 置信度→severity 映射(取规则内最高置信度子模式档位):
+  #   ≥0.9 critical / ≥0.75 high / ≥0.6 medium / ≥0.4 low / <0.4 info
 
-  # P1: Prompt Injection — 指令覆盖/jailbreak 模式
+  # ── P: Prompt Injection(4 条,P1-P4)──
+
+  # P1: Instruction Override — 指令覆盖/越狱(conf 0.8-0.95,jailbreak mode 0.95 → critical)
   - id: injection.prompt-injection.p1
-    severity: high
+    severity: critical
     description: "检测到提示注入:指令覆盖/越狱模式"
     asset_type: skill
-    match: { field: content, op: regex_match, value: "(ignore\\s+(?:all\\s+)?previous\\s+instructions?|you\\s+are\\s+now\\s+(?:in\\s+)?(?:jailbreak|unrestricted|unfiltered)\\s+mode|override\\s+(?:safety|security|system)|bypass\\s+(?:safety|security|restrictions?|constraints?)|do\\s+not\\s+follow\\s+(?:any|your|the)\\s+(?:rules?|guidelines?))" }
+    match: { field: content, op: regex_match, value: "(ignore\\s+(?:all\\s+)?previous\\s+instructions?|ignore\\s+(?:all\\s+)?(?:safety|security)\\s+(?:rules?|constraints?|guidelines?)|you\\s+are\\s+now\\s+(?:in\\s+)?(?:jailbreak|unrestricted|unfiltered)\\s+mode|override\\s+(?:safety|security|system)|bypass\\s+(?:safety|security|restrictions?|constraints?)|do\\s+not\\s+follow\\s+(?:any|your|the)\\s+(?:rules?|guidelines?))" }
     remediation: "审查该文本中的可疑指令覆盖,确认来源可信"
 
-  # AS1: Agent Snooping — 读取 agent 配置目录(可能窃取 API key/配置)
-  - id: injection.agent-snooping.as1
+  # P2: Hidden Instructions — 隐藏指令(conf 0.6-0.85,RTL/bidi tags 0.85 → high)
+  - id: injection.prompt-injection.p2
     severity: high
-    description: "检测到 agent 配置目录访问(可能窃取 API key/配置)"
-    asset_type: agent
-    match: { field: content, op: regex_match, value: "(?:cat|less|head|tail|grep|find)\\s+[^|&;\\n]*~?/?\\.(?:claude|codex|gemini)/" }
-    remediation: "skill 不应读取 agent 配置目录,移除相关指令"
-
-  # AS3: Agent Snooping — 枚举其他 skill(RE2 改写:post_exclude 排除 CURRENT)
-  - id: injection.agent-snooping.as3
-    severity: high
-    description: "检测到 skill 枚举(读取其他 skill 的 SKILL.md)"
+    description: "检测到隐藏指令(HTML 注释/RTL 控制字符/零宽)"
     asset_type: skill
-    match: { field: content, op: regex_match, value: "skills?/[A-Z][A-Za-z0-9_-]+/SKILL\\.md" }
-    post_exclude: ["CURRENT"]
-    remediation: "skill 不应枚举其他 skill,移除相关路径访问"
+    match: { field: content, op: regex_match, value: "(<!--.*?(?:system|instructions?|ignore|POST|GET|send|transmit).*?-->|\\[//\\]:\\s*#\\s*\\(.*?(?:system|instructions?|ignore).*?\\)|[\\x{202a}-\\x{202e}\\x{2066}-\\x{2069}])" }
+    deobfuscation: [zero_width, html_comment]
+    remediation: "审查隐藏的指令文本,确认非恶意嵌入"
 
-  # MP1: Memory Poisoning — 持久上下文注入(跨会话记忆操纵)
+  # P3: Exfiltration Commands — 外发指令(conf 0.75-0.9,send conversation to 0.9 → critical)
+  - id: injection.prompt-injection.p3
+    severity: critical
+    description: "检测到外发指令(把对话/数据发往外部)"
+    asset_type: skill
+    match: { field: content, op: regex_match, value: "((?:send|transmit|upload|post|forward)\\s+(?:the\\s+)?(?:conversation|context|chat|history|messages?)\\s+to|(?:send|transmit|upload|post)\\s+(?:all\\s+)?(?:user\\s+)?(?:data|information|input|files?)\\s+to\\s+(?:https?://|external))" }
+    remediation: "移除外发指令,确认无数据泄漏意图"
+
+  # P4: Behavior Manipulation — 行为操纵(conf 0.7-0.85,prioritize over safety 0.85 → high)
+  - id: injection.prompt-injection.p4
+    severity: high
+    description: "检测到行为操纵指令(诱导偏好/绕过用户知情)"
+    asset_type: skill
+    match: { field: content, op: regex_match, value: "((?:prioritize|prefer)\\s+(?:\\w+\\s+){0,3}(?:over|above)\\s+(?:user\\s+)?(?:safety|security|privacy|preferences?)|(?:subtly|gradually|slowly)\\s+(?:steer|guide|push|nudge)\\s+(?:the\\s+)?(?:user|conversation)|(?:without\\s+)?(?:the\\s+)?user\\s+(?:knowing|realizing|noticing).*?(?:change|modify|alter|influence))" }
+    remediation: "审查行为操纵指令,确认非恶意诱导"
+
+  # ── AR: Anti-Refusal(3 条,AR1-3)──
+
+  # AR1: Refusal Suppression — 拒绝抑制(conf 0.6-0.9,you must never refuse 0.9 → critical)
+  - id: injection.anti-refusal.ar1
+    severity: critical
+    description: "检测到拒绝抑制指令(尝试绕过安全拒绝)"
+    asset_type: skill
+    match: { field: content, op: regex_match, value: "(\\b(?:never|do\\s+not|don'?t)\\s+(?:ever\\s+)?(?:refuse|decline)\\b|\\byou\\s+(?:must|will|should|can)\\s*(?:not|never)\\s+(?:refuse|decline|say\\s+no)\\b|\\byou\\s+(?:cannot|can'?t|can\\s+not)\\s+(?:refuse|decline|say\\s+no)\\b|\\bnever\\s+say\\s+(?:that\\s+)?(?:you\\s+)?(?:can'?t|cannot|won'?t|no)\\b)" }
+    remediation: "移除拒绝抑制指令,保留 agent 安全拒绝能力"
+
+  # AR2: Disclaimer Suppression — 免责/警告抑制(conf 0.55-0.85,do not moralize 0.85 → high)
+  - id: injection.anti-refusal.ar2
+    severity: high
+    description: "检测到免责/警告抑制指令(抑制安全提示)"
+    asset_type: skill
+    match: { field: content, op: regex_match, value: "(\\b(?:do\\s+not|don'?t|never|no)\\s+(?:include|add|give|provide|use|append)?\\s*(?:any\\s+)?(?:warnings?|disclaimers?|caveats?)\\b|\\bwithout\\s+(?:any\\s+)?(?:warnings?|disclaimers?|caveats?|moralizing|moralising|judg(?:e?ment|ing))\\b|\\b(?:do\\s+not|don'?t|never)\\s+(?:lecture|moralize|moralise|preach|judge|warn)\\b|\\b(?:skip|omit|leave\\s+out|drop)\\s+(?:the\\s+)?(?:disclaimer|warning|ethics|safety)\\b)" }
+    remediation: "移除免责抑制指令,保留安全提示"
+
+  # AR3: Safety Nullification — 安全策略失效(conf 0.75-0.9,you have no restrictions 0.9 → critical)
+  - id: injection.anti-refusal.ar3
+    severity: critical
+    description: "检测到安全策略失效指令(越狱框架)"
+    asset_type: skill
+    match: { field: content, op: regex_match, value: "(\\byou\\s+have\\s+no\\s+(?:restrictions?|limitations?|filters?|rules?|guidelines?|boundaries|limits)\\b|\\b(?:ignore|disregard|forget|bypass|override)\\s+(?:your\\s+)?(?:content\\s+)?(?:policy|policies|guidelines?|safety|restrictions?|filters?)\\b|\\bnot\\s+bound\\s+by\\s+(?:any\\s+)?(?:rules?|policy|policies|guidelines?|restrictions?)\\b|\\bdo\\s+anything\\s+now\\b)" }
+    remediation: "移除安全失效指令,这是典型越狱框架"
+
+  # ── MP: Memory Poisoning(3 条,MP1-3,memory)──
+
+  # MP1: Persistent Context Injection — 持久上下文注入(conf 0.65-0.85,remember this for all 0.85 → high)
   - id: injection.memory-poisoning.mp1
     severity: high
     description: "检测到持久上下文注入(跨会话记忆操纵)"
     asset_type: memory
-    match: { field: content, op: regex_match, value: "(remember\\s+(?:this|that|the\\s+following)\\s+(?:for|in)\\s+(?:all\\s+)?(?:future|subsequent|every|all)\\s+(?:interactions?|conversations?|sessions?|responses?)|(?:from\\s+now\\s+on|henceforth|going\\s+forward|permanently)\\s*[,:]?\\s*(?:always|you\\s+must|you\\s+should|you\\s+will)|(?:store|save|persist|retain|keep)\\s+(?:this|the\\s+following)\\s+(?:in|to|across)\\s+(?:your\\s+)?(?:memory|context|state|knowledge))" }
+    match: { field: content, op: regex_match, value: "((?:always\\s+)?remember\\s+(?:this|that|the\\s+following)\\s+(?:for|in)\\s+(?:all\\s+)?(?:future|subsequent|every|all)\\s+(?:interactions?|conversations?|sessions?|responses?)|(?:from\\s+now\\s+on|henceforth|going\\s+forward|permanently)\\s*[,:]?\\s*(?:always|you\\s+must|you\\s+should|you\\s+will)|(?:store|save|persist|retain|keep)\\s+(?:this|the\\s+following)\\s+(?:in|to|across)\\s+(?:your\\s+)?(?:memory|context|state|knowledge)|(?:add|inject|insert|embed|implant)\\s+(?:this|the\\s+following)\\s+(?:into|to)\\s+(?:your\\s+)?(?:memory|context|knowledge|training))" }
     remediation: "审查记忆/上下文持久化指令,确认非注入"
 
-  # MP2: Memory Poisoning — 上下文填充(RE2 改写:repeat_check 替代反向引用)
+  # MP2: Context Window Stuffing — 上下文填充(RE2 改写:repeat_check 替代反向引用,conf 0.8 → high)
   - id: injection.memory-poisoning.mp2
     severity: high
     description: "检测到上下文填充/重复串洪水(可能挤出系统提示)"
@@ -184,23 +226,122 @@ rules:
       repeat_min_repeat: 20
     remediation: "移除重复填充内容,检查是否为上下文注入攻击"
 
-  # AR1: Anti-Refusal — 拒绝抑制(尝试绕过安全拒绝)
-  - id: injection.anti-refusal.ar1
-    severity: medium
-    description: "检测到拒绝抑制指令(尝试绕过安全拒绝)"
-    asset_type: skill
-    match: { field: content, op: regex_match, value: "(\\b(?:never|do\\s+not|don'?t)\\s+(?:ever\\s+)?(?:refuse|decline)\\b|\\byou\\s+(?:must|will|should|can)\\s*(?:not|never)\\s+(?:refuse|decline|say\\s+no)\\b|\\balways\\s+(?:comply|obey|answer|respond|agree)\\b)" }
-    remediation: "移除拒绝抑制指令,保留 agent 安全拒绝能力"
+  # MP3: Memory Manipulation — 记忆直接操纵(conf 0.7-0.9,inject false memories 0.9 → critical)
+  - id: injection.memory-poisoning.mp3
+    severity: critical
+    description: "检测到记忆直接操纵(清除/覆写/植入虚假记忆)"
+    asset_type: memory
+    match: { field: content, op: regex_match, value: "((?:clear|reset|wipe|erase|delete|purge)\\s+(?:your\\s+)?(?:memory|context|state|history|conversation)|(?:overwrite|replace|substitute|swap)\\s+(?:your\\s+)?(?:memory|context|state|instructions?|rules?)|(?:modify|edit|change|alter|corrupt|tamper\\s+with)\\s+(?:your\\s+)?(?:memory|state|context|stored|saved)\\s+(?:data|information|content)|(?:inject|insert|plant)\\s+(?:false|fake|fabricated|malicious)\\s+(?:memories?|information|context|data|history)|(?:poison|contaminate|corrupt|taint)\\s+(?:your\\s+)?(?:memory|context|state|knowledge|training))" }
+    remediation: "移除记忆操纵指令,这是典型记忆投毒"
 
-  # EA1: Excessive Agency — 无限制工具访问(tools: ["*"] 或 all tools)
-  - id: injection.excessive-agency.ea1
-    severity: medium
-    description: "检测到无限制工具访问(tools: [\"*\"] 或 all tools)"
-    asset_type: skill
-    match: { field: content, op: regex_match, value: "((?:tools?|permissions?)\\s*:\\s*\\[?\\s*['\"]?\\*['\"]?\\s*\\]?|(?:allow|grant|enable)\\s+(?:access\\s+to\\s+)?(?:all|any|every)\\s+tools?|(?:unrestricted|unlimited|unconstrained)\\s+(?:tool|function|api)\\s+(?:access|use|calls?))" }
-    remediation: "限制工具权限为最小集,避免通配符授权"
+  # ── P6-8: System Prompt Leakage(3 条,全文本类)──
 
-  # PE2: Privilege Escalation — sudo 使用(RE2 改写:post_exclude 排除 -v/-l/--version/--list)
+  # P6: Direct Prompt Extraction — 直接提取系统提示(conf 0.8-0.9,verbatim repeat prompt 0.9 → critical)
+  - id: injection.prompt-leakage.p6
+    severity: critical
+    description: "检测到系统提示直接提取指令"
+    asset_type: skill
+    match: { field: content, op: regex_match, value: "((?:print|output|show|display|reveal|expose|return|echo)\\s+(?:your\\s+)?(?:full\\s+)?(?:system\\s+)?(?:prompt|instructions?|rules?|guidelines?|directives?)|(?:share|disclose|leak|give\\s+me)\\s+(?:your\\s+)?(?:internal|hidden|system|secret)\\s+(?:prompt|instructions?|rules?|config)|(?:verbatim|exactly|word\\s+for\\s+word)\\s+(?:repeat|output|print)\\s+(?:your\\s+)?(?:system\\s+)?(?:prompt|instructions?))" }
+    remediation: "移除系统提示提取指令,保护提示机密性"
+
+  # P7: Indirect Prompt Extraction — 间接提取(conf 0.7-0.85,encode prompt 0.85 → high)
+  - id: injection.prompt-leakage.p7
+    severity: high
+    description: "检测到系统提示间接提取(侧信道/推断)"
+    asset_type: skill
+    match: { field: content, op: regex_match, value: "((?:repeat|recite|reproduce)\\s+(?:everything|all|the\\s+text)\\s+(?:above|before|prior|preceding)|(?:summarize|paraphrase|rephrase|translate)\\s+(?:your\\s+)?(?:system\\s+)?(?:prompt|instructions?|rules?|guidelines?)|(?:encode|encrypt|rot13|base64|reverse)\\s+(?:your\\s+)?(?:system\\s+)?(?:prompt|instructions?|rules?)|(?:format|present|rearrange)\\s+(?:your\\s+)?(?:system\\s+)?(?:prompt|instructions?)\\s+(?:as|in)\\s+(?:a\\s+)?(?:list|json|yaml|csv|table|markdown))" }
+    remediation: "移除间接提取指令,防止提示通过侧信道泄漏"
+
+  # P8: Prompt Exfiltration via Tool — 经工具外发系统提示(conf 0.8-0.9,send prompt to https 0.9 → critical)
+  - id: injection.prompt-leakage.p8
+    severity: critical
+    description: "检测到系统提示经工具外发指令"
+    asset_type: skill
+    match: { field: content, op: regex_match, value: "((?:write|save|store|log|dump)\\s+(?:your\\s+)?(?:system\\s+)?(?:prompt|instructions?|rules?)\\s+(?:to|into|in)\\s+(?:a\\s+)?(?:file|disk|log|database|storage)|(?:send|post|upload|transmit)\\s+(?:your\\s+)?(?:system\\s+)?(?:prompt|instructions?|rules?)\\s+(?:to|via)\\s+(?:https?://|external|remote|webhook|api|server)|(?:pipe|redirect|forward)\\s+(?:the\\s+)?(?:system\\s+)?(?:prompt|instructions?)\\s+(?:to|through|via)\\s+(?:curl|wget|fetch|http|api|tool))" }
+    remediation: "移除系统提示外发指令,防止提示经工具泄漏"
+
+  # ── AS: Agent Snooping(3 条,AS1-3)──
+
+  # AS1: Agent Config Directory Access — 读取 agent 配置目录(conf 0.8-0.9,open .claude/ 0.9 → critical)
+  - id: injection.agent-snooping.as1
+    severity: critical
+    description: "检测到 agent 配置目录访问(可能窃取 API key/配置)"
+    asset_type: agent
+    match: { field: content, op: regex_match, value: "(open\\s*\\(\\s*['\"]?\\.(?:claude|codex|gemini|continue)/|(?:cat|less|head|tail|grep|find)\\s+[^|&;\\n]*~?/?\\.(?:claude|codex|gemini)/|~?/\\.(?:claude|codex|gemini|continue)/(?:config|settings?|preferences?|credentials?)(?:\\.(?:json|yaml|yml|toml))?|(?:read|load|open|access|fetch)\\s+(?:the\\s+)?(?:agent|claude|codex|gemini)\\s+(?:config|configuration|settings?)\\s+(?:from|at|in)\\s+~?/?\\.(?:claude|codex|gemini))" }
+    remediation: "skill 不应读取 agent 配置目录,移除相关指令"
+
+  # AS2: MCP Config Access — 读取 MCP 配置(conf 0.8-0.95,.claude/mcp.json 0.95 → critical)
+  - id: injection.agent-snooping.as2
+    severity: critical
+    description: "检测到 MCP 配置访问(可能窃取 MCP server 凭据)"
+    asset_type: agent
+    match: { field: content, op: regex_match, value: "(open\\s*\\(\\s*['\"][^'\"]*mcp(?:_config)?\\.json['\"]|(?:cat|less|head|grep)\\s+[^|&;\\n]*mcp(?:_config)?\\.json|\\.(?:claude|codex|gemini)/mcp(?:_config)?\\.json|mcp(?:_config)?\\.json.*?(?:api_?key|token|secret|url|endpoint))" }
+    remediation: "skill 不应读取 MCP 配置,移除相关指令"
+
+  # AS3: Skill Enumeration — 枚举其他 skill(RE2 改写:post_exclude 排除 CURRENT 目录名)
+  # 原 PCRE skills?/(?:(?!CURRENT)[A-Z][A-Za-z0-9_-]+)/SKILL\.md,conf 0.8 → high
+  # M2 修复:post_exclude 用 "skills/CURRENT/" 匹配目录名边界,避免误排 MYCURRENT
+  - id: injection.agent-snooping.as3
+    severity: high
+    description: "检测到 skill 枚举(读取其他 skill 的 SKILL.md)"
+    asset_type: skill
+    match: { field: content, op: regex_match, value: "skills?/[A-Z][A-Za-z0-9_-]+/SKILL\\.md" }
+    post_exclude: ["skills/CURRENT/"]
+    remediation: "skill 不应枚举其他 skill,移除相关路径访问"
+
+  # ── RA: Rogue Agent(2 条,RA1-2)──
+
+  # RA1: Self-Modification — 自修改(conf 0.75-0.95,open __file__ 'w' 0.95 → critical)
+  - id: injection.rogue-agent.ra1
+    severity: critical
+    description: "检测到 skill 自修改(运行时改自身代码/配置)"
+    asset_type: skill
+    match: { field: content, op: regex_match, value: "(open\\s*\\(\\s*__file__\\s*,\\s*['\"]w|(?:Path|pathlib)\\s*\\(\\s*__file__\\s*\\)\\s*\\.\\s*write_text|(?:write|modify|edit|update|overwrite|patch)\\s+(?:this\\s+)?(?:skill(?:'s)?|SKILL\\.md|skill\\.md)|(?:modify|edit|change|rewrite|update|alter)\\s+(?:your\\s+own|its\\s+own|this\\s+skill(?:'s)?)\\s+(?:code|source|file|script|config|configuration|instructions?|rules?)|(?:self[_-]?modify|self[_-]?update|self[_-]?rewrite|self[_-]?patch|self[_-]?evolve))" }
+    remediation: "移除自修改指令,skill 不应在运行时改自身"
+
+  # RA2: Session Persistence — 隐藏目录持久化(RE2 改写:post_exclude 排除 .git/.ssh/.aws)
+  # 原 PCRE (?:create|write|mkdir)\s+[^|]*(?:~/|/home/|/tmp/)\.(?!git|ssh|aws)[a-z_-]+,conf 0.6 → medium
+  # M3 修复:原 PCRE 负向 lookahead 排除任何以 git/ssh/aws 开头的目录名(含 .github/.sshkey)。
+  # reviewer 建议的 \.(git|ssh|aws)(?:[^A-Za-z0-9_-]|$) 用单词边界,会漏排 .github(git 后跟 h 是单词字符)。
+  # 故取更简模式 \.(git|ssh|aws)(无边界),精确对齐原 PCRE 语义:目录名以 git/ssh/aws 开头即排除。
+  - id: injection.rogue-agent.ra2
+    severity: medium
+    description: "检测到隐藏目录创建(可能建立未授权持久化)"
+    asset_type: script
+    match: { field: content, op: regex_match, value: "(?:create|write|mkdir)\\s+[^|]*(?:~/|/home/|/tmp/)\\.[a-z_-]+" }
+    post_exclude: ["\\.(git|ssh|aws)"]
+    remediation: "审查隐藏目录创建,确认非持久化后门"
+
+  # ── TM: Tool Misuse(3 条,TM1-3,script)──
+
+  # TM1: Tool Parameter Abuse — 工具参数滥用(conf 0.6-0.9,rm -rf / 0.9 → critical)
+  - id: injection.tool-misuse.tm1
+    severity: critical
+    description: "检测到工具参数滥用(危险参数/破坏性命令)"
+    asset_type: script
+    match: { field: content, op: regex_match, value: "(subprocess\\.\\w+\\s*\\([^)]*shell\\s*=\\s*True|\\b(?:rm|del|erase)\\s+[^|]*-(?:r|rf|fr)\\s+[/~]|--no-?(?:verify|check|validate|confirm|protect|safe)|--skip-?(?:validation|verification|checks?|auth|tests?)|\\b(?:rm|shutil\\.rmtree)\\s*\\(?[^)\\n]{0,80}['\"]?\\s*/\\s*['\"]?|(?:chmod|chown)\\s+[^|]*(?:777|666|a\\+rwx))" }
+    remediation: "移除危险参数/破坏性命令,使用最小权限"
+
+  # TM2: Chaining Abuse — 链式滥用绕过安全(conf 0.6-0.9,curl|sh 0.9 → critical)
+  - id: injection.tool-misuse.tm2
+    severity: critical
+    description: "检测到命令链式滥用(绕过安全检查)"
+    asset_type: script
+    match: { field: content, op: regex_match, value: "((?:&&|;)\\s*(?:curl|wget)\\s+[^|]*\\|\\s*(?:ba)?sh|(?:&&|;)\\s*\\b(?:rm|del|erase)\\s+-|(?:&&|;)\\s*(?:sudo|su\\s+)|(?:chain|combine|sequence|pipe)\\s+(?:these\\s+)?(?:tools?|commands?|actions?)\\s+to\\s+(?:bypass|circumvent|avoid|skip)\\s+(?:the\\s+)?(?:safety|security|check|restriction|limit)|\\|\\s*(?:sudo|su)\\s+)" }
+    remediation: "拆解命令链,移除绕过安全检查的组合"
+
+  # TM3: Unsafe Defaults — 不安全默认值(conf 0.6-0.8,verify=False/ssl verify off 0.8 → high)
+  - id: injection.tool-misuse.tm3
+    severity: high
+    description: "检测到不安全默认值(TLS 验证关闭/认证关闭)"
+    asset_type: script
+    match: { field: content, op: regex_match, value: "(verify\\s*=\\s*False|VERIFY_SSL\\s*=\\s*False|(?:ssl|tls)[_.]?verify\\s*=\\s*(?:False|false|0|off|no|disable)|NODE_TLS_REJECT_UNAUTHORIZED\\s*=\\s*['\"]?0['\"]?|(?:auth|authentication|authorization)\\s*=\\s*(?:None|False|false|disabled?|off|no)|(?:disable|skip|ignore|bypass)[_-]?(?:security|auth|validation|sanitization|encoding|escaping)|(?:safe[_-]?mode|secure[_-]?mode|sandbox)\\s*=\\s*(?:False|false|0|off|no|disable))" }
+    remediation: "启用 TLS 验证/认证,移除不安全默认值"
+
+  # ── PE: Privilege Escalation(2 条,PE2-3,script)──
+
+  # PE2: Sudo/Root Execution — sudo 提权(RE2 改写:post_exclude 排除 -v/-l/--version/--list)
+  # 原 PCRE sudo\s+(?!-v|-l|--version|--list),conf 0.7 → medium
   - id: injection.privilege-escalation.pe2
     severity: medium
     description: "检测到 sudo 提权使用(排除安全查询 -v/-l/--version/--list)"
@@ -209,19 +350,54 @@ rules:
     post_exclude: ["sudo\\s+(-v|-l|--version|--list)"]
     remediation: "审查 sudo 使用,确认非过度提权"
 
-  # RA2: Rogue Agent — 隐藏目录持久化(RE2 改写:post_exclude 排除 .git/.ssh/.aws)
-  - id: injection.rogue-agent.ra2
-    severity: medium
-    description: "检测到隐藏目录创建(可能建立未授权持久化)"
+  # PE3: Credential Access — 凭据文件访问(conf 0.6-0.95,/etc/shadow 0.95 → critical)
+  - id: injection.privilege-escalation.pe3
+    severity: critical
+    description: "检测到凭据文件访问(SSH key/AWS 凭据/shadow)"
     asset_type: script
-    match: { field: content, op: regex_match, value: "(?:create|write|mkdir)\\s+[^|]*(?:~/|/home/|/tmp/)\\.[a-z_-]+" }
-    post_exclude: ["\\.(git|ssh|aws)\\b"]
-    remediation: "审查隐藏目录创建,确认非持久化后门"
+    match: { field: content, op: regex_match, value: "(~?/?\\.ssh/(?:id_rsa|id_ed25519|id_ecdsa|id_dsa|authorized_keys|known_hosts)|~?/?\\.aws/credentials|/etc/shadow|~?/?\\.git-credentials|~?/?\\.netrc|~?/?\\.kube/config)" }
+    remediation: "移除凭据文件访问,凭据应经安全存储而非明文读取"
 
-  # OH1: Output Handling — 未校验输出注入(exec/eval of model output)
-  - id: injection.output-handling.oh1
+  # ── E: Data Exfiltration(3 条,E2-4,script)──
+
+  # E2: Env Variable Harvesting — 环境变量收集(conf 0.6-0.8,os.environ[KEY] 0.8 → high)
+  - id: injection.data-exfiltration.e2
     severity: high
-    description: "检测到模型输出直接注入危险 sink(exec/eval)"
+    description: "检测到环境变量收集(可能窃取凭据)"
     asset_type: script
-    match: { field: content, op: regex_match, value: "(?:exec|eval)\\s*\\(\\s*(?:response|output|result|answer|completion|reply|generated)" }
-    remediation: "对模型输出做校验/沙箱,避免直接 exec/eval"
+    match: { field: content, op: regex_match, value: "(os\\.environ\\s*\\[\\s*['\"][^'\"]*(?:KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL)[^'\"]*['\"]\\s*\\]|os\\.environ\\.get\\s*\\([^)]*(?:KEY|SECRET|TOKEN|PASSWORD|CREDENTIAL)|process\\.env\\s*\\[\\s*['\"][^'\"]*(?:KEY|SECRET|TOKEN|PASSWORD)[^'\"]*['\"]\\s*\\]|env\\s*\\|\\s*grep\\s+(?:-i\\s+)?(?:key|secret|token|password)|(?:extract|harvest|gather)\\s+(?:api\\s+)?keys?\\s+from\\s+environment)" }
+    remediation: "移除环境变量收集指令,凭据不应被枚举"
+
+  # E3: File System Enumeration — 文件系统枚举(conf 0.5-0.8,glob .env/.ssh 0.8 → high)
+  - id: injection.data-exfiltration.e3
+    severity: high
+    description: "检测到文件系统枚举(扫描凭据/配置文件)"
+    asset_type: script
+    match: { field: content, op: regex_match, value: "(glob\\s*\\.\\s*glob\\s*\\([^)]*(?:\\.env|\\.ssh|\\.aws|\\.config|credentials)|os\\s*\\.\\s*listdir\\s*\\([^)]*(?:\\.ssh|\\.aws|\\.config|\\.gnupg)|(?:find|search|scan|enumerate)\\s+(?:for\\s+)?(?:all\\s+)?(?:\\.env|credential|secret|key)\\s+files?|find\\s+[~\\$/]\\S*\\s+.*?-name\\s+['\"]?\\*(?:\\.env|\\.pem|\\.key|credential))" }
+    remediation: "移除文件系统枚举指令,限制扫描范围"
+
+  # E4: Context Leakage — 上下文/会话泄漏(conf 0.7-0.9,export conversation to external 0.9 → critical)
+  - id: injection.data-exfiltration.e4
+    severity: critical
+    description: "检测到对话/上下文泄漏指令"
+    asset_type: script
+    match: { field: content, op: regex_match, value: "((?:send|transmit|upload|log|record)\\s+(?:the\\s+)?(?:full\\s+)?(?:conversation|chat|dialog|session)\\s+(?:history|context|log)?|(?:export|dump|save)\\s+(?:the\\s+)?(?:conversation|chat|messages?)\\s+to\\s+(?:external|remote|server)|log\\s+(?:all\\s+)?(?:user\\s+)?(?:input|messages?|queries?|prompts?)\\s+to\\s+(?:external|remote|server))" }
+    remediation: "移除上下文泄漏指令,保护用户对话隐私"
+
+  # ── EA: Excessive Agency(2 条,EA1-2)──
+
+  # EA1: Unrestricted Tool Access — 无限制工具访问(conf 0.7-0.85,tools: ["*"] 0.85 → high)
+  - id: injection.excessive-agency.ea1
+    severity: high
+    description: "检测到无限制工具访问(tools: [\"*\"] 或 all tools)"
+    asset_type: skill
+    match: { field: content, op: regex_match, value: "((?:tools?|permissions?)\\s*:\\s*\\[?\\s*['\"]?\\*['\"]?\\s*\\]?|(?:allow|grant|enable)\\s+(?:access\\s+to\\s+)?(?:all|any|every)\\s+tools?|(?:unrestricted|unlimited|unconstrained)\\s+(?:tool|function|api)\\s+(?:access|use|calls?)|(?:call|invoke|use|execute)\\s+(?:any|all|every)\\s+(?:available\\s+)?tools?)" }
+    remediation: "限制工具权限为最小集,避免通配符授权"
+
+  # EA2: Autonomous Decision Making — 自主决策(conf 0.65-0.85,skip confirmation 0.85 → high)
+  - id: injection.excessive-agency.ea2
+    severity: high
+    description: "检测到自主决策指令(绕过用户确认)"
+    asset_type: skill
+    match: { field: content, op: regex_match, value: "((?:without|no)\\s+(?:asking|confirmation|approval|consent|verification|checking)|(?:auto(?:matically)?|autonomously)\\s+(?:execute|run|perform|delete|remove|modify|send|deploy)|(?:skip|bypass|disable)\\s+(?:user\\s+)?(?:confirmation|approval|consent|verification|prompt)|(?:do\\s+not|don't|never)\\s+(?:ask|prompt|confirm|verify|check)\\s+(?:the\\s+)?(?:user|before)|(?:auto[_-]?approve|auto[_-]?confirm|auto[_-]?execute|auto[_-]?deploy))" }
+    remediation: "保留用户确认环节,移除自主执行指令"

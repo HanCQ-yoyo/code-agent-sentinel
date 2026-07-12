@@ -24,6 +24,10 @@ import (
 //  2. 多字符模式:单元长度 ∈ [minLen, 20],连续重复 ≥ minRepeat 次。
 //     对齐 SkillSpector MP 的 (.{2,20}?)\1{20,},但用 Go 代码而非正则实现。
 //
+// off-by-one 说明:原 PCRE `(.{2,20}?)\1{20,}` 要求单元 + 20 次反向引用 = 共 21 次。
+// 本实现用 `count >= minRepeat`(默认 ≥20 次),比原 PCRE 多敏感 1 次(20 即触发,原需 21)。
+// 对安全工具而言更敏感是更安全的方向(宁可多报不可漏报),故有意保留,不强行对齐 21。
+//
 // 参数约定:evalLeaf 路由时默认 minLen=2、minRepeat=20(对齐 SkillSpector);
 // 可通过 rule.Metadata["repeat_min_len"] / ["repeat_min_repeat"] 覆盖。
 func evalRepeatCheck(content string, minLen, minRepeat int) bool {

@@ -166,6 +166,13 @@ func validateLeaf(raw map[string]any, r *Rule) error {
 	// 特殊求值模式(repeat_check / homoglyph_check):非用户 op,但 evalLeaf 可路由。
 	// 不需要 value 字段,只需 field(已校验)。
 	if opStr == SpecialRepeat || opStr == SpecialHomoglyph {
+		// repeat_check 需 metadata 中的 repeat_min_len / repeat_min_repeat 为正整数。
+		// 防止拼写错误(如 repeat_min_length)静默回退默认值掩盖意图。
+		if opStr == SpecialRepeat {
+			if err := validateRepeatMetadata(r); err != nil {
+				return err
+			}
+		}
 		return nil
 	}
 
@@ -240,6 +247,32 @@ func validateAndOr(v any, op string, r *Rule) error {
 		}
 		if err := validateMatchRaw(childRaw, r); err != nil {
 			return fmt.Errorf("op %q element[%d]: %v", op, i, err)
+		}
+	}
+	return nil
+}
+
+// validateRepeatMetadata 校验 repeat_check 规则的 metadata 参数。
+// 要求 repeat_min_len / repeat_min_repeat(若存在)为正整数,且不出现未知键(防止拼写错误静默回退默认值)。
+// 两键均可缺省(evalSpecialRepeat 用默认 2/20),但写错键名(如 repeat_min_length)应报错。
+func validateRepeatMetadata(r *Rule) error {
+	if r.Metadata == nil {
+		return nil // 两键都缺省,合法(用默认值)
+	}
+	known := map[string]bool{"repeat_min_len": true, "repeat_min_repeat": true}
+	for key, v := range r.Metadata {
+		if !known[key] {
+			return fmt.Errorf("metadata key %q unknown for repeat_check (want repeat_min_len/repeat_min_repeat)", key)
+		}
+		if v == nil {
+			continue
+		}
+		n, isInt := toInt(v)
+		if !isInt {
+			return fmt.Errorf("metadata %q must be an integer, got %T", key, v)
+		}
+		if n <= 0 {
+			return fmt.Errorf("metadata %q must be a positive integer, got %d", key, n)
 		}
 	}
 	return nil
