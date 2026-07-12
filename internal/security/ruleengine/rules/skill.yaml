@@ -1,0 +1,92 @@
+# skills 专项规则包:6 条规则覆盖 skill frontmatter/结构级威胁。
+# 这些威胁是 skill 特有的(文本注入规则不覆盖 frontmatter 字段级风险)。
+# 所有规则 asset_type: skill,通过 RulesDetector 路由到 skill 资产。
+#
+# 规则来源:SkillSpector 威胁分类法 + spec 6d 表 + CC skills 特化:
+#   TP1: description 含隐藏指令(HTML 注释/零宽/base64)— 复用 deobfuscation
+#   TP2: description 含同形字/RTL 覆盖字符 — homoglyph_check
+#   TP3: description 含 SYSTEM:/override/外传短语 — post_exclude localhost
+#   LP2: allowed-tools 含通配 * — contains
+#   LP3: 有能力迹象但无 allowed-tools — and: not_exists + regex_match
+#   RA1: skill 脚本自修改($0/__file__/SKILL.md)— or 树覆盖 shell+python+generic
+rules:
+  # TP1: skill description 含隐藏指令(HTML 注释/零宽/base64 混淆)
+  # or 树两层检测:branch 1 直接检测混淆标记(description 中出现 HTML 注释/零宽字符本身即可疑);
+  # branch 2 反混淆后检测注入短语(zero_width 拆词/base64 编码/html_comment 拆词后 reveal)。
+  # deobfuscation 应用于 description 字段(Task 14 修复 eval.go 移除 field==content 限制)。
+  - id: skill.description-hidden-instruction
+    severity: high
+    description: "skill frontmatter description 含隐藏指令(HTML 注释/零宽/base64 混淆)"
+    asset_type: skill
+    match:
+      or:
+        - { field: description, op: regex_match, value: "(<!--[\\s\\S]*?-->|[\\x{200b}\\x{200c}\\x{200d}\\x{feff}\\x{2060}])" }
+        - { field: description, op: regex_match, value: "(ignore|disregard).*(instructions?|rules)|override.*(system|safety|security)" }
+    deobfuscation: [zero_width, html_comment, base64]
+    remediation: "移除 skill description 中的 HTML 注释/零宽字符/base64 隐藏指令"
+
+  # TP2: skill description 含同形字/RTL 覆盖字符
+  # homoglyph_check 扫描 Cyrillic/Greek 同形字(confusables map ~40 条)+ RTL 控制字符(U+202E 等)。
+  # 单个 Cyrillic а(U+0430)即触发 — 视觉上与拉丁 a 无法区分。
+  - id: skill.description-unicode-spoofing
+    severity: high
+    description: "skill frontmatter description 含同形字/RTL 覆盖字符"
+    asset_type: skill
+    match: { field: description, op: homoglyph_check }
+    remediation: "移除 description 中的 Cyrillic/Greek 同形字和 RTL 控制字符"
+
+  # TP3: skill description 含 SYSTEM:/override/外传短语
+  # RE2 改写:原 SkillSpector 用 negative-lookahead 排除 localhost,改为 post_exclude。
+  # or 树 3 分支:SYSTEM: / override safety / 外传短语(send/exfiltrate data to <dest>)。
+  # post_exclude 仅影响外传分支(命中上下文含 localhost → 降级不报);SYSTEM:/override 不受影响。
+  - id: skill.parameter-description-injection
+    severity: high
+    description: "skill 参数描述含 SYSTEM:/override/外传短语"
+    asset_type: skill
+    match:
+      or:
+        - { field: description, op: regex_match, value: "SYSTEM:" }
+        - { field: description, op: regex_match, value: "override\\s+(safety|security|system|policy)" }
+        - { field: description, op: regex_match, value: "(send|exfiltrate|transmit|upload|post)\\s+(data|tokens?|secrets?|credentials?|files?|conversation|history|messages?)\\s+to\\s+\\S+" }
+    post_exclude: ["localhost", "127\\.0\\.0\\.1"]
+    remediation: "移除 skill description 中的 SYSTEM:/override/外传指令"
+
+  # LP2: skill allowed-tools 含通配 *
+  # contains "*" 检测 allowed-tools 字符串中出现的通配符。
+  # 匹配裸 * (允许一切) 和 Bash(*) (允许所有 bash 命令);Bash(git:*) 等带作用域通配也会匹配(medium 级可接受)。
+  - id: skill.wildcard-allowed-tools
+    severity: medium
+    description: "skill allowed-tools 含通配 *"
+    asset_type: skill
+    match: { field: allowed-tools, op: contains, value: "*" }
+    remediation: "收窄 allowed-tools 到具体工具/命令,避免通配 *"
+
+  # LP3: skill 有能力迹象但无 allowed-tools 声明
+  # and 树:not_exists allowed-tools + content regex_match 能力关键词。
+  # 能力关键词:network(curl/wget/fetch/http)、shell(bash/sh/exec/subprocess)、file-write(>>)。
+  # 有 allowed-tools 时不报(即便 content 有能力词);无 allowed-tools 且无能力词也不报。
+  - id: skill.missing-allowed-tools
+    severity: low
+    description: "skill 有能力迹象但无 allowed-tools 声明"
+    asset_type: skill
+    match:
+      and:
+        - { field: allowed-tools, op: not_exists }
+        - { field: content, op: regex_match, value: "(curl|wget|\\bfetch\\b|https?://|\\bbash\\b|\\bsh\\b|\\bexec\\b|subprocess|>>)" }
+    remediation: "为 skill 声明 allowed-tools,限制其可用工具范围"
+
+  # RA1: skill 脚本自修改($0/__file__/SKILL.md)
+  # 扩展 SkillSpector RA1(Python-centric)到 shell + python + generic:
+  # branch 1: shell 自编辑 $0(>> $0 / sed -i $0)
+  # branch 2: Python __file__ 写入(open(__file__ / __file__...'w')
+  # branch 3: SKILL.md/frontmatter 写入(>> SKILL.md / sed -i SKILL.md / open(SKILL.md)
+  - id: skill.self-modification
+    severity: critical
+    description: "skill 脚本自修改($0/__file__/SKILL.md)"
+    asset_type: skill
+    match:
+      or:
+        - { field: content, op: regex_match, value: ">>.*\\$0|sed\\s+-i.*\\$0" }
+        - { field: content, op: regex_match, value: "open\\s*\\([^)]*__file__|__file__.*['\"]w" }
+        - { field: content, op: regex_match, value: ">>.*SKILL\\.md|sed\\s+-i.*SKILL\\.md|open\\s*\\([^)]*SKILL\\.md" }
+    remediation: "移除 skill 中的自修改逻辑,skill 不应在运行时改自身"

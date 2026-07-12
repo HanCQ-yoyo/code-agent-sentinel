@@ -236,8 +236,10 @@ func evalRegexMatch(field string, fieldVal any, value any, rule *Rule, op string
 		}
 	}
 
-	// 有反混淆且 field==content:对每个 candidate 跑(不链式)
-	if len(rule.Deobfuscation) > 0 && field == "content" {
+	// 有反混淆:对每个 candidate 跑(不链式)。
+	// Task 14 修复:移除 field=="content" 限制 — deobfuscation 应作用于任意字段
+	// (skill rules 需要对 description 字段做反混淆)。原有 field==content 规则不受影响。
+	if len(rule.Deobfuscation) > 0 {
 		candidates := Deobfuscate(text, rule.Deobfuscation)
 		for _, c := range candidates {
 			if c.Method == "" {
