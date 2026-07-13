@@ -19,7 +19,7 @@ func TestRulesValidateReportsInvalid(t *testing.T) {
 	if err := os.WriteFile(badFile, []byte(badYAML), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	out, err := execRulesValidate("", badFile)
+	out, err := execRulesValidate(tmp, badFile)
 	if err == nil {
 		t.Fatal("含非法规则的 validate 应返回 error")
 	}
@@ -36,7 +36,7 @@ func TestRulesValidateValidFile(t *testing.T) {
 	if err := os.WriteFile(goodFile, []byte(goodYAML), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	out, err := execRulesValidate("", goodFile)
+	out, err := execRulesValidate(tmp, goodFile)
 	if err != nil {
 		t.Fatalf("合法规则不应返回 error: %v, out=%s", err, out)
 	}
@@ -228,7 +228,11 @@ func execRulesValidate(home, file string) (string, error) {
 
 // writeTestConfig 在 home/.claude-sentinel/config.yaml 写一份最小配置(设 home_dir=home),
 // 返回路径。让 loadCfgAndHome 用此 config 解析到正确的 home。
+// home 必须非空(否则 filepath.Join 退化成相对路径,会在 cwd 泄漏创建 .claude-sentinel/)。
 func writeTestConfig(home string) string {
+	if home == "" {
+		panic("writeTestConfig: home must be non-empty to avoid leaking .claude-sentinel/ into cwd")
+	}
 	dir := filepath.Join(home, ".claude-sentinel")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		panic(err)
