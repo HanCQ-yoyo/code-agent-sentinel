@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { apiGet, apiPost, apiPut, apiDelete, AuthError } from '../api/client'
-import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, TreeNode, Project, DirTagsResponse, RawFile, PreviewResult, EditResult } from '../types'
+import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, TreeNode, Project, DirTagsResponse, RawFile, PreviewResult, EditResult, SuppressionItem, BaselineResult } from '../types'
 import { type DirTag, type DirTagsMap } from '../lib/dirTags'
 
 type ProjectTab = { kind: 'global' } | { kind: 'project'; path: string }
@@ -50,6 +50,12 @@ interface State {
   previewAssetEdit: (id: string, newContent: string, baseHash: string) => Promise<PreviewResult | undefined>
   commitAssetEdit: (id: string, newContent: string, baseHash: string) => Promise<EditResult | undefined>
   clearEditError: () => void
+  // P3 抑制(suppressions)与 baseline
+  suppressions: SuppressionItem[]
+  fetchSuppressions: () => Promise<void>
+  addSuppression: (body: { fingerprint?: string; rule_id?: string; asset_id?: string; reason: string }) => Promise<boolean>
+  deleteSuppression: (id: string) => Promise<void>
+  generateBaseline: () => Promise<BaselineResult | undefined>
   clearError: () => void
 }
 
@@ -71,6 +77,7 @@ export const useStore = create<State>((set, get) => ({
   agents: null, tree: null, projects: [], activeProjectTab: { kind: 'global' },
   dirTagsDefaults: {}, dirTagsOverrides: {}, selectedTagFilter: null,
   previewResult: null, editError: null,
+  suppressions: [],
   fetchAssets: async () => {
     const inv = await wrap(() => apiGet<Inventory>('/api/assets'), set)
     if (inv) set({ assets: inv })
@@ -155,5 +162,27 @@ export const useStore = create<State>((set, get) => ({
     return r
   },
   clearEditError: () => set({ editError: null }),
+  // P3 抑制与 baseline:豁免列表 CRUD + baseline 生成(POST /api/baseline 跑全量扫描 + union 合并)。
+  // 成功后不自动重扫(brief 未要求);用户下次手动扫描时 suppressed 状态即反映。
+  fetchSuppressions: async () => {
+    const res = await wrap(() => apiGet<{ items: SuppressionItem[] }>('/api/suppressions'), set)
+    if (res) set({ suppressions: res.items ?? [] })
+  },
+  addSuppression: async (body) => {
+    const r = await wrap(() => apiPost<SuppressionItem>('/api/suppressions', body), set)
+    if (r) {
+      // 刷新豁免列表(新条目入列);不重扫,finding 的 suppressed 状态下次扫描才变。
+      get().fetchSuppressions()
+      return true
+    }
+    return false
+  },
+  deleteSuppression: async (id) => {
+    await wrap(() => apiDelete(`/api/suppressions/${encodeURIComponent(id)}`), set)
+    await get().fetchSuppressions()
+  },
+  generateBaseline: async () => {
+    return wrap(() => apiPost<BaselineResult>('/api/baseline'), set)
+  },
   clearError: () => set({ error: null, authError: false }),
 }))

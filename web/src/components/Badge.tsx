@@ -12,12 +12,14 @@ export type BadgeTone =
   | 'sev-high'
   | 'sev-medium'
   | 'sev-low'
+  | 'sev-info'
 
 const sevFill: Record<string, string> = {
   'sev-critical': 'var(--sev-critical)',
   'sev-high': 'var(--sev-high)',
   'sev-medium': 'var(--sev-medium)',
   'sev-low': 'var(--sev-low)',
+  'sev-info': 'var(--sev-info)',
 }
 
 const scopeColor: Record<string, string> = {

@@ -15,6 +15,7 @@ export interface TokenSet {
   sevHigh: string
   sevMedium: string
   sevLow: string
+  sevInfo: string
   scopeGlobal: string
   scopeProject: string
   scopeManaged: string
@@ -44,6 +45,7 @@ export const tokens: Record<Mode, TokenSet> = {
     sevHigh: '#C9742E',
     sevMedium: '#B8901F',
     sevLow: '#2E8B4A',
+    sevInfo: '#6B7280',
     scopeGlobal: '#1B6E6A',
     scopeProject: '#2E8B4A',
     scopeManaged: '#C9742E',
@@ -66,6 +68,7 @@ export const tokens: Record<Mode, TokenSet> = {
     sevHigh: '#E89B5A',
     sevMedium: '#E8C547',
     sevLow: '#4FB868',
+    sevInfo: '#9CA3AF',
     scopeGlobal: '#2D4A6B',
     scopeProject: '#2F5D3A',
     scopeManaged: '#6B4A2D',

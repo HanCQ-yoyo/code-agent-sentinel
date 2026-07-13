@@ -6,7 +6,7 @@ import type { Asset, Finding, Severity, TreeNode } from '../types'
 import { Badge, type BadgeTone } from './Badge'
 import { resolveDirTag, type DirTag, type DirTagsMap } from '../lib/dirTags'
 
-const rank: Record<Severity, number> = { critical: 4, high: 3, medium: 2, low: 1 }
+const rank: Record<Severity, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 0 }
 
 function sevOf(findings: Finding[], assetId: string): Severity | undefined {
   let best: Severity | undefined

@@ -1,11 +1,11 @@
 import { Card } from 'antd'
 import type { Finding, Severity } from '../types'
 
-const order: Severity[] = ['critical', 'high', 'medium', 'low']
-const label: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低' }
+const order: Severity[] = ['critical', 'high', 'medium', 'low', 'info']
+const label: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低', info: '信息' }
 
 export function SeverityChart({ findings }: { findings: Finding[] }) {
-  const counts: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0 }
+  const counts: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 }
   for (const f of findings) counts[f.severity] = (counts[f.severity] ?? 0) + 1
   const total = findings.length || 1
   return (

@@ -2,6 +2,9 @@ import { Card, List, Badge, Typography } from 'antd'
 import type { DetectorStatus } from '../types'
 
 const names: Record<string, string> = {
+  // P3 声明式规则引擎(合并基线 + 注入 + skill 规则,统一 RulesDetector)。
+  rules: '声明式规则引擎',
+  // 旧检测器 ID 保留:历史扫描记录可能携带 baseline/content.injection,需能正常显示中文名。
   baseline: '基线',
   'content.injection': '提示注入',
   secret: '密钥(gitleaks)',

@@ -1,17 +1,32 @@
 import { useState, useMemo, type HTMLAttributes } from 'react'
-import { Table, Segmented, Empty, Typography, Card, Tooltip } from 'antd'
+import { Table, Segmented, Empty, Typography, Card, Tooltip, Alert, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import type { DetectorMeta, Severity } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { RuleDrawer } from './RuleDrawer'
 
-const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低' }
-type FlatRule = { id: string; severity: Severity; description: string; syntax?: string; detector: string; detector_id: string }
+const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低', info: '信息' }
+type FlatRule = {
+  id: string; severity: Severity; description: string; syntax?: string
+  source?: string; valid?: boolean
+  detector: string; detector_id: string
+}
 
 // 级别筛选配色与风险管理列表(FindingTable)共用 .sev-seg 体系:index.css 按 .sev-tab-* 给选中项填级别实色。
-const order: Severity[] = ['critical', 'high', 'medium', 'low']
+const order: Severity[] = ['critical', 'high', 'medium', 'low', 'info']
 const sevDot: Record<Severity, string> = {
-  critical: 'var(--sev-critical)', high: 'var(--sev-high)', medium: 'var(--sev-medium)', low: 'var(--sev-low)',
+  critical: 'var(--sev-critical)', high: 'var(--sev-high)', medium: 'var(--sev-medium)', low: 'var(--sev-low)', info: 'var(--sev-info)',
+}
+
+// 按 rule_id 前缀推导来源分组(baseline./injection./skill./custom.)。
+// 后端 RuleInfo 目前未带 source 字段;前端按前缀推导,后端补充后优先用 r.source。
+function ruleSource(r: FlatRule): string {
+  if (r.source) return r.source
+  const i = r.id.indexOf('.')
+  return i > 0 ? r.id.slice(0, i) : 'other'
+}
+const sourceLabel: Record<string, string> = {
+  baseline: '基线', injection: '注入', skill: '技能', custom: '自定义', other: '其他',
 }
 
 // 级别筛选标签:色点 + 文案 + 计数。「全部」用 accent 点,各级别用对应级别色点。
@@ -47,7 +62,7 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
   )
 
   const counts = useMemo(() => {
-    const c: Record<string, number> = { all: byDetector.length, critical: 0, high: 0, medium: 0, low: 0 }
+    const c: Record<string, number> = { all: byDetector.length, critical: 0, high: 0, medium: 0, low: 0, info: 0 }
     for (const r of byDetector) c[r.severity] = (c[r.severity] ?? 0) + 1
     return c
   }, [byDetector])
@@ -55,7 +70,11 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
   // 合并筛选:在 byDetector 基础上再按 sev。
   const filtered = sev === 'all' ? byDetector : byDetector.filter((r) => r.severity === sev)
 
-  // 列顺序:规则号 → 规则名称 → 级别 → 检测器 → 规则语法。
+  // 无效规则(valid === false)置顶横幅:后端 Meta() 目前只返回已 Validate 的规则(全 valid),
+  // 此横幅为防御性能力——后端补充 valid 字段后即生效。
+  const invalidRules = useMemo(() => byDetector.filter((r) => r.valid === false), [byDetector])
+
+  // 列顺序:规则号 → 规则名称 → 级别 → 来源 → 校验 → 检测器 → 规则语法。
   // 规则号/规则语法加宽并 mono;规则名称作弹性列(ellipsis 截断),收窄其占比。
   // 行可点击 → 打开规则详情抽屉(展示完整语法 + 所属检测器上下文)。
   const columns: ColumnsType<FlatRule> = [
@@ -68,10 +87,26 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
       ),
     },
     { title: '级别', width: 80, render: (_: unknown, r: FlatRule) => <SevBadge tone={`sev-${r.severity}` as BadgeTone}>{sevLabel[r.severity]}</SevBadge> },
+    {
+      // 来源:按 rule_id 前缀推导(baseline./injection./skill./custom.),后端带 source 则优先。
+      title: '来源', width: 90, render: (_: unknown, r: FlatRule) => (
+        <Tag style={{ marginInlineEnd: 0, fontSize: 11, borderColor: 'var(--bg-border)', color: 'var(--text-muted)', background: 'transparent' }}>
+          {sourceLabel[ruleSource(r)] ?? ruleSource(r)}
+        </Tag>
+      ),
+    },
+    {
+      // 校验:valid 默认 true(Meta() 只返回已 Validate 的规则);false → 红色标记。
+      title: '校验', width: 70, render: (_: unknown, r: FlatRule) => (
+        r.valid === false
+          ? <Tag color="error" style={{ marginInlineEnd: 0 }}>无效</Tag>
+          : <Tag color="success" style={{ marginInlineEnd: 0 }}>有效</Tag>
+      ),
+    },
     { title: '检测器', width: 120, dataIndex: 'detector' },
     {
       // 规则语法:baseline 按 op 拼、injection 为正则原文;无则 '--'。列表截断,详情抽屉展示完整。
-      title: '规则语法', width: 360, ellipsis: true, render: (_: unknown, r: FlatRule) => (
+      title: '规则语法', width: 320, ellipsis: true, render: (_: unknown, r: FlatRule) => (
         <Tooltip title={r.syntax || '--'}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{r.syntax || '--'}</span>
         </Tooltip>
@@ -83,6 +118,17 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
 
   return (
     <Card>
+      {/* 无效规则横幅:valid === false 的规则置顶提示。后端 Meta() 目前只返回已校验规则,
+          此横幅为防御性能力(后端补充 valid 字段后即生效)。 */}
+      {invalidRules.length > 0 ? (
+        <Alert
+          type="warning"
+          showIcon
+          style={{ marginBottom: 12 }}
+          message={`${invalidRules.length} 条规则校验失败`}
+          description={invalidRules.map((r) => r.id).join('、')}
+        />
+      ) : null}
       {/* 级别筛选:与风险管理列表同一套 sev-seg 配色(色点 + 选中实色填充),复用 index.css 的 .sev-seg。 */}
       <Segmented
         className="sev-seg"

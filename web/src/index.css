@@ -18,6 +18,7 @@
   --sev-high: #C9742E;
   --sev-medium: #B8901F;
   --sev-low: #2E8B4A;
+  --sev-info: #6B7280;
   --scope-global: #1B6E6A;
   --scope-project: #2E8B4A;
   --scope-managed: #C9742E;
@@ -42,6 +43,7 @@
   --sev-high: #E89B5A;
   --sev-medium: #E8C547;
   --sev-low: #4FB868;
+  --sev-info: #9CA3AF;
   --scope-global: #2D4A6B;
   --scope-project: #2F5D3A;
   --scope-managed: #6B4A2D;
@@ -158,6 +160,9 @@ body {
 }
 .sev-seg .ant-segmented-item-selected.sev-tab-low {
   background: var(--sev-low) !important; color: #fff !important; font-weight: 600;
+}
+.sev-seg .ant-segmented-item-selected.sev-tab-info {
+  background: var(--sev-info) !important; color: #fff !important; font-weight: 600;
 }
 /* 选中时色点转白(中等级别用深字,点也转深);未选中保留级别色点。 */
 .sev-seg .ant-segmented-item-selected .sev-seg-dot {

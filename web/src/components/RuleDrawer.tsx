@@ -2,7 +2,7 @@ import { Drawer, Descriptions, Typography, Empty, Badge as AntBadge } from 'antd
 import type { DetectorMeta, Severity } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
 
-const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低' }
+const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低', info: '信息' }
 
 interface RuleDrawerProps {
   rule: {
@@ -10,6 +10,8 @@ interface RuleDrawerProps {
     severity: Severity
     description: string
     syntax?: string
+    source?: string
+    valid?: boolean
     detector: string
     detector_id: string
   } | null
@@ -48,6 +50,14 @@ export function RuleDrawer({ rule, detectors, onClose }: RuleDrawerProps) {
               <SevBadge tone={`sev-${rule.severity}` as BadgeTone}>{sevLabel[rule.severity]}</SevBadge>
             </Descriptions.Item>
             <Descriptions.Item label="检测器">{rule.detector}</Descriptions.Item>
+            <Descriptions.Item label="来源">{rule.source ?? '--'}</Descriptions.Item>
+            <Descriptions.Item label="校验">
+              {rule.valid === false ? (
+                <AntBadge status="error" text="无效" />
+              ) : (
+                <AntBadge status="success" text="有效" />
+              )}
+            </Descriptions.Item>
             <Descriptions.Item label="规则语法">
               {/* 列表截断展示,详情完整呈现;mono 等宽 + wordBreak 防长正则撑破抽屉,与风险详情抽屉一致。 */}
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, wordBreak: 'break-all', color: 'var(--text)' }}>

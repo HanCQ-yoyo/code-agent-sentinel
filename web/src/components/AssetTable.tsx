@@ -7,7 +7,7 @@ import { Badge, type BadgeTone } from './Badge'
 import { relativeClaudePath } from '../lib/path'
 import { resolveDirTag, type DirTag, type DirTagsMap } from '../lib/dirTags'
 
-const rank: Record<Severity, number> = { critical: 4, high: 3, medium: 2, low: 1 }
+const rank: Record<Severity, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 0 }
 
 function maxSev(findings: Finding[], assetId: string): Severity | undefined {
   let best: Severity | undefined
@@ -22,7 +22,7 @@ function maxSev(findings: Finding[], assetId: string): Severity | undefined {
   return best
 }
 
-const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低' }
+const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低', info: '信息' }
 
 // tagLabel:资产生效标签(相对 .claude 根)。无标签 → 不显示。
 function assetTag(a: Asset, defaults: DirTagsMap, overrides: DirTagsMap): DirTag | undefined {

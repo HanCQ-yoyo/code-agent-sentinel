@@ -1,16 +1,19 @@
 import { useState, type HTMLAttributes } from 'react'
-import { Card, Table, Segmented, Typography, Empty, Tooltip } from 'antd'
+import { Card, Table, Segmented, Typography, Empty, Tooltip, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import type { Finding, Severity, DetectorMeta } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { formatDateTime } from '../lib/format'
 
-const order: Severity[] = ['critical', 'high', 'medium', 'low']
-const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低' }
+const order: Severity[] = ['critical', 'high', 'medium', 'low', 'info']
+const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低', info: '信息' }
 // 筛选标签内的色点颜色(复用 sev token);「全部」用 accent。
 const sevDot: Record<Severity, string> = {
-  critical: 'var(--sev-critical)', high: 'var(--sev-high)', medium: 'var(--sev-medium)', low: 'var(--sev-low)',
+  critical: 'var(--sev-critical)', high: 'var(--sev-high)', medium: 'var(--sev-medium)', low: 'var(--sev-low)', info: 'var(--sev-info)',
 }
+
+// 抑制状态筛选:全部 | 活跃(未抑制)| 已抑制。与 sev 筛选 AND 组合。
+type SupprFilter = 'all' | 'active' | 'suppressed'
 
 // 级别筛选标签:左侧色点 + 文本 + 计数。色点颜色对应级别,选中时整块填该级别色(见 .sev-seg CSS),
 // 与未选中的透明底+色点形成明显差别。
@@ -39,9 +42,19 @@ interface FindingTableProps {
 
 export function FindingTable({ findings, startedAt, detectors, onSelect }: FindingTableProps) {
   const [filter, setFilter] = useState<Severity | 'all'>('all')
+  const [supprFilter, setSupprFilter] = useState<SupprFilter>('all')
   const counts: Record<string, number> = { all: findings.length }
   for (const s of order) counts[s] = findings.filter((f) => f.severity === s).length
-  const shown = filter === 'all' ? findings : findings.filter((f) => f.severity === filter)
+  const supprCounts = {
+    all: findings.length,
+    active: findings.filter((f) => !f.suppressed).length,
+    suppressed: findings.filter((f) => f.suppressed).length,
+  }
+
+  // 合并筛选:sev × 抑制状态(AND)。
+  let shown = filter === 'all' ? findings : findings.filter((f) => f.severity === filter)
+  if (supprFilter === 'active') shown = shown.filter((f) => !f.suppressed)
+  else if (supprFilter === 'suppressed') shown = shown.filter((f) => f.suppressed)
   const sorted = [...shown].sort((a, b) => order.indexOf(a.severity) - order.indexOf(b.severity))
 
   // detector_id → 中文名(供检测器列显示;无匹配则回退 id)。
@@ -53,9 +66,19 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
   const columns: ColumnsType<Finding> = [
     {
       // 风险名称:不设固定宽度,作为弹性主列占据剩余空间并省略;资产列收窄后这里更宽。
+      // 已抑制 finding:名称后附「已抑制」标签(Tooltip 展示抑制来源 + reason),行整体降透明度。
       title: '风险名称', ellipsis: true, render: (_: unknown, f: Finding) => (
         <Tooltip title={f.message}>
-          <span>{f.message}</span>
+          <span>
+            {f.message}
+            {f.suppressed ? (
+              <Tooltip title={`抑制来源:${f.suppression ?? '--'}${f.reason ? ` · 原因:${f.reason}` : ''}`}>
+                <Tag style={{ marginInlineEnd: 0, marginLeft: 6, fontSize: 10, lineHeight: '16px', padding: '0 5px', borderColor: 'var(--bg-border)', color: 'var(--text-muted)', background: 'var(--surface-2)' }}>
+                  已抑制
+                </Tag>
+              </Tooltip>
+            ) : null}
+          </span>
         </Tooltip>
       ),
     },
@@ -88,20 +111,32 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
 
   return (
     <Card>
-      <Segmented
-        className="sev-seg"
-        style={{ marginBottom: 12 }}
-        value={filter}
-        onChange={(v) => setFilter(v as Severity | 'all')}
-        options={[
-          { value: 'all', label: <SevSegLabel text="全部" count={counts.all} />, className: 'sev-tab-all' },
-          ...order.map((s) => ({
-            value: s,
-            label: <SevSegLabel text={sevLabel[s]} count={counts[s]} sev={s} />,
-            className: `sev-tab-${s}`,
-          })),
-        ]}
-      />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 12, alignItems: 'center' }}>
+        <Segmented
+          className="sev-seg"
+          value={filter}
+          onChange={(v) => setFilter(v as Severity | 'all')}
+          options={[
+            { value: 'all', label: <SevSegLabel text="全部" count={counts.all} />, className: 'sev-tab-all' },
+            ...order.map((s) => ({
+              value: s,
+              label: <SevSegLabel text={sevLabel[s]} count={counts[s]} sev={s} />,
+              className: `sev-tab-${s}`,
+            })),
+          ]}
+        />
+        {/* 抑制状态筛选:与 sev 筛选 AND 组合。已抑制 finding 默认仍在「全部」中显示(降透明度)。 */}
+        <Segmented
+          size="small"
+          value={supprFilter}
+          onChange={(v) => setSupprFilter(v as SupprFilter)}
+          options={[
+            { value: 'all', label: `全部 ${supprCounts.all}` },
+            { value: 'active', label: `活跃 ${supprCounts.active}` },
+            { value: 'suppressed', label: `已抑制 ${supprCounts.suppressed}` },
+          ]}
+        />
+      </div>
       <Table<Finding>
         rowKey={(_f, i) => String(i)}
         columns={columns}
@@ -110,12 +145,13 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
         size="middle"
         // 行点击打开抽屉;保留 finding-row testid(e2e [data-testid="finding-row"] 硬约束)。
         // onClick 经 onRow 注入;data-testid 同理(参考 AssetTable onRow 模式)。
+        // 已抑制 finding 行降透明度(opacity 0.55),视觉上与活跃 finding 区分。
         onRow={(f) => ({
           'data-testid': 'finding-row',
           onClick: () => onSelect?.(f),
-          style: onSelect ? { cursor: 'pointer' } : undefined,
+          style: { ...(onSelect ? { cursor: 'pointer' } : {}), ...(f.suppressed ? { opacity: 0.55 } : {}) },
         }) as HTMLAttributes<HTMLElement>}
-        locale={{ emptyText: findings.length === 0 ? <Empty description="暂无发现 · 扫描后显示" /> : '无该级别发现' }}
+        locale={{ emptyText: findings.length === 0 ? <Empty description="暂无发现 · 扫描后显示" /> : '无匹配发现' }}
       />
     </Card>
   )

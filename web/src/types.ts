@@ -1,4 +1,5 @@
-export type Severity = 'critical' | 'high' | 'medium' | 'low'
+// info:低置信度 finding(系数 0.0,不影响健康分),仅 RulesDetector 产生。排在 low 之后。
+export type Severity = 'critical' | 'high' | 'medium' | 'low' | 'info'
 
 export interface Asset {
   id: string; type: string; scope: string; source_path: string; name: string
@@ -9,11 +10,17 @@ export interface Inventory { assets: Asset[]; projects?: Project[]; duplicates?:
 export interface Finding {
   id?: string; detector_id: string; rule_id: string; severity: Severity
   asset_id: string; asset_type: string; asset_name: string; message: string; evidence: string; remediation: string
+  // 规则指纹(仅 RulesDetector 填充);抑制按钮依赖此字段,空则无法按指纹抑制。
+  fingerprint?: string
+  // 抑制状态:suppressed=true 表示已被 baseline/inline 豁免,不计入健康分。
+  suppressed?: boolean; suppression?: string; reason?: string
 }
 export interface HealthScore { score: number; band: string; deductions: { asset_name: string; rule_id: string; severity: Severity; points: number }[] }
 export interface DetectorStatus { id: string; available: boolean; reason?: string }
 export interface EngineInfo { name: string; kind: string; available: boolean; reason?: string }
-export interface RuleInfo { id: string; severity: Severity; description: string; syntax?: string }
+// source/valid:后端 RuleInfo 目前未携带(Meta() 只返回已 Validate 的规则,全 valid);
+// 前端按 rule_id 前缀推导 source 做分组,valid 默认 true。字段预留,后端补充后无需改前端。
+export interface RuleInfo { id: string; severity: Severity; description: string; syntax?: string; source?: string; valid?: boolean }
 // rules/covers/engines 可为 null:Go 端子进程检测器(gitleaks/govulncheck)规则在外部工具内、
 // 或 Covers() 返回 nil(全部资产),nil 切片序列化为 JSON null(非 [])。前端须防御性判空。
 export interface DetectorMeta {
@@ -93,4 +100,22 @@ export interface EditResult {
   dangerous: Danger[]
   new_findings: Finding[]
   rescan_error?: string
+}
+
+// P3 抑制(suppressions)与 baseline
+// 对应 GET /api/suppressions 返回的单条豁免项(后端 suppressionItemResponse)。
+export interface SuppressionItem {
+  id: string // 稳定标识符,DELETE /api/suppressions/:id 用
+  fingerprint: string
+  rule_id: string
+  asset_id: string
+  reason: string
+}
+
+// POST /api/baseline 返回:合并后指纹总数 / 本次新增数 / 扫描发现总数。
+export interface BaselineResult {
+  baseline_path: string
+  total_fps: number
+  added_fps: number
+  scan_findings: number
 }
