@@ -46,19 +46,26 @@ type RulesDetector struct {
 // 项目列表的唯一权威来源是 ~/.claude.json(readProjectList),Scan 内用 configengine
 // .NewEngine(home).ListProjects() 读取即可(文件缺失返回 nil,nil,安全)。
 //
-// 路径 TODO:baseline/suppressions/全局规则目录的路径目前硬编码 filepath.Join(home,
-// ".claude-sentinel", ...);Task 15(配置字段)会把这些路径收进 internal/config,届时改读 cfg。
+// 路径 TODO(Finding #5):baseline/suppressions/全局规则目录的路径目前硬编码
+// filepath.Join(home, ".claude-sentinel", ...),扫描侧(scan-time)不读 cfg 配置。
+// CLI/API 写侧已通过 cfg.ResolveBaselinePath/ResolveSuppressionsPath/ResolveRulesDir
+// 支持 config 覆盖(suppress_path/baseline_path/sentinel_rules_dir);若用户在 config 里
+// 改了这些路径,写会落到自定义路径,但本检测器仍读默认路径 → 扫描时抑制/baseline/全局规则
+// 静默不生效。security 包目前不接收 config(controller 决议待定),故此处不改行为,仅标注。
+// 将来把 config 接入本检测器时,改这三处 filepath.Join 为 cfg.Resolve*Path(home)。
 func NewRulesDetector(home string) *RulesDetector {
 	d := &RulesDetector{home: home}
 
 	// 内置 + 全局规则:LoadForScan(home, nil) = builtin + global(无项目),合并 + Validate。
 	// 用 LoadForScan 而非 LoadBuiltin+LoadDir 分开调,是为了复用 Merge+Validate 一次成型。
+	// 路径 Finding #5:全局规则目录在 LoadForScan 内硬编码,扫描侧不读 cfg(sentinel_rules_dir)。
 	rules, errs := ruleengine.LoadForScan(home, nil)
 	d.baseRules = rules
 	d.loadErrs = errs
 
 	// 抑制配置:文件不存在 → (nil,nil) 静默(用户尚未生成/创建,非错误)。
-	// 路径硬编码,TODO Task 15 收进 config。
+	// 路径 Finding #5:扫描侧硬编码默认路径,不读 cfg(baseline_path/suppress_path 覆盖在
+	// 扫描时不生效,仅写侧生效)。见上方 TODO。
 	baselinePath := filepath.Join(home, ".claude-sentinel", "baseline.json")
 	if bs, err := suppression.LoadBaseline(baselinePath); err != nil {
 		d.loadErrs = append(d.loadErrs, ruleengine.RuleLoadError{

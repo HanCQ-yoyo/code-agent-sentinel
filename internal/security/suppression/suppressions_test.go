@@ -1,6 +1,7 @@
 package suppression
 
 import (
+	"os"
 	"testing"
 )
 
@@ -159,5 +160,26 @@ func TestLoadSuppressionsMissingFileIsEmpty(t *testing.T) {
 	}
 	if s != nil {
 		t.Fatalf("文件不存在应返回 nil, got %+v", s)
+	}
+}
+
+// ── Save 创建父目录 + 文件权限 0o600 ──
+// Finding #9:Suppression.Save 写 0o600(与 BaselineSet.Save 一致),但无权限断言测试。
+// 镜像 baseline_test.go 的 TestBaselineSaveCreatesParentDir 模式。
+func TestSuppressionsSaveCreatesParentDirAndPerm(t *testing.T) {
+	dir := t.TempDir()
+	path := dir + "/nested/dir/suppressions.yaml"
+
+	s := &Suppressions{Items: []Item{{Fingerprint: "fp1", Reason: "r1"}}}
+	if err := s.Save(path); err != nil {
+		t.Fatalf("Save 应创建父目录: %v", err)
+	}
+	// 验证文件权限为 0o600(与 BaselineSet.Save 一致)
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatalf("Stat: %v", err)
+	}
+	if perm := info.Mode().Perm(); perm != 0o600 {
+		t.Errorf("文件权限: got %o, want 0o600", perm)
 	}
 }

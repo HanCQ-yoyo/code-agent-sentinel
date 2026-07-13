@@ -16,12 +16,17 @@ func TestFingerprintStable(t *testing.T) {
 }
 
 func TestFingerprintIgnoresHitContent(t *testing.T) {
+	// Fingerprint 仅取 (rule, assetID),签名里没有 content 参数,
+	// 故指纹不可能依赖命中证据。直接断言此属性:同规则同资产两次调用稳定,
+	// 且与"该资产内容是否变化"无关(Fingerprint 根本看不到内容)。
 	r := mustRule(t, "permissions", map[string]any{"field": "allow", "op": "contains", "value": "Bash(*)"})
-	// 指纹不含命中证据:无论资产内容是什么,同规则同资产指纹相同
 	fp := Fingerprint(r, "asset-1")
-	_ = fp // 只验证不依赖资产内容(算法里没有 content)
 	if len(fp) != 64 {
 		t.Fatalf("want sha256 hex 64 chars, got %d", len(fp))
+	}
+	// 稳定性:同 (rule, assetID) 再算一次必相等(指纹不含命中证据,纯函数)。
+	if fp2 := Fingerprint(r, "asset-1"); fp2 != fp {
+		t.Fatalf("Fingerprint 必须稳定且不依赖命中内容: fp1=%s fp2=%s", fp, fp2)
 	}
 }
 

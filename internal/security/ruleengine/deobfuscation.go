@@ -55,7 +55,6 @@ func stripHTMLComments(s string) string {
 	return htmlCommentRe.ReplaceAllString(s, "")
 }
 
-var b64Re = regexp.MustCompile(`[A-Za-z0-9+/=]{40,}`)
 var shortB64Re = regexp.MustCompile(`[A-Za-z0-9+/=]{16,}`)
 
 // decodeBase64Chunks 尝试解码文本里的 base64 片段,返回解码后的字符串。
@@ -69,7 +68,6 @@ func decodeBase64Chunks(s string) []string {
 			}
 		}
 	}
-	_ = b64Re
 	return out
 }
 

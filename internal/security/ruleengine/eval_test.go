@@ -246,12 +246,6 @@ func TestEvalAndShortCircuitFail(t *testing.T) {
 	}
 }
 
-// TestEvalBase64MultiBlockRegression 验证 base64 反混淆在文本含 ≥2 个可解码块时
-// 不再越界 panic,且能命中匹配的块。
-// 回归 bug:旧 evalRegexMatch 用 rule.Deobfuscation[i-1] 取方法名,但 base64
-// 可能产生 N 个 candidate(每块一个),导致索引越界 panic。
-// ── Task 8 引擎缺口修复测试 ──
-
 // TestEvalContainsJsonRawMessage 验证 stringify 正确处理 json.RawMessage
 // (settings 解析器把 raw 存为 json.RawMessage = []byte)。
 // 旧 stringify 用 fmt.Sprint(json.RawMessage{...}) 产生 "[123 34 ...]" 而非 JSON 文本,
@@ -305,6 +299,11 @@ func TestEvalRegexMatchPostExcludeMultiMatch(t *testing.T) {
 	}
 }
 
+// TestEvalBase64MultiBlockRegression 验证 base64 反混淆在文本含 ≥2 个可解码块时
+// 不再越界 panic,且能命中匹配的块。
+// 回归 bug:旧 evalRegexMatch 用 rule.Deobfuscation[i-1] 取方法名,但 base64
+// 可能产生 N 个 candidate(每块一个),导致索引越界 panic。
+// ── Task 8 引擎缺口修复测试 ──
 func TestEvalBase64MultiBlockRegression(t *testing.T) {
 	// 两个可独立 base64 解码的块(各 ≥16 字符),非匹配块在前、匹配块在后:
 	// "c29tZSBoYXJtbGVzcyBwYWRkaW5nIHRleHQgaGVyZQ==" → "some harmless padding text here"(44 字符,不匹配 regex)
