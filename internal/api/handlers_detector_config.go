@@ -32,11 +32,13 @@ func (s *Server) putDetectorConfig(c *gin.Context) {
 }
 
 // detectorConfig 返回 cfg.Detectors 的快照(含默认展开),nil 时返回全启用默认。
-func (s *Server) detectorConfig() config.DetectorsConfig {
+// 返回指针而非值:DetectorsConfig 含 sync.RWMutex(go vet copylocks 会标记值拷贝),
+// 交给 c.JSON(interface{}) 时按指针传递避免拷贝;快照是逐字段新建的,该 mutex 为零值未用。
+func (s *Server) detectorConfig() *config.DetectorsConfig {
 	s.Config.EnsureDetectors()
 	// 读访问器已有锁;这里取一份快照供序列化。
 	dc := s.Config.Detectors
-	return config.DetectorsConfig{
+	return &config.DetectorsConfig{
 		Rules:  config.DetectorToggle{Enabled: dc.RulesEnabled()},
 		Secret: config.BinaryDetectorConfig{Enabled: dc.SecretEnabled(), Binary: dc.SecretBinaryOrDefault()},
 		Dep: config.DepDetectorConfig{
