@@ -58,10 +58,11 @@ func runFullScan(cfg *config.Config, home string) (*security.ScanResult, error) 
 	if err != nil {
 		return nil, fmt.Errorf("发现资产失败: %w", err)
 	}
+	cfg.EnsureDetectors() // 与 main.go 一致:检测器持 cfg.Detectors 指针
 	r := security.NewRegistry()
-	r.Register(security.NewRulesDetector(home, nil))
-	r.Register(security.NewSecretDetector(nil))
-	r.Register(security.NewDependencyDetector(nil))
+	r.Register(security.NewRulesDetector(home, cfg.Detectors))
+	r.Register(security.NewSecretDetector(cfg.Detectors))
+	r.Register(security.NewDependencyDetector(cfg.Detectors))
 	orch := &security.Orchestrator{Registry: r}
 	res, err := orch.Scan(context.Background(), inv.Assets, nil)
 	if err != nil {

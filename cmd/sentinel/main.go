@@ -93,11 +93,12 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 		home = h
 	}
 
+	cfg.EnsureDetectors() // 确保 Detectors 非 nil,检测器持其指针,API 写原地生效
 	eng := configengine.NewEngine(home)
 	r := security.NewRegistry()
-	r.Register(security.NewRulesDetector(home, nil))
-	r.Register(security.NewSecretDetector(nil))
-	r.Register(security.NewDependencyDetector(nil))
+	r.Register(security.NewRulesDetector(home, cfg.Detectors))
+	r.Register(security.NewSecretDetector(cfg.Detectors))
+	r.Register(security.NewDependencyDetector(cfg.Detectors))
 	orch := &security.Orchestrator{Registry: r}
 
 	// C-BUILD-1: --token 非空则用之(调试/测试),否则随机生成。

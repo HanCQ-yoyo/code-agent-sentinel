@@ -110,6 +110,8 @@ func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	api.GET("/health", s.getHealth)
 	api.GET("/dashboard", s.getDashboard)
 	api.GET("/detectors", s.getDetectors)
+	api.GET("/detectors/config", s.getDetectorConfig)
+	api.PUT("/detectors/config", s.putDetectorConfig)
 	api.GET("/agents", s.getAgents)
 	api.GET("/project", s.getProject)
 	api.GET("/history", s.getHistoryList)
