@@ -30,6 +30,10 @@ type Config struct {
 	SuppressPath        string  `yaml:"suppress_path"`         // 空=默认 ~/.claude-sentinel/suppressions.yaml
 	BaselinePath        string  `yaml:"baseline_path"`         // 空=默认 ~/.claude-sentinel/baseline.json
 	SuppressionDiscount float64 `yaml:"suppression_discount"`  // 空/0=默认 0.3
+
+	// 检测器运行期配置(启用开关 + 二进制路径)。nil=全启用默认(向后兼容)。
+	// main.go 启动时 EnsureDetectors 确保非 nil,使 API 写能原地被检测器读到。
+	Detectors *DetectorsConfig `yaml:"detectors"`
 }
 
 func DefaultConfig() *Config {
@@ -108,4 +112,21 @@ func (c *Config) ResolveSuppressionDiscount() float64 {
 		return c.SuppressionDiscount
 	}
 	return DefaultSuppressionDiscount
+}
+
+// EnsureDetectors 确保 c.Detectors 非 nil(分配全启用默认)。已存在则不覆盖。
+// 供 main.go 启动时调用:检测器持有 *DetectorsConfig 指针,PUT /api/detectors/config
+// 原地改写其字段,故指针须在构造检测器前就稳定指向一个非 nil 对象。
+//
+// 注意:&DetectorsConfig{} 的零值是全 false(全禁用),与"全启用默认"语义相反,
+// 故需显式设 Enabled=true。bool 零值是 false,无法区分"未设"与"显式禁用",
+// 但 nil-safe 访问器已覆盖"无 detectors 段"的情况(nil→全启用),此处覆盖"新建"的情况。
+func (c *Config) EnsureDetectors() {
+	if c.Detectors == nil {
+		c.Detectors = &DetectorsConfig{
+			Rules:  DetectorToggle{Enabled: true},
+			Secret: BinaryDetectorConfig{Enabled: true},
+			Dep:    DepDetectorConfig{Enabled: true},
+		}
+	}
 }
