@@ -39,6 +39,45 @@ func TestValidateBadRegexFails(t *testing.T) {
 	}
 }
 
+// TestValidateRejectsRE2Incompatible 验证规则 value 用了 RE2 不支持的正则特性时,
+// Validate 返回 RuleLoadError(而非 panic 或静默接受)。
+// Finding #4:RE2 子集约束(无前瞻/后瞻/反向引用/\u)只在 TestValidateBadRegexFails 里
+// 用 `(?P<bad`(未闭合命名捕获)覆盖,特性级拒绝缺测试 —— 未来重构 compileRegexPattern
+// 可能静默回退到 panic 或接受。本测试锁定现有正确行为。
+//
+// 实测 Go regexp(RE2)对下列全部报错:
+//   - 前瞻 (?=...)/(?!...) → "unsupported Perl syntax"
+//   - 后瞻 (?<=...)/(?<!...) → Go 把 (?< 解析为命名捕获开头,故报 "invalid named capture"
+//   - 反向引用 \1 → "invalid escape sequence: `\\1`"
+//   - Unicode 转义 \u → "invalid escape sequence: `\\u`"(Go regexp 用 \x{NNNN},不支持 \u)
+func TestValidateRejectsRE2Incompatible(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+	}{
+		{"lookahead", `foo(?=bar)`},
+		{"negative_lookahead", `foo(?!bar)`},
+		{"lookbehind", `(?<=foo)bar`},
+		{"negative_lookbehind", `(?<!foo)bar`},
+		{"backreference", `(foo)\1`},
+		{"unicode_escape_u", "\\u0041"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rules := []Rule{{ID: "x", Severity: "high", AssetType: "skill",
+				Match: MatchNode{raw: map[string]any{"field": "content", "op": "regex_match", "value": c.value}}}}
+			// 不应 panic:RE2 不兼容特性经 compileRegexPattern 报错 → Validate 转 RuleLoadError
+			valid, errs := Validate(rules)
+			if len(errs) == 0 {
+				t.Fatalf("RE2 不兼容特性 %s (value=%q) 应被拒绝为 RuleLoadError,但被静默接受(valid=%d)", c.name, c.value, len(valid))
+			}
+			if len(valid) != 0 {
+				t.Fatalf("RE2 不兼容特性 %s 不应进 valid, got %d", c.name, len(valid))
+			}
+		})
+	}
+}
+
 // M1: repeat_check 的 metadata 拼写错误应报错(防止静默回退默认值掩盖意图)
 func TestValidateRepeatCheckBadMetadataFails(t *testing.T) {
 	// 拼写错误的键名(repeat_min_length 而非 repeat_min_len)
