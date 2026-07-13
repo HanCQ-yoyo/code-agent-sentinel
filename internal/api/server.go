@@ -115,6 +115,10 @@ func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	api.GET("/history", s.getHistoryList)
 	api.GET("/history/:id", s.getHistoryDetail)
 	api.DELETE("/history/:id", s.deleteHistory)
+	api.POST("/suppressions", s.postSuppression)
+	api.GET("/suppressions", s.getSuppressions)
+	api.DELETE("/suppressions/:id", s.deleteSuppression)
+	api.POST("/baseline", s.postBaseline)
 }
 
 func (s *Server) notImplemented(c *gin.Context) {
