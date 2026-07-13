@@ -66,6 +66,8 @@ func TestRulesListShowsBuiltin(t *testing.T) {
 }
 
 // TestBaselineCreate 验证 sentinel baseline --create 能跑全量扫描并把指纹写入 baseline.json。
+// Finding #2:--create 应 UNION(保留已有指纹 + 添加新发现),与 API postBaseline 一致,
+// 而非覆盖。预置一条不会在本次扫描复现的假指纹,验证 --create 后它仍被保留。
 func TestBaselineCreate(t *testing.T) {
 	home := t.TempDir()
 	// 构造一个会触发 baseline.wildcard-bash 的 settings.json
@@ -80,6 +82,17 @@ func TestBaselineCreate(t *testing.T) {
 
 	cfg := config.DefaultConfig()
 	baselinePath := cfg.ResolveBaselinePath(home)
+
+	// 预置一条不会在本次扫描复现的假指纹(模拟之前记录、当前不复现的旧 finding)
+	preseed := &suppression.BaselineSet{
+		Version:      "1",
+		GeneratedAt:  "2026-01-01T00:00:00Z",
+		Fingerprints: map[string]bool{"preseed-stale-fp": true},
+	}
+	if err := preseed.Save(baselinePath); err != nil {
+		t.Fatalf("预置 baseline 失败: %v", err)
+	}
+
 	out, err := runBaselineCreate(cfg, home)
 	if err != nil {
 		t.Fatalf("baseline create error: %v\noutput: %s", err, out)
@@ -95,6 +108,14 @@ func TestBaselineCreate(t *testing.T) {
 	}
 	if bs == nil || len(bs.Fingerprints) == 0 {
 		t.Fatalf("baseline 应含至少一条指纹, got %+v", bs)
+	}
+	// UNION 语义:预置的假指纹必须保留(覆盖语义会丢失它)
+	if !bs.Contains("preseed-stale-fp") {
+		t.Fatal("--create 应保留已有指纹(UNION 语义),预置假指纹被丢失(覆盖语义)")
+	}
+	// UNION 后指纹数应 >= 2:预置 1 条 + 本次扫描新发现至少 1 条
+	if len(bs.Fingerprints) < 2 {
+		t.Fatalf("UNION 后指纹数应 >= 2(预置 1 + 新发现 >=1), got %d", len(bs.Fingerprints))
 	}
 }
 

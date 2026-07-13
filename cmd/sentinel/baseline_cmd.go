@@ -15,7 +15,8 @@ import (
 
 // newBaselineCmd 构造 `sentinel baseline` 子命令(--create / --prune)。
 //
-// --create:跑一次全量扫描,收集所有 Finding 的 fingerprint,快照到 baseline.json。
+// --create:跑一次全量扫描,把所有 Finding 的 fingerprint 合并(union)到 baseline.json
+// (保留已有指纹 + 添加新发现,与 API POST /api/baseline 一致;不清理不复现指纹)。
 // --prune:重新扫描,删掉 baseline 中已不复现的指纹,保存。
 //
 // 路径解析:baseline.json 路径来自 cfg.ResolveBaselinePath(home)(支持 config 覆盖)。
@@ -28,7 +29,7 @@ func newBaselineCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "baseline",
-		Short: "baseline 管理:--create 快照 / --prune 清理",
+		Short: "baseline 管理:--create 合并快照 / --prune 清理",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !create && !prune {
 				return fmt.Errorf("请指定 --create 或 --prune")
@@ -44,7 +45,7 @@ func newBaselineCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.claude-sentinel/config.yaml)")
-	cmd.Flags().BoolVar(&create, "create", false, "跑全量扫描并快照全部指纹到 baseline.json")
+	cmd.Flags().BoolVar(&create, "create", false, "跑全量扫描并把指纹合并到 baseline.json(保留已有 + 添加新发现)")
 	cmd.Flags().BoolVar(&prune, "prune", false, "重新扫描并删除 baseline 中已不复现的指纹")
 	return cmd
 }
@@ -88,7 +89,9 @@ func runBaselineCreateCmd(cmd *cobra.Command, cfg *config.Config, home string) e
 	return err
 }
 
-// runBaselineCreate 跑全量扫描,把全部 Finding 的 fingerprint 快照到 baseline.json。
+// runBaselineCreate 跑全量扫描,把全部 Finding 的 fingerprint 合并到 baseline.json。
+// Finding #2:UNION 语义(保留已有指纹 + 添加新发现),与 API postBaseline 一致。
+// 旧实现用当前扫描的指纹直接覆盖,会丢失之前记录但当前不复现的指纹(覆盖语义)。
 // 返回可读输出。路径由 cfg.ResolveBaselinePath(home) 解析(支持 config 覆盖)。
 func runBaselineCreate(cfg *config.Config, home string) (string, error) {
 	res, err := runFullScan(cfg, home)
@@ -96,17 +99,41 @@ func runBaselineCreate(cfg *config.Config, home string) (string, error) {
 		return "", err
 	}
 	fps := collectFingerprints(res)
-	bs := &suppression.BaselineSet{
-		Version:      "1",
-		GeneratedAt:  time.Now().UTC().Format(time.RFC3339),
-		Fingerprints: fps,
-	}
 	baselinePath := cfg.ResolveBaselinePath(home)
+
+	existing, err := suppression.LoadBaseline(baselinePath)
+	if err != nil {
+		return "", fmt.Errorf("加载 baseline 失败: %w", err)
+	}
+
+	// 合并:union(保留已有 + 添加新发现)。无 baseline 时新建。
+	var bs *suppression.BaselineSet
+	added := 0
+	if existing != nil {
+		bs = existing
+		if bs.Fingerprints == nil {
+			bs.Fingerprints = make(map[string]bool)
+		}
+		for fp := range fps {
+			if !bs.Fingerprints[fp] {
+				bs.Fingerprints[fp] = true
+				added++
+			}
+		}
+	} else {
+		bs = &suppression.BaselineSet{
+			Version:      "1",
+			Fingerprints: fps,
+		}
+		added = len(fps)
+	}
+	bs.GeneratedAt = time.Now().UTC().Format(time.RFC3339)
+
 	if err := bs.Save(baselinePath); err != nil {
 		return "", fmt.Errorf("保存 baseline 失败: %w", err)
 	}
-	return fmt.Sprintf("baseline 已生成: %s\n  扫描产出 %d 条 finding, %d 条唯一指纹\n",
-		baselinePath, len(res.Findings), len(fps)), nil
+	return fmt.Sprintf("baseline 已生成(合并): %s\n  扫描产出 %d 条 finding, 新增 %d 条指纹, 合并后共 %d 条唯一指纹\n",
+		baselinePath, len(res.Findings), added, len(bs.Fingerprints)), nil
 }
 
 // runBaselinePruneCmd 执行 --prune:加载旧 baseline → 重新扫描 → 删已不复现指纹 → 保存。
