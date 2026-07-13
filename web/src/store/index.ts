@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { apiGet, apiPost, apiPut, apiDelete, AuthError } from '../api/client'
-import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, TreeNode, Project, DirTagsResponse, RawFile, PreviewResult, EditResult, SuppressionItem, BaselineResult } from '../types'
+import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, TreeNode, Project, DirTagsResponse, RawFile, PreviewResult, EditResult, SuppressionItem, BaselineResult, DetectorsConfig } from '../types'
 import { type DirTag, type DirTagsMap } from '../lib/dirTags'
 
 type ProjectTab = { kind: 'global' } | { kind: 'project'; path: string }
@@ -9,6 +9,7 @@ interface State {
   assets: Inventory | null
   scan: ScanResult | null
   detectors: DetectorMeta[]
+  detectorConfig: DetectorsConfig | null
   history: ScanSummary[]
   loading: boolean
   error: string | null
@@ -30,6 +31,8 @@ interface State {
   fetchAssets: () => Promise<void>
   runScan: (detectors?: string) => Promise<void>
   fetchDetectors: () => Promise<void>
+  fetchDetectorConfig: () => Promise<void>
+  saveDetectorConfig: (cfg: DetectorsConfig) => Promise<boolean>
   fetchLatestScan: () => Promise<void>
   fetchHistory: () => Promise<void>
   fetchHistoryDetail: (id: string) => Promise<ScanRecord | undefined>
@@ -73,7 +76,7 @@ const wrap = async <T>(fn: () => Promise<T>, set: (p: Partial<State>) => void): 
 }
 
 export const useStore = create<State>((set, get) => ({
-  assets: null, scan: null, detectors: [], history: [], loading: false, error: null, authError: false,
+  assets: null, scan: null, detectors: [], detectorConfig: null, history: [], loading: false, error: null, authError: false,
   agents: null, tree: null, projects: [], activeProjectTab: { kind: 'global' },
   dirTagsDefaults: {}, dirTagsOverrides: {}, selectedTagFilter: null,
   previewResult: null, editError: null,
@@ -100,6 +103,20 @@ export const useStore = create<State>((set, get) => ({
       })
       set({ detectors: normalized })
     }
+  },
+  fetchDetectorConfig: async () => {
+    const res = await wrap(() => apiGet<DetectorsConfig>('/api/detectors/config'), set)
+    if (res) set({ detectorConfig: res })
+  },
+  saveDetectorConfig: async (cfg) => {
+    const res = await wrap(() => apiPut<DetectorsConfig>('/api/detectors/config', cfg), set)
+    if (res) {
+      set({ detectorConfig: res })
+      // 配置改了:检测器 enabled/available 变化,刷新 detectors
+      get().fetchDetectors()
+      return true
+    }
+    return false
   },
   fetchLatestScan: async () => {
     const res = await wrap(() => apiGet<ScanRecord>('/api/scan/result'), set)

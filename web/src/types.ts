@@ -17,14 +17,15 @@ export interface Finding {
 }
 export interface HealthScore { score: number; band: string; deductions: { asset_name: string; rule_id: string; severity: Severity; points: number }[] }
 export interface DetectorStatus { id: string; available: boolean; reason?: string }
-export interface EngineInfo { name: string; kind: string; available: boolean; reason?: string }
+export interface EngineInfo { name: string; kind: string; enabled: boolean; available: boolean; reason?: string }
 // source/valid:后端 RuleInfo 目前未携带(Meta() 只返回已 Validate 的规则,全 valid);
 // 前端按 rule_id 前缀推导 source 做分组,valid 默认 true。字段预留,后端补充后无需改前端。
 export interface RuleInfo { id: string; severity: Severity; description: string; syntax?: string; source?: string; valid?: boolean }
 // rules/covers/engines 可为 null:Go 端子进程检测器(gitleaks/govulncheck)规则在外部工具内、
 // 或 Covers() 返回 nil(全部资产),nil 切片序列化为 JSON null(非 [])。前端须防御性判空。
 export interface DetectorMeta {
-  id: string; name: string; engines: EngineInfo[] | null; rules: RuleInfo[] | null; covers: string[] | null
+  id: string; name: string; enabled: boolean
+  engines: EngineInfo[] | null; rules: RuleInfo[] | null; covers: string[] | null
   available: boolean; reason?: string
 }
 export interface ScanResult {
@@ -118,4 +119,14 @@ export interface BaselineResult {
   total_fps: number
   added_fps: number
   scan_findings: number
+}
+
+// 检测器运行期配置(GET/PUT /api/detectors/config)。
+export interface DetectorToggle { enabled: boolean }
+export interface BinaryDetectorConfig { enabled: boolean; binary: string }
+export interface DepDetectorConfig { enabled: boolean; engines: Record<string, BinaryDetectorConfig> }
+export interface DetectorsConfig {
+  rules: DetectorToggle
+  secret: BinaryDetectorConfig
+  dep: DepDetectorConfig
 }

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
-import { Card, Typography, Empty, Badge as AntBadge, Tabs } from 'antd'
+import { Card, Typography, Empty, Badge as AntBadge, Tabs, Switch, Input, Button } from 'antd'
 import { useStore } from '../store'
-import type { DetectorMeta } from '../types'
+import type { DetectorMeta, DetectorsConfig } from '../types'
 import { Badge, type BadgeTone } from '../components/Badge'
 import { RulesTable } from '../components/RulesTable'
 
@@ -29,7 +29,7 @@ function DetectorChip({ d, active, onClick }: { d: DetectorMeta; active: boolean
         color: 'var(--text)',
       }}
     >
-      <AntBadge status={d.available ? 'success' : 'error'} />
+      <AntBadge status={!d.enabled ? 'default' : d.available ? 'success' : 'error'} />
       <span>{d.name}</span>
       <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{ruleCountLabel(d)}</span>
     </button>
@@ -46,7 +46,7 @@ function DetectorDetailStrip({ d }: { d: DetectorMeta }) {
           <div style={{ marginTop: 4 }}>
             {(d.engines ?? []).map((e) => (
               <div key={e.name} style={{ fontSize: 13 }}>
-                <AntBadge status={e.available ? 'success' : 'error'} />
+                <AntBadge status={!e.enabled ? 'default' : e.available ? 'success' : 'error'} />
                 <span style={{ color: 'var(--text)' }}>{e.name}</span>
                 <Typography.Text type="secondary" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, marginLeft: 8 }}>{e.kind}</Typography.Text>
                 {!e.available && e.reason ? <Typography.Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>{e.reason}</Typography.Text> : null}
@@ -70,10 +70,62 @@ function DetectorDetailStrip({ d }: { d: DetectorMeta }) {
   )
 }
 
+// 检测器配置控件:启用开关 + 二进制路径(rules 仅开关;secret 单二进制;dep 每引擎一行)。
+function DetectorConfigControls({ d, draft, setDraft }: { d: DetectorMeta; draft: DetectorsConfig | null; setDraft: (c: DetectorsConfig) => void }) {
+  if (!draft) return null
+  const patch = (p: Partial<DetectorsConfig>) => setDraft({ ...draft, ...p })
+  return (
+    <Card size="small" style={{ background: 'var(--surface2)', marginTop: 8 }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {d.id === 'rules' ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 13 }}>启用</span>
+            <Switch size="small" checked={draft.rules.enabled} onChange={(v) => patch({ rules: { ...draft.rules, enabled: v } })} />
+          </div>
+        ) : null}
+        {d.id === 'secret' ? (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13 }}>启用</span>
+              <Switch size="small" checked={draft.secret.enabled} onChange={(v) => patch({ secret: { ...draft.secret, enabled: v } })} />
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13, width: 80 }}>二进制路径</span>
+              <Input size="small" style={{ flex: 1 }} placeholder="默认 gitleaks" value={draft.secret.binary} onChange={(e) => patch({ secret: { ...draft.secret, binary: e.target.value } })} />
+            </div>
+          </>
+        ) : null}
+        {d.id === 'dep' ? (
+          <>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 13 }}>启用</span>
+              <Switch size="small" checked={draft.dep.enabled} onChange={(v) => patch({ dep: { ...draft.dep, enabled: v } })} />
+            </div>
+            {['npm', 'govulncheck'].map((name) => {
+              const e = draft.dep.engines[name] ?? { enabled: true, binary: '' }
+              return (
+                <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Switch size="small" checked={e.enabled} onChange={(v) => patch({ dep: { ...draft.dep, engines: { ...draft.dep.engines, [name]: { ...e, enabled: v } } } })} />
+                  <span style={{ fontSize: 13, width: 100 }}>{name}</span>
+                  <Input size="small" style={{ flex: 1 }} placeholder={`默认 ${name}`} value={e.binary} onChange={(ev) => patch({ dep: { ...draft.dep, engines: { ...draft.dep.engines, [name]: { ...e, binary: ev.target.value } } } })} />
+                </div>
+              )
+            })}
+          </>
+        ) : null}
+      </div>
+    </Card>
+  )
+}
+
 export default function Settings() {
-  const { detectors, fetchDetectors } = useStore()
+  const { detectors, fetchDetectors, detectorConfig, fetchDetectorConfig, saveDetectorConfig } = useStore()
   const [filter, setFilter] = useState<string | undefined>(undefined)
+  const [draft, setDraft] = useState<DetectorsConfig | null>(null)
+  const [saving, setSaving] = useState(false)
   useEffect(() => { fetchDetectors() }, [fetchDetectors])
+  useEffect(() => { fetchDetectorConfig() }, [fetchDetectorConfig])
+  useEffect(() => { if (detectorConfig) setDraft(detectorConfig) }, [detectorConfig])
 
   const selected = filter ? detectors.find((d) => d.id === filter) : undefined
   const totalRules = detectors.reduce((n, d) => n + (d.rules ?? []).length, 0)
@@ -105,7 +157,19 @@ export default function Settings() {
 
       {/* 选中检测器详情条;选「全部」显示摘要。 */}
       {selected ? (
-        <DetectorDetailStrip d={selected} />
+        <>
+          <DetectorDetailStrip d={selected} />
+          <DetectorConfigControls d={selected} draft={draft} setDraft={setDraft} />
+          <div>
+            <Button type="primary" size="small" loading={saving} onClick={async () => {
+              if (!draft) return
+              setSaving(true)
+              const ok = await saveDetectorConfig(draft)
+              setSaving(false)
+              if (!ok) { /* error 已由 wrap 写入 store.error */ }
+            }}>保存配置</Button>
+          </div>
+        </>
       ) : (
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           共 {detectors.length} 个检测器,{availCount} 个可用,{totalRules} 条规则。
