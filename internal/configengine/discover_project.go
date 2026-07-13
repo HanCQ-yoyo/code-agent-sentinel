@@ -54,7 +54,13 @@ func (e *Engine) discoverOneProject(inv *Inventory, p Project) {
 	if a, _ := parseClaudeJSONProjectMCP(e.ClaudeJSON, p.Path, ScopeProject); a != nil {
 		inv.Assets = append(inv.Assets, a...)
 	}
+	// memory:项目 .claude/ 下 + 项目根 p.Path 下(Claude Code 标准项目记忆位置在项目根,
+	// 非仅 .claude/)。两处都扫,覆盖 CLAUDE.md 与 CLAUDE.local.md。两份同名文件 SourcePath
+	// 不同 → ID 不同,均保留(可能被 detectDuplicates 标记,符合预期)。
 	if mem, _ := parseMemory(d, ScopeProject); mem != nil {
+		inv.Assets = append(inv.Assets, mem...)
+	}
+	if mem, _ := parseMemory(p.Path, ScopeProject); mem != nil {
 		inv.Assets = append(inv.Assets, mem...)
 	}
 	for _, sub := range []struct {

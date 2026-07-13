@@ -12,9 +12,15 @@ import (
 // memory/ 下每个 .md 文件产出一条资产。两者均无时不致错。
 func parseMemory(claudeDir string, scope Scope) ([]Asset, error) {
 	var out []Asset
-	if p := filepath.Join(claudeDir, "CLAUDE.md"); fileExists(p) {
+	// CLAUDE.md 与 CLAUDE.local.md:项目根/全局的标准记忆文件。归入 memory 类型,
+	// Name 区分为文件名(供 UI 与去重区分)。
+	for _, name := range []string{"CLAUDE.md", "CLAUDE.local.md"} {
+		p := filepath.Join(claudeDir, name)
+		if !fileExists(p) {
+			continue
+		}
 		data, _ := os.ReadFile(p)
-		a := Asset{Type: AssetMemory, Scope: scope, SourcePath: p, Name: "CLAUDE.md", Content: string(data)}
+		a := Asset{Type: AssetMemory, Scope: scope, SourcePath: p, Name: name, Content: string(data)}
 		fillHash(&a)
 		out = append(out, a)
 	}

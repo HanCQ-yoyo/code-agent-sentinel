@@ -141,3 +141,59 @@ func TestDiscoverProjectsNoCrossProjectScriptDup(t *testing.T) {
 		}
 	}
 }
+
+// TestDiscoverProjectRootClaudeMD 验证项目根 <proj>/CLAUDE.md 与 CLAUDE.local.md 被发现
+// (Claude Code 标准项目记忆位置在项目根,而非 .claude/ 下)。两者归入 memory 类型。
+func TestDiscoverProjectRootClaudeMD(t *testing.T) {
+	f := newFixture(t)
+	f.writeProject("myproj/.claude/settings.json", `{}`) // 确保 discoverOneProject 运行
+	f.writeProject("myproj/CLAUDE.md", `# proj root`)
+	f.writeProject("myproj/CLAUDE.local.md", `# proj local`)
+	f.writeProject("myproj/.claude/CLAUDE.md", `# proj claude dir`)
+	f.writeClaudeJSON(`{"projects":{"` + filepath.Join(f.home, "myproj") + `":{}}}`)
+
+	eng := NewEngine(f.home)
+	inv, err := eng.Discover()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 用计数断言:CLAUDE.md 应出现 2 次(项目根 + .claude/),CLAUDE.local.md 1 次(项目根)。
+	counts := map[string]int{}
+	for _, a := range inv.Assets {
+		if a.Type == AssetMemory && a.Scope == ScopeProject {
+			counts[a.Name]++
+		}
+	}
+	if counts["CLAUDE.md"] != 2 {
+		t.Errorf("CLAUDE.md 期望 2 份(项目根+.claude/),实际 %d", counts["CLAUDE.md"])
+	}
+	if counts["CLAUDE.local.md"] != 1 {
+		t.Errorf("CLAUDE.local.md 期望 1 份(项目根),实际 %d", counts["CLAUDE.local.md"])
+	}
+}
+
+// TestDiscoverGlobalClaudeLocal 验证全局 ~/.claude/CLAUDE.local.md 被发现。
+func TestDiscoverGlobalClaudeLocal(t *testing.T) {
+	f := newFixture(t)
+	f.write("settings.json", `{}`)
+	f.write("CLAUDE.md", `# global`)
+	f.write("CLAUDE.local.md", `# global local`)
+
+	eng := NewEngine(f.home)
+	inv, err := eng.Discover()
+	if err != nil {
+		t.Fatal(err)
+	}
+	names := map[string]bool{}
+	for _, a := range inv.Assets {
+		if a.Type == AssetMemory && a.Scope == ScopeGlobal {
+			names[a.Name] = true
+		}
+	}
+	if !names["CLAUDE.md"] {
+		t.Error("缺全局 CLAUDE.md")
+	}
+	if !names["CLAUDE.local.md"] {
+		t.Error("缺全局 CLAUDE.local.md")
+	}
+}
