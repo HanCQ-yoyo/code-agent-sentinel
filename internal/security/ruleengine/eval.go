@@ -227,13 +227,11 @@ func evalRegexMatch(field string, fieldVal any, value any, rule *Rule, op string
 		excludePats = compilePostExcludePatterns(rule)
 	}
 
-	// 无反混淆:直接对原始文本跑
-	if re.MatchString(text) {
-		hitStr := re.FindString(text)
-		// post_exclude:命中上下文匹配排除模式 → 降级(继续尝试反混淆)
-		if !applyPostExclude(hitStr, excludePats) {
-			return true, hitStr
-		}
+	// 无反混淆:直接对原始文本跑(遍历全部匹配,首个未被 post_exclude 排除的命中)。
+	// Finding #1 修复:旧实现用 FindString 只取最左匹配,若该匹配被 post_exclude 排除就
+	// 直接放弃,从不检查后续匹配 → 漏报(如 PE2 对 "sudo -v && sudo rm" 漏报 sudo rm)。
+	if hit, ok := firstNonExcludedHit(re, text, excludePats); ok {
+		return true, hit
 	}
 
 	// 有反混淆:对每个 candidate 跑(不链式)。
@@ -245,17 +243,27 @@ func evalRegexMatch(field string, fieldVal any, value any, rule *Rule, op string
 			if c.Method == "" {
 				continue // 原始文本,已跑过
 			}
-			if re.MatchString(c.Text) {
-				hitStr := re.FindString(c.Text)
-				// post_exclude 同样作用于反混淆命中
-				if !applyPostExclude(hitStr, excludePats) {
-					return true, fmt.Sprintf("[%s] %s", c.Method, hitStr)
-				}
+			// post_exclude 同样作用于反混淆命中(遍历全部匹配)
+			if hit, ok := firstNonExcludedHit(re, c.Text, excludePats); ok {
+				return true, fmt.Sprintf("[%s] %s", c.Method, hit)
 			}
 		}
 	}
 
 	return false, ""
+}
+
+// firstNonExcludedHit 在 text 上迭代正则的全部匹配,返回第一个未被 post_exclude 排除的命中串。
+// Finding #1:旧实现只取最左匹配(FindString),若被 post_exclude 排除就放弃 → 漏报后续匹配。
+// 现遍历 FindAllString 的所有匹配,在首个未被排除的匹配上命中;全部被排除(或无匹配)才返回 false。
+// post_exclude 缺省时 excludePats 为空 → applyPostExclude 恒 false → 首个匹配命中,与旧行为一致。
+func firstNonExcludedHit(re *regexp.Regexp, text string, excludePats []*regexp.Regexp) (string, bool) {
+	for _, hit := range re.FindAllString(text, -1) {
+		if !applyPostExclude(hit, excludePats) {
+			return hit, true
+		}
+	}
+	return "", false
 }
 
 // evalKeyMatches:字段值是 map,对其 KEY 跑正则。

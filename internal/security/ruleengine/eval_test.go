@@ -283,6 +283,28 @@ func TestEvalKeyMatchesStringMap(t *testing.T) {
 	}
 }
 
+// TestEvalRegexMatchPostExcludeMultiMatch 回归:post_exclude 排除首个匹配时,
+// evalRegexMatch 必须继续检查后续匹配,在第一个未被排除的匹配上命中(不漏报)。
+// 旧 bug:用 re.FindString 只取最左匹配,若该匹配被 post_exclude 排除就直接返回 false,
+// 从不检查后续匹配 → 对 "sudo -v && sudo rm -rf /tmp/x" 漏报 sudo rm(Finding #1)。
+func TestEvalRegexMatchPostExcludeMultiMatch(t *testing.T) {
+	r := mustRule(t, "script", map[string]any{"field": "content", "op": "regex_match", "value": "sudo\\s+\\S+"})
+	r.PostExclude = []string{"sudo\\s+(-v|-l)"}
+	// 首个匹配 "sudo -v" 被 post_exclude 排除;第二个匹配 "sudo rm" 应命中
+	content := "sudo -v && sudo rm -rf /tmp/x"
+	matched, ev := evalRegexMatch("content", content, "sudo\\s+\\S+", &r, OpRegexMatch)
+	if !matched {
+		t.Fatal("post_exclude 排除首个匹配后,应继续检查后续匹配并命中 sudo rm")
+	}
+	if !strings.Contains(ev, "sudo rm") {
+		t.Fatalf("evidence 应含未被排除的命中 sudo rm, got %q", ev)
+	}
+	// 不应返回被排除的最左匹配
+	if strings.Contains(ev, "sudo -v") {
+		t.Fatalf("evidence 不应含被 post_exclude 排除的 sudo -v, got %q", ev)
+	}
+}
+
 func TestEvalBase64MultiBlockRegression(t *testing.T) {
 	// 两个可独立 base64 解码的块(各 ≥16 字符),非匹配块在前、匹配块在后:
 	// "c29tZSBoYXJtbGVzcyBwYWRkaW5nIHRleHQgaGVyZQ==" → "some harmless padding text here"(44 字符,不匹配 regex)

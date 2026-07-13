@@ -413,6 +413,22 @@ func TestInjectionPrivilegeEscalationPE2RE2Rewrite(t *testing.T) {
 	}
 }
 
+// TestInjectionPE2PostExcludeMultiMatch 回归(Finding #1):post_exclude 排除首个匹配时,
+// PE2 必须继续检查后续匹配。内容 "sudo -v && sudo rm -rf /tmp/x" 的最左匹配 "sudo -v"
+// 被 post_exclude 排除,但后续匹配 "sudo rm" 是真实提权,必须命中。
+// 旧 evalRegexMatch 用 FindString 只取最左匹配 → 漏报 sudo rm。
+func TestInjectionPE2PostExcludeMultiMatch(t *testing.T) {
+	r := ruleByID(t, "injection.privilege-escalation.pe2")
+	a := configengine.Asset{Type: configengine.AssetScript, Content: "sudo -v && sudo rm -rf /tmp/x"}
+	matched, ev := Eval(r, a)
+	if !matched {
+		t.Fatal("PE2 应在首个匹配被排除后继续检查并命中 sudo rm,不应漏报")
+	}
+	if !strings.Contains(ev, "sudo rm") {
+		t.Fatalf("evidence 应含未被排除的命中 sudo rm, got %q", ev)
+	}
+}
+
 func TestInjectionPrivilegeEscalationPE3(t *testing.T) {
 	r := ruleByID(t, "injection.privilege-escalation.pe3")
 	// 正例:访问 SSH key
