@@ -4,6 +4,7 @@ package history
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -151,5 +152,68 @@ func TestListSummaryFields(t *testing.T) {
 	}
 	if sum.Band != "良" {
 		t.Errorf("Band = %q, want \"良\"", sum.Band)
+	}
+}
+
+// TestHistoryLegacyDetectorID 验证 P3 重构(基线+注入检测器合并为 rules 检测器)
+// 之前写入的旧记录仍可被读取,不崩溃,finding 字段完整保留,且 rule_id 前缀
+// 分组不变——前端 RulesTable(Task 17)按 rule_id 前缀分组,旧记录的
+// "baseline." / "injection." 前缀仍需可识别,以归入"基线"/"注入"分组。
+// 旧 detector_id="baseline" / "content.injection" 在 DetectorStatus 里仍保留
+// 中文名映射(Task 17),故此处不校验 detector 名,只校验 id 往返 + rule_id 前缀。
+func TestHistoryLegacyDetectorID(t *testing.T) {
+	s := NewStore(t.TempDir())
+	rec := ScanRecord{
+		ID:        "2026-07-06-14-30-05-legacy01",
+		StartedAt: time.Date(2026, 7, 6, 14, 30, 5, 0, time.UTC),
+		// 旧记录:detector_id 用重构前的 baseline / content.injection,
+		// rule_id 用旧前缀(baseline.* / injection.*)。新规则包(Task 12-14)
+		// 虽然改用 rules.* 命名,但历史记录不受影响。
+		Findings: []security.Finding{
+			{DetectorID: "baseline", RuleID: "baseline.wildcard-bash", Severity: security.SeverityHigh, AssetID: "a1"},
+			{DetectorID: "content.injection", RuleID: "injection.hidden-instruction", Severity: security.SeverityCritical, AssetID: "a2"},
+		},
+		HealthScore: &security.HealthScore{Score: 60, Band: "中"},
+	}
+	if err := s.Save(rec); err != nil {
+		t.Fatalf("Save 旧记录: %v", err)
+	}
+	got, err := s.Get(rec.ID)
+	if err != nil {
+		t.Fatalf("Get 旧记录不应报错(legacy-compat): %v", err)
+	}
+	if len(got.Findings) != 2 {
+		t.Fatalf("finding 数量应保留为 2,got %d", len(got.Findings))
+	}
+	// 逐条校验字段往返完整,且 rule_id 前缀可识别(前端分组不变式)。
+	want := rec.Findings
+	for i, f := range got.Findings {
+		w := want[i]
+		if f.DetectorID != w.DetectorID {
+			t.Errorf("finding[%d].DetectorID = %q, want %q", i, f.DetectorID, w.DetectorID)
+		}
+		if f.RuleID != w.RuleID {
+			t.Errorf("finding[%d].RuleID = %q, want %q", i, f.RuleID, w.RuleID)
+		}
+		if f.Severity != w.Severity {
+			t.Errorf("finding[%d].Severity = %q, want %q", i, f.Severity, w.Severity)
+		}
+		if f.AssetID != w.AssetID {
+			t.Errorf("finding[%d].AssetID = %q, want %q", i, f.AssetID, w.AssetID)
+		}
+	}
+	// 前端分组不变式:旧 rule_id 仍带可识别前缀(baseline. / injection.),
+	// RulesTable 按 "." 之前的前缀分组 → 旧记录归入"基线"/"注入"组,不丢失。
+	if !strings.HasPrefix(got.Findings[0].RuleID, "baseline.") {
+		t.Errorf("legacy rule_id %q 缺少 \"baseline.\" 前缀,前端分组会断裂", got.Findings[0].RuleID)
+	}
+	if !strings.HasPrefix(got.Findings[1].RuleID, "injection.") {
+		t.Errorf("legacy rule_id %q 缺少 \"injection.\" 前缀,前端分组会断裂", got.Findings[1].RuleID)
+	}
+	// 新增字段(Suppressed/Suppression/Reason/Fingerprint)在旧记录 JSON 里不存在,
+	// Go json.Unmarshal 对缺失字段赋零值,不应报错。这里隐式验证:got 反序列化成功
+	// 且这些字段为零值(无抑制标记)。
+	if got.Findings[0].Suppressed {
+		t.Errorf("legacy finding 不应有 Suppressed=true")
 	}
 }
