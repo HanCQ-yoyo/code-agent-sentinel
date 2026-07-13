@@ -54,6 +54,9 @@ func newRootCmd() *cobra.Command {
 	cmd.Flags().StringVar(&homeFlag, "home", "", "覆盖 home 目录(调试)")
 	// C-BUILD-1: 调试/测试用固定 token,覆盖随机 genToken()。生产场景应留空走随机。
 	cmd.Flags().StringVar(&tokenFlag, "token", "", "覆盖随机生成的 token(调试/测试用,生产场景留空)")
+	// Task 15:baseline / rules 子命令
+	cmd.AddCommand(newBaselineCmd())
+	cmd.AddCommand(newRulesCmd())
 	return cmd
 }
 

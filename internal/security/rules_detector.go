@@ -149,6 +149,7 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 				Message:     r.Description,
 				Evidence:    truncate(evidence, 200),
 				Remediation: r.Remediation,
+				Fingerprint: fp,
 			}
 			applySuppression(&f, fp, d.baseline, d.supprs)
 			out = append(out, f)

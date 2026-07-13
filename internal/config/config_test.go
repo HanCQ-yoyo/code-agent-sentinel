@@ -57,3 +57,43 @@ func TestConfigBackupDefaults(t *testing.T) {
 		t.Fatalf("default BackupDir want empty(resolved at editor.New) got %q", c.BackupDir)
 	}
 }
+
+// Task 15:新字段默认值 + Resolve* helpers
+func TestConfigResolveDefaults(t *testing.T) {
+	c := DefaultConfig()
+	home := "/tmp/fake-home"
+
+	if got := c.ResolveSentinelRulesDir(home); got != filepath.Join(home, ".claude-sentinel", "rules") {
+		t.Errorf("ResolveSentinelRulesDir = %q", got)
+	}
+	if got := c.ResolveSuppressPath(home); got != filepath.Join(home, ".claude-sentinel", "suppressions.yaml") {
+		t.Errorf("ResolveSuppressPath = %q", got)
+	}
+	if got := c.ResolveBaselinePath(home); got != filepath.Join(home, ".claude-sentinel", "baseline.json") {
+		t.Errorf("ResolveBaselinePath = %q", got)
+	}
+	if got := c.ResolveSuppressionDiscount(); got != DefaultSuppressionDiscount {
+		t.Errorf("ResolveSuppressionDiscount = %v, want %v", got, DefaultSuppressionDiscount)
+	}
+}
+
+func TestConfigResolveOverrides(t *testing.T) {
+	c := DefaultConfig()
+	c.SentinelRulesDir = "/custom/rules"
+	c.SuppressPath = "/custom/suppr.yaml"
+	c.BaselinePath = "/custom/baseline.json"
+	c.SuppressionDiscount = 0.5
+
+	if got := c.ResolveSentinelRulesDir("/home"); got != "/custom/rules" {
+		t.Errorf("ResolveSentinelRulesDir override = %q", got)
+	}
+	if got := c.ResolveSuppressPath("/home"); got != "/custom/suppr.yaml" {
+		t.Errorf("ResolveSuppressPath override = %q", got)
+	}
+	if got := c.ResolveBaselinePath("/home"); got != "/custom/baseline.json" {
+		t.Errorf("ResolveBaselinePath override = %q", got)
+	}
+	if got := c.ResolveSuppressionDiscount(); got != 0.5 {
+		t.Errorf("ResolveSuppressionDiscount override = %v", got)
+	}
+}

@@ -29,9 +29,10 @@ type Finding struct {
 	Message     string                 `json:"message"`
 	Evidence    string                 `json:"evidence"`
 	Remediation string                 `json:"remediation"`
-	Suppressed   bool   `json:"suppressed,omitempty"`
-	Suppression  string `json:"suppression,omitempty"` // "baseline" / "inline"
-	Reason       string `json:"reason,omitempty"`
+	Fingerprint string                 `json:"fingerprint,omitempty"` // 规则指纹(baseline/inline 抑制用);仅 RulesDetector 填充
+	Suppressed  bool                   `json:"suppressed,omitempty"`
+	Suppression string                 `json:"suppression,omitempty"` // "baseline" / "inline"
+	Reason      string                 `json:"reason,omitempty"`
 }
 
 // DetectorStatus 是一个检测器的运行状态。

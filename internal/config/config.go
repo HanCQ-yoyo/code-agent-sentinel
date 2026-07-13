@@ -24,6 +24,12 @@ type Config struct {
 	DirTags    DirTags `yaml:"dir_tags"`
 	BackupDir  string  `yaml:"backup_dir"`  // 空=默认 ~/.claude-sentinel/backups
 	MaxBackups int     `yaml:"max_backups"` // 0=默认 20
+
+	// Task 15:安全检测增强配置字段。空值=用默认路径/值,Resolve* 方法统一解析。
+	SentinelRulesDir    string  `yaml:"sentinel_rules_dir"`    // 空=默认 ~/.claude-sentinel/rules
+	SuppressPath        string  `yaml:"suppress_path"`         // 空=默认 ~/.claude-sentinel/suppressions.yaml
+	BaselinePath        string  `yaml:"baseline_path"`         // 空=默认 ~/.claude-sentinel/baseline.json
+	SuppressionDiscount float64 `yaml:"suppression_discount"`  // 空/0=默认 0.3
 }
 
 func DefaultConfig() *Config {
@@ -66,4 +72,40 @@ func Save(path string, c *Config) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0o600)
+}
+
+// DefaultSuppressionDiscount 是抑制 finding 的残值扣分因子(决策 #12:残值 30% 扣分)。
+// SuppressionDiscount 为 0 或负值时用此默认。
+const DefaultSuppressionDiscount = 0.3
+
+// ResolveSentinelRulesDir 返回全局规则目录路径。空=默认 <home>/.claude-sentinel/rules。
+func (c *Config) ResolveSentinelRulesDir(home string) string {
+	if c.SentinelRulesDir != "" {
+		return c.SentinelRulesDir
+	}
+	return filepath.Join(home, ".claude-sentinel", "rules")
+}
+
+// ResolveSuppressPath 返回 suppressions 文件路径。空=默认 <home>/.claude-sentinel/suppressions.yaml。
+func (c *Config) ResolveSuppressPath(home string) string {
+	if c.SuppressPath != "" {
+		return c.SuppressPath
+	}
+	return filepath.Join(home, ".claude-sentinel", "suppressions.yaml")
+}
+
+// ResolveBaselinePath 返回 baseline 文件路径。空=默认 <home>/.claude-sentinel/baseline.json。
+func (c *Config) ResolveBaselinePath(home string) string {
+	if c.BaselinePath != "" {
+		return c.BaselinePath
+	}
+	return filepath.Join(home, ".claude-sentinel", "baseline.json")
+}
+
+// ResolveSuppressionDiscount 返回抑制折扣因子。0 或负值=默认 0.3。
+func (c *Config) ResolveSuppressionDiscount() float64 {
+	if c.SuppressionDiscount > 0 {
+		return c.SuppressionDiscount
+	}
+	return DefaultSuppressionDiscount
 }
