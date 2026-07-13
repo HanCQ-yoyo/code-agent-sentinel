@@ -101,7 +101,7 @@ func hasRuleID(fs []Finding, id string) bool {
 //   - findings 带 Severity(非空)。
 func TestRulesDetectorScan(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home)
+	d := NewRulesDetector(home, nil)
 	assets := rulesFixtureAssets()
 	findings, err := d.Scan(context.Background(), assets)
 	if err != nil {
@@ -134,7 +134,7 @@ func TestRulesDetectorScan(t *testing.T) {
 // TestRulesDetectorCoversNil:Covers() 返回 nil(orchestrator 传全部资产,内部路由)。
 func TestRulesDetectorCoversNil(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home)
+	d := NewRulesDetector(home, nil)
 	if d.Covers() != nil {
 		t.Fatalf("Covers must be nil, got %v", d.Covers())
 	}
@@ -143,7 +143,7 @@ func TestRulesDetectorCoversNil(t *testing.T) {
 // TestRulesDetectorMeta:Meta 基本信息(ID/Name/Engines/Rules/Covers)。
 func TestRulesDetectorMeta(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home)
+	d := NewRulesDetector(home, nil)
 	m := d.Meta()
 	if m.ID != "rules" {
 		t.Errorf("Meta ID = %q, want rules", m.ID)
@@ -179,7 +179,7 @@ func TestRulesDetectorLoadErrorNotInHealth(t *testing.T) {
 	home := newRulesHome(t)
 
 	// (1) 干净 home:无 load-error
-	cleanD := NewRulesDetector(home)
+	cleanD := NewRulesDetector(home, nil)
 	assets := []configengine.Asset{
 		{ID: "clean-1", Type: configengine.AssetSettings, Name: "settings",
 			Fields: map[string]any{"raw": json.RawMessage(`{"model":"opus"}`)}},
@@ -201,7 +201,7 @@ func TestRulesDetectorLoadErrorNotInHealth(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(globalDir, "bad.yaml"), []byte(badYaml), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	badD := NewRulesDetector(home)
+	badD := NewRulesDetector(home, nil)
 	badFindings, err := badD.Scan(context.Background(), assets)
 	if err != nil {
 		t.Fatal(err)
@@ -248,7 +248,7 @@ func TestRulesDetectorSuppressionBaselineHit(t *testing.T) {
 	home := newRulesHome(t)
 
 	// 第一次扫描:无 baseline → finding 未抑制
-	d1 := NewRulesDetector(home)
+	d1 := NewRulesDetector(home, nil)
 	assets := []configengine.Asset{
 		{ID: "perm-1", Type: configengine.AssetPermissions, Name: "permissions",
 			Fields: map[string]any{"allow": []any{"Bash(*)"}}},
@@ -291,7 +291,7 @@ func TestRulesDetectorSuppressionBaselineHit(t *testing.T) {
 	}
 
 	// 第二次扫描:baseline 命中 → finding 被抑制
-	d2 := NewRulesDetector(home)
+	d2 := NewRulesDetector(home, nil)
 	fs2, err := d2.Scan(context.Background(), assets)
 	if err != nil {
 		t.Fatal(err)
@@ -326,7 +326,7 @@ func TestRulesDetectorSuppressionInline(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	d := NewRulesDetector(home)
+	d := NewRulesDetector(home, nil)
 	assets := []configengine.Asset{
 		{ID: "perm-1", Type: configengine.AssetPermissions, Name: "permissions",
 			Fields: map[string]any{"allow": []any{"Bash(*)"}}},
@@ -400,7 +400,7 @@ func TestRulesDetectorProjectRuleScoped(t *testing.T) {
 		Fields:     map[string]any{"allow": []any{"Bash(DANGER)"}},
 	}
 
-	d := NewRulesDetector(home)
+	d := NewRulesDetector(home, nil)
 	fs, err := d.Scan(context.Background(), []configengine.Asset{assetA, assetB})
 	if err != nil {
 		t.Fatal(err)

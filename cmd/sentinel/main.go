@@ -95,9 +95,9 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 
 	eng := configengine.NewEngine(home)
 	r := security.NewRegistry()
-	r.Register(security.NewRulesDetector(home))
-	r.Register(security.NewSecretDetector(""))
-	r.Register(security.NewDependencyDetector("", ""))
+	r.Register(security.NewRulesDetector(home, nil))
+	r.Register(security.NewSecretDetector(nil))
+	r.Register(security.NewDependencyDetector(nil))
 	orch := &security.Orchestrator{Registry: r}
 
 	// C-BUILD-1: --token 非空则用之(调试/测试),否则随机生成。

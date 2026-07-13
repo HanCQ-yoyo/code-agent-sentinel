@@ -38,7 +38,9 @@ type Finding struct {
 // DetectorStatus 是一个检测器的运行状态。
 type DetectorStatus struct {
 	ID           string        `json:"id"`
+	Enabled      bool          `json:"enabled"`
 	Available    bool          `json:"available"`
+	Disabled     bool          `json:"disabled,omitempty"` // 用户禁用(Enabled=false)
 	Reason       string        `json:"reason,omitempty"`
 	FindingCount int           `json:"finding_count"`
 	Duration     time.Duration `json:"duration"`

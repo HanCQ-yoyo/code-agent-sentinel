@@ -9,37 +9,38 @@ import (
 	"strings"
 	"time"
 
+	"code-agent-sentinel/internal/config"
 	"code-agent-sentinel/internal/configengine"
 )
 
 type DependencyDetector struct {
-	npmBin      string
-	govulncheck string
+	cfg *config.DetectorsConfig
 }
 
-func NewDependencyDetector(npmBin, govulncheck string) *DependencyDetector {
-	if npmBin == "" {
-		npmBin = "npm"
-	}
-	if govulncheck == "" {
-		govulncheck = "govulncheck"
-	}
-	return &DependencyDetector{npmBin: npmBin, govulncheck: govulncheck}
+func NewDependencyDetector(cfg *config.DetectorsConfig) *DependencyDetector {
+	return &DependencyDetector{cfg: cfg}
 }
 
+func (d *DependencyDetector) npmBin() string         { return d.cfg.DepEngineBinaryOrDefault("npm") }
+func (d *DependencyDetector) govulncheckBin() string { return d.cfg.DepEngineBinaryOrDefault("govulncheck") }
 func (d *DependencyDetector) ID() string { return "dep" }
 func (d *DependencyDetector) Covers() []configengine.AssetType {
 	return []configengine.AssetType{configengine.AssetScript, configengine.AssetPlugin, configengine.AssetSkill, configengine.AssetCommand}
 }
+func (d *DependencyDetector) Enabled() bool { return d.cfg.DepEnabled() }
 func (d *DependencyDetector) Available() bool {
-	return commandExists(d.npmBin) || commandExists(d.govulncheck)
+	return d.cfg.DepEngineEnabled("npm") && commandExists(d.npmBin()) ||
+		d.cfg.DepEngineEnabled("govulncheck") && commandExists(d.govulncheckBin())
 }
 func (d *DependencyDetector) Reason() string {
 	if d.Available() {
 		return ""
 	}
-	return "npm 与 govulncheck 均未找到(依赖扫描将跳过)"
+	return "npm 与 govulncheck 均未找到或均被禁用(依赖扫描将跳过)"
 }
+
+// DepEngineEnabled 暴露给测试断言引擎级启用状态。
+func (d *DependencyDetector) DepEngineEnabled(name string) bool { return d.cfg.DepEngineEnabled(name) }
 
 func (d *DependencyDetector) Meta() DetectorMeta {
 	covers := make([]string, 0, len(d.Covers()))
@@ -47,12 +48,13 @@ func (d *DependencyDetector) Meta() DetectorMeta {
 		covers = append(covers, string(c))
 	}
 	engines := []EngineInfo{
-		{Name: "npm audit", Kind: "subprocess", Available: commandExists(d.npmBin)},
-		{Name: "govulncheck", Kind: "subprocess", Available: commandExists(d.govulncheck)},
+		{Name: "npm audit", Kind: "subprocess", Enabled: d.cfg.DepEngineEnabled("npm"), Available: d.cfg.DepEngineEnabled("npm") && commandExists(d.npmBin())},
+		{Name: "govulncheck", Kind: "subprocess", Enabled: d.cfg.DepEngineEnabled("govulncheck"), Available: d.cfg.DepEngineEnabled("govulncheck") && commandExists(d.govulncheckBin())},
 	}
 	return DetectorMeta{
 		ID:      d.ID(),
 		Name:    "依赖检测",
+		Enabled: d.Enabled(),
 		Engines: engines,
 		Rules:   nil,
 		Covers:  covers,
@@ -66,7 +68,7 @@ type npmAudit struct {
 }
 
 func (d *DependencyDetector) Scan(ctx context.Context, assets []configengine.Asset) ([]Finding, error) {
-	if !d.Available() {
+	if !d.Enabled() || !d.Available() {
 		return nil, nil
 	}
 	var out []Finding
@@ -77,8 +79,8 @@ func (d *DependencyDetector) Scan(ctx context.Context, assets []configengine.Ass
 			continue
 		}
 		scanned[dir] = true
-		if commandExists(d.npmBin) && fileExists(filepath.Join(dir, "package.json")) {
-			r := runSubprocess(ctx, d.npmBin, []string{"audit", "--json"}, dir, 60*time.Second)
+		if d.cfg.DepEngineEnabled("npm") && commandExists(d.npmBin()) && fileExists(filepath.Join(dir, "package.json")) {
+			r := runSubprocess(ctx, d.npmBin(), []string{"audit", "--json"}, dir, 60*time.Second)
 			if r.TimedOut {
 				continue
 			}
@@ -139,8 +141,8 @@ func (d *DependencyDetector) Scan(ctx context.Context, assets []configengine.Ass
 				})
 			}
 		}
-		if commandExists(d.govulncheck) && hasGoMod(dir) {
-			r := runSubprocess(ctx, d.govulncheck, []string{"-json", "./..."}, dir, 120*time.Second)
+		if d.cfg.DepEngineEnabled("govulncheck") && commandExists(d.govulncheckBin()) && hasGoMod(dir) {
+			r := runSubprocess(ctx, d.govulncheckBin(), []string{"-json", "./..."}, dir, 120*time.Second)
 			if r.TimedOut {
 				// 偏差(brief 原文缺此守卫):120s 超时会截断 NDJSON,解析不完整。
 				// 镜像 Task 14 + npm 分支的一致性处理;经人工确认同意偏离。

@@ -17,6 +17,7 @@ func (f fakeDetector) ID() string { return f.id }
 func (f fakeDetector) Covers() []configengine.AssetType {
 	return []configengine.AssetType{configengine.AssetHook}
 }
+func (f fakeDetector) Enabled() bool    { return true }
 func (f fakeDetector) Available() bool { return f.avail }
 func (f fakeDetector) Reason() string  { return "" }
 func (f fakeDetector) Scan(ctx context.Context, assets []configengine.Asset) ([]Finding, error) {
@@ -48,9 +49,9 @@ func TestDetectorMeta(t *testing.T) {
 		wantRules   int
 		wantCovers  int
 	}{
-		{"rules", NewRulesDetector(tmpHome), "声明式规则引擎", 1, 63, 0},
-		{"secret", NewSecretDetector(""), "密钥检测", 1, 0, 0},
-		{"dep", NewDependencyDetector("", ""), "依赖检测", 2, 0, 4},
+		{"rules", NewRulesDetector(tmpHome, nil), "声明式规则引擎", 1, 63, 0},
+		{"secret", NewSecretDetector(nil), "密钥检测", 1, 0, 0},
+		{"dep", NewDependencyDetector(nil), "依赖检测", 2, 0, 4},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -91,7 +92,7 @@ func TestDetectorMeta(t *testing.T) {
 func TestRuleSyntaxContent(t *testing.T) {
 	// baseline.wildcard-bash 的 syntax 应含 value "Bash(*)"(op=contains 的可读语法含 value)。
 	tmpHome := t.TempDir()
-	rd := NewRulesDetector(tmpHome)
+	rd := NewRulesDetector(tmpHome, nil)
 	m := rd.Meta()
 	var got string
 	for _, r := range m.Rules {

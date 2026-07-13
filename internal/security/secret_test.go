@@ -7,11 +7,12 @@ import (
 	"strings"
 	"testing"
 
+	"code-agent-sentinel/internal/config"
 	"code-agent-sentinel/internal/configengine"
 )
 
 func TestSecretDetectorUnavailable(t *testing.T) {
-	d := NewSecretDetector("definitely-not-a-real-binary-xyz")
+	d := NewSecretDetector(&config.DetectorsConfig{Secret: config.BinaryDetectorConfig{Enabled: true, Binary: "definitely-not-a-real-binary-xyz"}})
 	if d.Available() {
 		t.Error("不存在的二进制应 unavailable")
 	}
@@ -33,7 +34,7 @@ func TestSecretDetectorParsesGitleaksJSON(t *testing.T) {
 	dir := t.TempDir()
 	script := filepath.Join(dir, "fakegitleaks")
 	os.WriteFile(script, []byte("#!/bin/sh\ncat <<'EOF'\n[{\"RuleID\":\"generic-api-key\",\"Secret\":\"sk-xxx\",\"File\":\"a\",\"StartLine\":1}]\nEOF\n"), 0o755)
-	d := NewSecretDetector(script)
+	d := NewSecretDetector(&config.DetectorsConfig{Secret: config.BinaryDetectorConfig{Enabled: true, Binary: script}})
 	if !d.Available() {
 		t.Fatal("fake 应可用")
 	}
@@ -63,7 +64,7 @@ func TestSecretDetectorAttributionByFullPath(t *testing.T) {
 	t.Run("no basename mis-attribution", func(t *testing.T) {
 		script := filepath.Join(base, "fake_no_match")
 		os.WriteFile(script, []byte("#!/bin/sh\necho '[{\"RuleID\":\"k\",\"Secret\":\"sk-leak\",\"File\":\"sub/config.yaml\",\"StartLine\":1}]'\n"), 0o755)
-		d := NewSecretDetector(script)
+		d := NewSecretDetector(&config.DetectorsConfig{Secret: config.BinaryDetectorConfig{Enabled: true, Binary: script}})
 		a := configengine.Asset{ID: "a1", Type: configengine.AssetMemory, Name: "config.yaml", SourcePath: topFile}
 		findings, err := d.Scan(context.Background(), []configengine.Asset{a})
 		if err != nil {
@@ -79,7 +80,7 @@ func TestSecretDetectorAttributionByFullPath(t *testing.T) {
 	t.Run("match by full path", func(t *testing.T) {
 		script := filepath.Join(base, "fake_match")
 		os.WriteFile(script, []byte("#!/bin/sh\necho '[{\"RuleID\":\"k\",\"Secret\":\"sk-leak\",\"File\":\"config.yaml\",\"StartLine\":1}]'\n"), 0o755)
-		d := NewSecretDetector(script)
+		d := NewSecretDetector(&config.DetectorsConfig{Secret: config.BinaryDetectorConfig{Enabled: true, Binary: script}})
 		a := configengine.Asset{ID: "a2", Type: configengine.AssetMemory, Name: "config.yaml", SourcePath: subFile}
 		findings, err := d.Scan(context.Background(), []configengine.Asset{a})
 		if err != nil {
@@ -98,7 +99,7 @@ func TestSecretDetectorScannerErrorSurfaced(t *testing.T) {
 	os.WriteFile(script, []byte("#!/bin/sh\necho 'config error: bad source' >&2\nexit 2\n"), 0o755)
 	srcFile := filepath.Join(dir, "config.yaml")
 	os.WriteFile(srcFile, []byte("x"), 0o644)
-	d := NewSecretDetector(script)
+	d := NewSecretDetector(&config.DetectorsConfig{Secret: config.BinaryDetectorConfig{Enabled: true, Binary: script}})
 	a := configengine.Asset{ID: "a1", Type: configengine.AssetMemory, Name: "config.yaml", SourcePath: srcFile}
 	findings, err := d.Scan(context.Background(), []configengine.Asset{a})
 	if err != nil {
@@ -131,7 +132,7 @@ func TestSecretDetectorAttributionFirstWinsSharedSourcePath(t *testing.T) {
 	// fake gitleaks:报告该 settings.json 含密钥(File 用 basename)。
 	script := filepath.Join(dir, "fake_gl")
 	os.WriteFile(script, []byte("#!/bin/sh\necho '[{\"RuleID\":\"k\",\"Secret\":\"sk\",\"File\":\"settings.json\",\"StartLine\":1}]'\n"), 0o755)
-	d := NewSecretDetector(script)
+	d := NewSecretDetector(&config.DetectorsConfig{Secret: config.BinaryDetectorConfig{Enabled: true, Binary: script}})
 
 	// 模拟 parseSettings 的产出顺序:settings 在前,hook 在后,共享 SourcePath。
 	settings := configengine.Asset{ID: "settings-id", Type: configengine.AssetSettings, Name: "settings", SourcePath: settingsFile}

@@ -7,11 +7,18 @@ import (
 	"strings"
 	"testing"
 
+	"code-agent-sentinel/internal/config"
 	"code-agent-sentinel/internal/configengine"
 )
 
 func TestDependencyUnavailableWhenNoNPM(t *testing.T) {
-	d := NewDependencyDetector("no-npm-xyz", "no-govulncheck-xyz")
+	d := NewDependencyDetector(&config.DetectorsConfig{Dep: config.DepDetectorConfig{
+		Enabled: true,
+		Engines: map[string]config.BinaryDetectorConfig{
+			"npm":         {Enabled: true, Binary: "no-npm-xyz"},
+			"govulncheck": {Enabled: true, Binary: "no-govulncheck-xyz"},
+		},
+	}})
 	if d.Available() {
 		t.Error("应 unavailable")
 	}
@@ -28,7 +35,13 @@ func TestDependencyParsesNpmAudit(t *testing.T) {
 	os.WriteFile(filepath.Join(pkgDir, "package.json"), []byte(`{"name":"p"}`), 0o644)
 	script := filepath.Join(dir, "fakenpm")
 	os.WriteFile(script, []byte("#!/bin/sh\ncat <<'EOF'\n{\"vulnerabilities\":{\"lodash\":{\"severity\":\"high\",\"via\":\"x\"}}}\nEOF\n"), 0o755)
-	d := NewDependencyDetector(script, "no-govulncheck-xyz")
+	d := NewDependencyDetector(&config.DetectorsConfig{Dep: config.DepDetectorConfig{
+		Enabled: true,
+		Engines: map[string]config.BinaryDetectorConfig{
+			"npm":         {Enabled: true, Binary: script},
+			"govulncheck": {Enabled: true, Binary: "no-govulncheck-xyz"},
+		},
+	}})
 	if !d.Available() {
 		t.Fatal("fake npm 应可用")
 	}
@@ -53,7 +66,13 @@ func TestDependencyNpmScannerErrorSurfaced(t *testing.T) {
 	// fake npm:写 stderr 并以退出码 2 退出(模拟 .npmrc/网络/lock 文件故障)
 	script := filepath.Join(dir, "fakenpm")
 	os.WriteFile(script, []byte("#!/bin/sh\necho \"npm error: ENOTFOUND registry\" >&2\nexit 2\n"), 0o755)
-	d := NewDependencyDetector(script, "no-govulncheck-xyz")
+	d := NewDependencyDetector(&config.DetectorsConfig{Dep: config.DepDetectorConfig{
+		Enabled: true,
+		Engines: map[string]config.BinaryDetectorConfig{
+			"npm":         {Enabled: true, Binary: script},
+			"govulncheck": {Enabled: true, Binary: "no-govulncheck-xyz"},
+		},
+	}})
 	if !d.Available() {
 		t.Fatal("fake npm 应可用")
 	}
@@ -85,7 +104,13 @@ func TestDependencyGovulncheckScannerErrorSurfaced(t *testing.T) {
 	// fake govulncheck:写 stderr 并以退出码 2 退出(模拟安装损坏/go.mod 无效/崩溃)
 	script := filepath.Join(dir, "fakegovulncheck")
 	os.WriteFile(script, []byte("#!/bin/sh\necho \"govulncheck: failed to load package\" >&2\nexit 2\n"), 0o755)
-	d := NewDependencyDetector("no-npm-xyz", script)
+	d := NewDependencyDetector(&config.DetectorsConfig{Dep: config.DepDetectorConfig{
+		Enabled: true,
+		Engines: map[string]config.BinaryDetectorConfig{
+			"npm":         {Enabled: true, Binary: "no-npm-xyz"},
+			"govulncheck": {Enabled: true, Binary: script},
+		},
+	}})
 	if !d.Available() {
 		t.Fatal("fake govulncheck 应可用")
 	}

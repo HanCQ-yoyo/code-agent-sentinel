@@ -8,23 +8,24 @@ import (
 	"strconv"
 	"time"
 
+	"code-agent-sentinel/internal/config"
 	"code-agent-sentinel/internal/configengine"
 )
 
 type SecretDetector struct {
-	binary string // gitleaks 路径或名
+	cfg *config.DetectorsConfig
 }
 
-func NewSecretDetector(binary string) *SecretDetector {
-	if binary == "" {
-		binary = "gitleaks"
-	}
-	return &SecretDetector{binary: binary}
+// NewSecretDetector 构造密钥检测器。cfg=nil → 全启用 + 默认 gitleaks(nil-safe)。
+func NewSecretDetector(cfg *config.DetectorsConfig) *SecretDetector {
+	return &SecretDetector{cfg: cfg}
 }
 
+func (d *SecretDetector) binary() string { return d.cfg.SecretBinaryOrDefault() }
 func (d *SecretDetector) ID() string                       { return "secret" }
 func (d *SecretDetector) Covers() []configengine.AssetType { return nil } // 全部:喂源文件路径
-func (d *SecretDetector) Available() bool                  { return commandExists(d.binary) }
+func (d *SecretDetector) Enabled() bool                    { return d.cfg.SecretEnabled() }
+func (d *SecretDetector) Available() bool                  { return commandExists(d.binary()) }
 func (d *SecretDetector) Reason() string {
 	if d.Available() {
 		return ""
@@ -36,7 +37,8 @@ func (d *SecretDetector) Meta() DetectorMeta {
 	return DetectorMeta{
 		ID:      d.ID(),
 		Name:    "密钥检测",
-		Engines: []EngineInfo{{Name: "gitleaks", Kind: "subprocess", Available: d.Available(), Reason: d.Reason()}},
+		Enabled: d.Enabled(),
+		Engines: []EngineInfo{{Name: "gitleaks", Kind: "subprocess", Enabled: d.Enabled(), Available: d.Available(), Reason: d.Reason()}},
 		Rules:   nil, // 规则在 gitleaks 内置配置
 		Covers:  nil, // Covers() 返回 nil = 全部资产(按源文件路径)
 	}
@@ -50,7 +52,7 @@ type gitleaksFinding struct {
 }
 
 func (d *SecretDetector) Scan(ctx context.Context, assets []configengine.Asset) ([]Finding, error) {
-	if !d.Available() {
+	if !d.Enabled() || !d.Available() {
 		return nil, nil
 	}
 	// 收集要扫的源文件路径(去重)。
@@ -77,7 +79,7 @@ func (d *SecretDetector) Scan(ctx context.Context, assets []configengine.Asset) 
 	var out []Finding
 	for path, a := range paths {
 		dir := filepath.Dir(path)
-		r := runSubprocess(ctx, d.binary, []string{"detect", "--source", dir, "--report-format", "json", "--report-path", "-", "--no-banner"}, "", 60*time.Second)
+		r := runSubprocess(ctx, d.binary(), []string{"detect", "--source", dir, "--report-format", "json", "--report-path", "-", "--no-banner"}, "", 60*time.Second)
 		if r.TimedOut {
 			continue
 		}

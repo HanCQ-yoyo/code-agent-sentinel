@@ -22,7 +22,13 @@ func (o *Orchestrator) Scan(ctx context.Context, assets []configengine.Asset, de
 		if len(want) > 0 && !want[d.ID()] {
 			continue
 		}
-		st := DetectorStatus{ID: d.ID(), Available: d.Available(), Reason: d.Reason()}
+		st := DetectorStatus{ID: d.ID(), Enabled: d.Enabled(), Available: d.Available(), Reason: d.Reason()}
+		if !d.Enabled() {
+			// 用户禁用:跳过扫描,标记 Disabled(三态:已禁用 / 不可用 / 可用)。
+			st.Disabled = true
+			res.Detectors = append(res.Detectors, st)
+			continue
+		}
 		if !d.Available() {
 			res.Detectors = append(res.Detectors, st)
 			continue

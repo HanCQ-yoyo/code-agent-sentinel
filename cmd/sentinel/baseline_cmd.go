@@ -59,9 +59,9 @@ func runFullScan(cfg *config.Config, home string) (*security.ScanResult, error) 
 		return nil, fmt.Errorf("发现资产失败: %w", err)
 	}
 	r := security.NewRegistry()
-	r.Register(security.NewRulesDetector(home))
-	r.Register(security.NewSecretDetector(""))
-	r.Register(security.NewDependencyDetector("", ""))
+	r.Register(security.NewRulesDetector(home, nil))
+	r.Register(security.NewSecretDetector(nil))
+	r.Register(security.NewDependencyDetector(nil))
 	orch := &security.Orchestrator{Registry: r}
 	res, err := orch.Scan(context.Background(), inv.Assets, nil)
 	if err != nil {

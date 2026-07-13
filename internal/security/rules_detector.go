@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"path/filepath"
 
+	"code-agent-sentinel/internal/config"
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/security/ruleengine"
 	"code-agent-sentinel/internal/security/suppression"
@@ -27,6 +28,7 @@ import (
 //     (见 TestRulesDetectorLoadErrorNotInHealth 的数学验证)。
 type RulesDetector struct {
 	home string
+	cfg  *config.DetectorsConfig
 
 	// builtin + global 合并 + Validate 后的规则(Meta 与 Scan 基础层)。
 	// Scan 时再叠加项目规则得到 allRules。
@@ -53,8 +55,8 @@ type RulesDetector struct {
 // 改了这些路径,写会落到自定义路径,但本检测器仍读默认路径 → 扫描时抑制/baseline/全局规则
 // 静默不生效。security 包目前不接收 config(controller 决议待定),故此处不改行为,仅标注。
 // 将来把 config 接入本检测器时,改这三处 filepath.Join 为 cfg.Resolve*Path(home)。
-func NewRulesDetector(home string) *RulesDetector {
-	d := &RulesDetector{home: home}
+func NewRulesDetector(home string, cfg *config.DetectorsConfig) *RulesDetector {
+	d := &RulesDetector{home: home, cfg: cfg}
 
 	// 内置 + 全局规则:LoadForScan(home, nil) = builtin + global(无项目),合并 + Validate。
 	// 用 LoadForScan 而非 LoadBuiltin+LoadDir 分开调,是为了复用 Merge+Validate 一次成型。
@@ -88,6 +90,7 @@ func NewRulesDetector(home string) *RulesDetector {
 
 func (d *RulesDetector) ID() string                     { return "rules" }
 func (d *RulesDetector) Covers() []configengine.AssetType { return nil } // 见类型注释
+func (d *RulesDetector) Enabled() bool                    { return d.cfg.RulesEnabled() }
 func (d *RulesDetector) Available() bool                 { return true }
 func (d *RulesDetector) Reason() string                  { return "" }
 
@@ -106,7 +109,8 @@ func (d *RulesDetector) Meta() DetectorMeta {
 	return DetectorMeta{
 		ID:      d.ID(),
 		Name:    "声明式规则引擎",
-		Engines: []EngineInfo{{Name: "声明式规则引擎", Kind: "embedded", Available: true}},
+		Enabled: d.Enabled(),
+		Engines: []EngineInfo{{Name: "声明式规则引擎", Kind: "embedded", Enabled: d.Enabled(), Available: true}},
 		Rules:   rules,
 		Covers:  nil, // 与 Covers() 一致:nil = 全资产类型(内部路由)
 	}

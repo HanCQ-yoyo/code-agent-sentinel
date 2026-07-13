@@ -10,6 +10,7 @@ import (
 type Detector interface {
 	ID() string
 	Covers() []configengine.AssetType
+	Enabled() bool   // 用户是否启用(配置开关);false 时编排器跳过
 	Available() bool // 子进程/依赖是否就绪
 	Reason() string  // 不可用时的原因
 	Scan(ctx context.Context, assets []configengine.Asset) ([]Finding, error)
@@ -20,6 +21,7 @@ type Detector interface {
 type DetectorMeta struct {
 	ID      string       `json:"id"`
 	Name    string       `json:"name"`     // 中文显示名
+	Enabled bool         `json:"enabled"`   // 用户启用开关(false=已禁用)
 	Engines []EngineInfo `json:"engines"`
 	Rules   []RuleInfo   `json:"rules"`    // 内嵌规则,可为空(子进程检测器规则在外部工具内)
 	Covers  []string     `json:"covers"`   // 覆盖的资产类型
@@ -29,6 +31,7 @@ type DetectorMeta struct {
 type EngineInfo struct {
 	Name      string `json:"name"`      // gitleaks / npm audit / govulncheck / 内嵌 YAML 规则引擎
 	Kind      string `json:"kind"`      // subprocess / embedded / native
+	Enabled   bool   `json:"enabled"`   // 引擎级启用(dep 的 npm/govulncheck 可独立)
 	Available bool   `json:"available"`
 	Reason    string `json:"reason,omitempty"`
 }

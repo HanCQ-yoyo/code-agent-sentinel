@@ -22,7 +22,7 @@ func newTestServer(t *testing.T, home string) *Server {
 	gin.SetMode(gin.TestMode)
 	eng := configengine.NewEngine(home)
 	r := security.NewRegistry()
-	r.Register(security.NewRulesDetector(home))
+	r.Register(security.NewRulesDetector(home, nil))
 	orch := &security.Orchestrator{Registry: r}
 	hist := history.NewStore(filepath.Join(home, "..", "history")) // 历史目录与 .claude 同级,在 home 之外
 	ed := editor.New(eng, "", 0)
