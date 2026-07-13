@@ -25,9 +25,10 @@ function ruleSource(r: FlatRule): string {
   const i = r.id.indexOf('.')
   return i > 0 ? r.id.slice(0, i) : 'other'
 }
-const sourceLabel: Record<string, string> = {
+export const sourceLabel: Record<string, string> = {
   baseline: '基线', injection: '注入', skill: '技能', custom: '自定义', other: '其他',
 }
+const sourceOrder = ['baseline', 'injection', 'skill', 'custom', 'other']
 
 // 级别筛选标签:色点 + 文案 + 计数。「全部」用 accent 点,各级别用对应级别色点。
 function SevSegLabel({ text, count, sev }: { text: string; count: number; sev?: Severity }) {
@@ -47,10 +48,17 @@ function SevSegLabel({ text, count, sev }: { text: string; count: number; sev?: 
 // detectorFilter(可选):外部胶囊行点击检测器后传入,只显示该检测器规则。
 export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorMeta[]; detectorFilter?: string }) {
   const [sev, setSev] = useState<Severity | 'all'>('all')
+  const [src, setSrc] = useState<string>('all')
   const [selected, setSelected] = useState<FlatRule | null>(null)
 
   const allRules = useMemo<FlatRule[]>(
-    () => detectors.flatMap((d) => (d.rules ?? []).map((r) => ({ ...r, detector: d.name, detector_id: d.id }))),
+    () => detectors.flatMap((d) => (d.rules ?? []).map((r) => {
+      const fr: FlatRule = { ...r, detector: d.name, detector_id: d.id }
+      // 后端 RuleInfo 未带 source:前端按 rule_id 前缀推导并写入 FlatRule.source,
+      // 使列表列、来源筛选与 RuleDrawer 来源展示共用同一推导结果(单一推导点)。
+      fr.source = fr.source ?? ruleSource(fr)
+      return fr
+    })),
     [detectors]
   )
 
@@ -61,14 +69,31 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
     [allRules, detectorFilter]
   )
 
-  const counts = useMemo(() => {
-    const c: Record<string, number> = { all: byDetector.length, critical: 0, high: 0, medium: 0, low: 0, info: 0 }
-    for (const r of byDetector) c[r.severity] = (c[r.severity] ?? 0) + 1
+  // 来源分布:按 rule_id 前缀分组(baseline/injection/skill/custom/other),计数随检测器筛选联动。
+  const sourceCounts = useMemo(() => {
+    const c: Record<string, number> = { all: byDetector.length }
+    for (const r of byDetector) {
+      const s = ruleSource(r)
+      c[s] = (c[s] ?? 0) + 1
+    }
     return c
   }, [byDetector])
 
-  // 合并筛选:在 byDetector 基础上再按 sev。
-  const filtered = sev === 'all' ? byDetector : byDetector.filter((r) => r.severity === sev)
+  // 来源筛选:在 byDetector 基础上再按来源前缀过滤,实现"按来源分组"。
+  const bySource = useMemo(
+    () => src === 'all' ? byDetector : byDetector.filter((r) => ruleSource(r) === src),
+    [byDetector, src]
+  )
+
+  // 级别分布:在来源筛选基础上算,使 Segmented 计数随来源筛选联动(检测器 → 来源 → 级别)。
+  const counts = useMemo(() => {
+    const c: Record<string, number> = { all: bySource.length, critical: 0, high: 0, medium: 0, low: 0, info: 0 }
+    for (const r of bySource) c[r.severity] = (c[r.severity] ?? 0) + 1
+    return c
+  }, [bySource])
+
+  // 合并筛选:在 bySource 基础上再按 sev(检测器 → 来源 → 级别三级过滤)。
+  const filtered = sev === 'all' ? bySource : bySource.filter((r) => r.severity === sev)
 
   // 无效规则(valid === false)置顶横幅:后端 Meta() 目前只返回已 Validate 的规则(全 valid),
   // 此横幅为防御性能力——后端补充 valid 字段后即生效。
@@ -129,6 +154,22 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
           description={invalidRules.map((r) => r.id).join('、')}
         />
       ) : null}
+      {/* 来源分组:按 rule_id 前缀筛选(全部/基线/注入/技能/自定义/其他),
+          复用 sev-seg 配色(选中 accent 填充),与级别筛选组合:检测器 → 来源 → 级别。 */}
+      <Segmented
+        className="sev-seg"
+        style={{ marginBottom: 12 }}
+        value={src}
+        onChange={(v) => setSrc(v as string)}
+        options={[
+          { value: 'all', label: <SevSegLabel text="全部" count={sourceCounts.all} />, className: 'sev-tab-all' },
+          ...sourceOrder.map((s) => ({
+            value: s,
+            label: <SevSegLabel text={sourceLabel[s]} count={sourceCounts[s] ?? 0} />,
+            className: 'sev-tab-all',
+          })),
+        ]}
+      />
       {/* 级别筛选:与风险管理列表同一套 sev-seg 配色(色点 + 选中实色填充),复用 index.css 的 .sev-seg。 */}
       <Segmented
         className="sev-seg"

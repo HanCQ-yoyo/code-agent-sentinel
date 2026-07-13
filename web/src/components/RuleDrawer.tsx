@@ -1,6 +1,7 @@
 import { Drawer, Descriptions, Typography, Empty, Badge as AntBadge } from 'antd'
 import type { DetectorMeta, Severity } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
+import { sourceLabel } from './RulesTable'
 
 const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低', info: '信息' }
 
@@ -50,7 +51,7 @@ export function RuleDrawer({ rule, detectors, onClose }: RuleDrawerProps) {
               <SevBadge tone={`sev-${rule.severity}` as BadgeTone}>{sevLabel[rule.severity]}</SevBadge>
             </Descriptions.Item>
             <Descriptions.Item label="检测器">{rule.detector}</Descriptions.Item>
-            <Descriptions.Item label="来源">{rule.source ?? '--'}</Descriptions.Item>
+            <Descriptions.Item label="来源">{rule.source ? sourceLabel[rule.source] ?? rule.source : '--'}</Descriptions.Item>
             <Descriptions.Item label="校验">
               {rule.valid === false ? (
                 <AntBadge status="error" text="无效" />
