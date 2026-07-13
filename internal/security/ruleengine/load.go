@@ -88,6 +88,13 @@ func LoadDir(dir, source string) ([]Rule, []RuleLoadError) {
 // Merge 按层合并规则:同 (id, projectPath) 后者整条替换前者(保持首次出现位置);
 // 新 id 按各层 encounter 顺序追加到末尾。不同 projectPath 的同名规则各自保留
 // (builtin/global projectPath 为空,仍按 id 覆盖)。
+//
+// TODO(spec §2 分歧,2026-07-13 final review):spec 要求「同 id 覆盖(项目>全局>内置)」,
+// 即项目规则应能覆盖/禁用同 id 内置规则(只对本项目)。当前复合键设计使项目规则与内置规则
+// 「共存」——用户写一条项目规则(match 缺失)想只对本项目禁用某内置规则时,内置规则仍会对该项目
+// 资产生效。全局覆盖内置(常见禁用场景)工作正常,缺口仅在「只对单个项目禁用内置」这一窄场景。
+// 实现项目级覆盖需在 RulesDetector.Scan 求值时按 (asset 所在项目, rule id) 抑制同 id 内置/全局
+// 规则,而非改 Merge(复合键为多项目同 id 隔离所必需)。经用户决策:先合并,后续任务补。
 func Merge(layers ...[]Rule) []Rule {
 	var merged []Rule
 	index := make(map[string]int) // id+"|"+projectPath → 在 merged 中的位置
