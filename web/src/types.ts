@@ -20,7 +20,13 @@ export interface DetectorStatus { id: string; available: boolean; reason?: strin
 export interface EngineInfo { name: string; kind: string; enabled: boolean; available: boolean; reason?: string }
 // source/valid:后端 RuleInfo 目前未携带(Meta() 只返回已 Validate 的规则,全 valid);
 // 前端按 rule_id 前缀推导 source 做分组,valid 默认 true。字段预留,后端补充后无需改前端。
-export interface RuleInfo { id: string; severity: Severity; description: string; syntax?: string; source?: string; valid?: boolean }
+export interface PathFilterInfo { include?: string[]; exclude?: string[] }
+export interface RuleInfo {
+  id: string; severity: Severity; asset_type?: string; description: string; syntax?: string
+  remediation?: string; paths?: PathFilterInfo; post_exclude?: string[]; deobfuscation?: string[]
+  dotall?: boolean; metadata?: Record<string, unknown>; source_file?: string; project_path?: string
+  source?: string; valid?: boolean
+}
 // rules/covers/engines 可为 null:Go 端子进程检测器(gitleaks/govulncheck)规则在外部工具内、
 // 或 Covers() 返回 nil(全部资产),nil 切片序列化为 JSON null(非 [])。前端须防御性判空。
 export interface DetectorMeta {

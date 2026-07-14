@@ -1,21 +1,12 @@
 import { Drawer, Descriptions, Typography, Empty, Badge as AntBadge } from 'antd'
 import type { DetectorMeta, Severity } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
-import { sourceLabel } from './RulesTable'
+import { sourceLabel, type FlatRule } from './RulesTable'
 
 const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低', info: '信息' }
 
 interface RuleDrawerProps {
-  rule: {
-    id: string
-    severity: Severity
-    description: string
-    syntax?: string
-    source?: string
-    valid?: boolean
-    detector: string
-    detector_id: string
-  } | null
+  rule: FlatRule | null
   detectors: DetectorMeta[]
   onClose: () => void
 }
@@ -65,6 +56,45 @@ export function RuleDrawer({ rule, detectors, onClose }: RuleDrawerProps) {
                 {rule.syntax || '--'}
               </span>
             </Descriptions.Item>
+            <Descriptions.Item label="资产类型">
+              <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{rule.asset_type || '--'}</Typography.Text>
+            </Descriptions.Item>
+            <Descriptions.Item label="修复建议">
+              <span style={{ fontSize: 13 }}>{rule.remediation || '--'}</span>
+            </Descriptions.Item>
+            <Descriptions.Item label="路径过滤">
+              {rule.paths ? (
+                <span style={{ fontSize: 12 }}>
+                  {rule.paths.include?.length ? `包含: ${rule.paths.include.join(', ')} ` : ''}
+                  {rule.paths.exclude?.length ? `排除: ${rule.paths.exclude.join(', ')}` : ''}
+                  {!rule.paths.include?.length && !rule.paths.exclude?.length ? '无' : ''}
+                </span>
+              ) : <Typography.Text type="secondary">无</Typography.Text>}
+            </Descriptions.Item>
+            <Descriptions.Item label="后置排除">
+              {rule.post_exclude?.length ? (
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{rule.post_exclude.join(', ')}</span>
+              ) : <Typography.Text type="secondary">无</Typography.Text>}
+            </Descriptions.Item>
+            <Descriptions.Item label="反混淆">
+              {rule.deobfuscation?.length ? (
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{rule.deobfuscation.join(', ')}</span>
+              ) : <Typography.Text type="secondary">无</Typography.Text>}
+            </Descriptions.Item>
+            <Descriptions.Item label="Dotall">{rule.dotall ? '是' : '否'}</Descriptions.Item>
+            <Descriptions.Item label="元数据">
+              {rule.metadata && Object.keys(rule.metadata).length > 0 ? (
+                <pre style={{ margin: 0, fontSize: 11, fontFamily: 'var(--font-mono)' }}>{JSON.stringify(rule.metadata, null, 2)}</pre>
+              ) : <Typography.Text type="secondary">无</Typography.Text>}
+            </Descriptions.Item>
+            <Descriptions.Item label="来源文件">
+              <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, wordBreak: 'break-all' }}>{rule.source_file || '--'}</Typography.Text>
+            </Descriptions.Item>
+            {rule.project_path ? (
+              <Descriptions.Item label="项目路径">
+                <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 11, wordBreak: 'break-all' }}>{rule.project_path}</Typography.Text>
+              </Descriptions.Item>
+            ) : null}
           </Descriptions>
 
           {/* 所属检测器:列表只露检测器名,这里补引擎 / 覆盖范围 / 可用状态等上下文。 */}

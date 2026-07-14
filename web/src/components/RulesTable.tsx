@@ -6,8 +6,11 @@ import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { RuleDrawer } from './RuleDrawer'
 
 const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低', info: '信息' }
-type FlatRule = {
+export type FlatRule = {
   id: string; severity: Severity; description: string; syntax?: string
+  asset_type?: string; remediation?: string; paths?: { include?: string[]; exclude?: string[] }
+  post_exclude?: string[]; deobfuscation?: string[]; dotall?: boolean
+  metadata?: Record<string, unknown>; source_file?: string; project_path?: string
   source?: string; valid?: boolean
   detector: string; detector_id: string
 }
