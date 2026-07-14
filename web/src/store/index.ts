@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { apiGet, apiPost, apiPut, apiDelete, AuthError } from '../api/client'
-import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, TreeNode, Project, DirTagsResponse, RawFile, PreviewResult, EditResult, SuppressionItem, BaselineResult, DetectorsConfig } from '../types'
+import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, TreeNode, Project, DirTagsResponse, RawFile, PreviewResult, EditResult, SuppressionItem, BaselineResult, DetectorsConfig, DashboardData } from '../types'
 import { type DirTag, type DirTagsMap } from '../lib/dirTags'
 
 type ProjectTab = { kind: 'global' } | { kind: 'project'; path: string }
@@ -8,6 +8,7 @@ type ProjectTab = { kind: 'global' } | { kind: 'project'; path: string }
 interface State {
   assets: Inventory | null
   scan: ScanResult | null
+  dashboard: DashboardData | null
   detectors: DetectorMeta[]
   detectorConfig: DetectorsConfig | null
   history: ScanSummary[]
@@ -35,6 +36,7 @@ interface State {
   saveDetectorConfig: (cfg: DetectorsConfig) => Promise<boolean>
   fetchLatestScan: () => Promise<void>
   fetchHistory: () => Promise<void>
+  fetchDashboard: () => Promise<void>
   fetchHistoryDetail: (id: string) => Promise<ScanRecord | undefined>
   deleteHistory: (id: string) => Promise<void>
   fetchAgents: () => Promise<void>
@@ -76,7 +78,7 @@ const wrap = async <T>(fn: () => Promise<T>, set: (p: Partial<State>) => void): 
 }
 
 export const useStore = create<State>((set, get) => ({
-  assets: null, scan: null, detectors: [], detectorConfig: null, history: [], loading: false, error: null, authError: false,
+  assets: null, scan: null, dashboard: null, detectors: [], detectorConfig: null, history: [], loading: false, error: null, authError: false,
   agents: null, tree: null, projects: [], activeProjectTab: { kind: 'global' },
   dirTagsDefaults: {}, dirTagsOverrides: {}, selectedTagFilter: null,
   previewResult: null, editError: null,
@@ -125,6 +127,17 @@ export const useStore = create<State>((set, get) => ({
   fetchHistory: async () => {
     const list = await wrap(() => apiGet<ScanSummary[]>('/api/history'), set)
     if (list) set({ history: list })
+  },
+  fetchDashboard: async () => {
+    const res = await wrap(() => apiGet<DashboardData>('/api/dashboard'), set)
+    if (res) {
+      // 归一化 detectors 的 available/reason(与 fetchDetectors 一致)
+      const detectors = (res.detectors ?? []).map(m => {
+        const engines = m.engines ?? []
+        return { ...m, available: engines.length > 0 && engines.some(e => e.available), reason: engines.find(e => !e.available && e.reason)?.reason }
+      })
+      set({ dashboard: { ...res, detectors }, scan: res.last_scan ?? null })
+    }
   },
   fetchHistoryDetail: async (id) => {
     return wrap(() => apiGet<ScanRecord>(`/api/history/${id}`), set)

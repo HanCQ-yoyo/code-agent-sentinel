@@ -136,3 +136,11 @@ export interface DetectorsConfig {
   secret: BinaryDetectorConfig
   dep: DepDetectorConfig
 }
+
+// GET /api/dashboard 响应。
+export interface DashboardData {
+  asset_counts: Record<string, number>
+  duplicates: unknown[]
+  detectors: DetectorMeta[]
+  last_scan: ScanRecord | null
+}
