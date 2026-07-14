@@ -99,12 +99,24 @@ func (d *RulesDetector) Reason() string                  { return "" }
 func (d *RulesDetector) Meta() DetectorMeta {
 	rules := make([]RuleInfo, 0, len(d.baseRules))
 	for _, r := range d.baseRules {
-		rules = append(rules, RuleInfo{
-			ID:          r.ID,
-			Severity:    r.Severity,
-			Description: r.Description,
-			Syntax:      r.Syntax(),
-		})
+		ri := RuleInfo{
+			ID:            r.ID,
+			Severity:      r.Severity,
+			AssetType:     r.AssetType,
+			Description:   r.Description,
+			Syntax:        r.Syntax(),
+			Remediation:   r.Remediation,
+			PostExclude:   r.PostExclude,
+			Deobfuscation: r.Deobfuscation,
+			Dotall:        r.Dotall,
+			Metadata:      r.Metadata,
+			SourceFile:    r.Source,
+			ProjectPath:   r.ProjectPath,
+		}
+		if r.Paths != nil {
+			ri.Paths = &PathFilterInfo{Include: r.Paths.Include, Exclude: r.Paths.Exclude}
+		}
+		rules = append(rules, ri)
 	}
 	return DetectorMeta{
 		ID:      d.ID(),

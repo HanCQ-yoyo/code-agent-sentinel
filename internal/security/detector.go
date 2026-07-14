@@ -38,10 +38,25 @@ type EngineInfo struct {
 
 // RuleInfo 是一条内嵌规则的摘要(含可读语法或正则,供发现页抽屉展示规则表达式)。
 type RuleInfo struct {
-	ID          string `json:"id"`
-	Severity    string `json:"severity"`
-	Description string `json:"description"`
-	Syntax      string `json:"syntax,omitempty"` // 可读语法(baseline:按 op 拼)或正则原文(injection)
+	ID            string          `json:"id"`
+	Severity      string          `json:"severity"`
+	AssetType     string          `json:"asset_type"`
+	Description   string          `json:"description"`
+	Syntax        string          `json:"syntax,omitempty"` // 可读语法(baseline:按 op 拼)或正则原文(injection)
+	Remediation   string          `json:"remediation,omitempty"`
+	Paths         *PathFilterInfo `json:"paths,omitempty"`
+	PostExclude   []string        `json:"post_exclude,omitempty"`
+	Deobfuscation []string        `json:"deobfuscation,omitempty"`
+	Dotall        bool            `json:"dotall,omitempty"`
+	Metadata      map[string]any  `json:"metadata,omitempty"`
+	SourceFile    string          `json:"source_file,omitempty"`
+	ProjectPath   string          `json:"project_path,omitempty"`
+}
+
+// PathFilterInfo 是 RuleInfo 中路径过滤的可读表示(对应 ruleengine.PathFilter)。
+type PathFilterInfo struct {
+	Include []string `json:"include,omitempty"`
+	Exclude []string `json:"exclude,omitempty"`
 }
 
 // Registry 管理已注册检测器。

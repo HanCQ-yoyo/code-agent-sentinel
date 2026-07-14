@@ -85,6 +85,18 @@ func TestDetectorMeta(t *testing.T) {
 					}
 				}
 			}
+			// rules 每条应含 asset_type / remediation / source_file 等补齐字段
+			if len(m.Rules) > 0 {
+				r := m.Rules[0]
+				if r.AssetType == "" {
+					t.Errorf("规则 %q AssetType 为空", r.ID)
+				}
+				if r.SourceFile == "" {
+					t.Errorf("规则 %q SourceFile 为空", r.ID)
+				}
+				// Paths 可为 nil(无路径过滤),但字段须存在(零值 nil)
+				// Metadata 可为空 map
+			}
 		})
 	}
 }
