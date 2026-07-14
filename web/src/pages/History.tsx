@@ -68,7 +68,13 @@ export default function History() {
   return (
     <Card>
       {history.length === 0 ? <Empty description="暂无历史扫描" /> : (
-        <Table<ScanSummary> rowKey="id" columns={columns} dataSource={history} pagination={false} size="middle" />
+        <Table<ScanSummary>
+          rowKey="id"
+          columns={columns}
+          dataSource={history}
+          pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: ['10', '20', '50', '100'], showTotal: (t) => `共 ${t} 条`, size: 'small' }}
+          size="middle"
+        />
       )}
     </Card>
   )

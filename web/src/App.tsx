@@ -29,7 +29,7 @@ export default function App() {
         <Layout style={{ minHeight: '100vh' }}>
           <Sidebar />
           <Layout>
-            <TopBar onScan={() => runScan()} loading={loading} detectors={detectors} />
+            <TopBar onScan={() => runScan()} loading={loading} />
             <Content style={{ overflow: 'auto', padding: 24 }}>
               <Routes>
                 <Route path="/" element={<Dashboard />} />

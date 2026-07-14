@@ -83,8 +83,8 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
       ),
     },
     {
-      // 资产:文件名 + 类型两词,收窄到 140;长名省略,Tooltip 兜底。
-      title: '资产', width: 140, ellipsis: true, render: (_: unknown, f: Finding) => (
+      // 资产:文件名 + 类型两词,加宽到 220(预留给资产列);长名省略,Tooltip 兜底。
+      title: '资产', width: 220, ellipsis: true, render: (_: unknown, f: Finding) => (
         <Tooltip title={`${f.asset_name} ${f.asset_type}`}>
           <span>{f.asset_name} <Typography.Text type="secondary" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{f.asset_type}</Typography.Text></span>
         </Tooltip>

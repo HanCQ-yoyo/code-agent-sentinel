@@ -6,14 +6,13 @@ import { useTheme } from '../theme'
 import { useStore } from '../store'
 import { agentMeta } from '../lib/agents'
 import { navLabels } from '../lib/nav'
-import type { Agent, DetectorMeta } from '../types'
+import type { Agent } from '../types'
 
 const { Header } = Layout
 
 interface Props {
   onScan: () => void
   loading: boolean
-  detectors: DetectorMeta[]
 }
 
 // 末段面包屑文案(含动态 :id 路由)。父段用 navLabels(侧栏文案单一来源)。
@@ -23,12 +22,11 @@ function leafLabel(pathname: string): string | null {
   return null
 }
 
-export function TopBar({ onScan, loading, detectors }: Props) {
+export function TopBar({ onScan, loading }: Props) {
   const { theme, toggle } = useTheme()
   const { agents, fetchAgents } = useStore()
   const loc = useLocation()
   const currentAgent = agents?.current
-  const avail = detectors.filter((d) => d.available).length
 
   // 当前一级路由(用于面包屑首段)。
   const root = loc.pathname === '/' ? '/dashboard' : `/${loc.pathname.split('/')[1]}`
@@ -73,9 +71,6 @@ export function TopBar({ onScan, loading, detectors }: Props) {
         />
       </Space>
       <Space size="middle">
-        <span data-testid="detector-summary" style={{ color: 'var(--text-muted)', fontFamily: 'var(--font-mono)' }}>
-          检测器 {avail}/{detectors.length}
-        </span>
         <Switch
           checked={theme === 'dark'}
           onChange={toggle}
