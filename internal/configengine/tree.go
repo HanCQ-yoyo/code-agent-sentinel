@@ -158,3 +158,47 @@ func (e *Engine) BuildTree(root string, assets []Asset) (TreeNode, error) {
 
 	return rootNode.toValue(), nil
 }
+
+// BuildTreeFromAssets 构造一棵仅由资产驱动的树:不读真实文件系统,把 assets 按
+// source_path 分组为根级 file/synthetic 节点。用于项目根目录缺失(如项目仅有
+// 根级 .mcp.json 而无 .claude/ 子目录)时 BuildTree 会因 root 不存在返回 error 的场景——
+// 此处降级为只展示资产,保证前端文件树仍可见该项目的资产,而非 500 白屏。
+//
+// 语义与 BuildTree 的 synthetic 分组一致:同 basename 的多资产合并到一个节点。
+// 排序按 basename 字典序,与 BuildTree 的 synthetic 追加顺序一致。
+func (e *Engine) BuildTreeFromAssets(root string, assets []Asset) TreeNode {
+	type group struct {
+		ids   []string
+		scope string
+	}
+	groups := map[string]*group{}
+	for _, a := range assets {
+		base := filepath.Base(a.SourcePath)
+		g := groups[base]
+		if g == nil {
+			g = &group{}
+			groups[base] = g
+		}
+		g.ids = append(g.ids, a.ID)
+		g.scope = string(a.Scope)
+	}
+	var keys []string
+	for k := range groups {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	children := make([]TreeNode, 0, len(keys))
+	for _, k := range keys {
+		// file 节点(有资产挂载);Path 用 basename,与 BuildTree synthetic 节点 Path 一致,
+		// 前端 byPath 索引按 path 查节点不受影响。
+		children = append(children, TreeNode{
+			Name: k, Path: k, Kind: "file", Scope: groups[k].scope, AssetIDs: groups[k].ids,
+		})
+	}
+	return TreeNode{
+		Name:     filepath.Base(root),
+		Path:     ".",
+		Kind:     "dir",
+		Children: children,
+	}
+}

@@ -44,6 +44,12 @@ export default function MonacoViewer({
       minimap: { enabled: false },
       automaticLayout: true,
       scrollBeyondLastLine: false,
+      // alwaysConsumeMouseWheel:false:Monaco 默认拦截一切 wheel 事件,即使已到滚动边界
+      // 也不冒泡。markdown 预览里代码块(MonacoBlock)嵌在外层 .markdown-preview 滚动容器中,
+      // 鼠标停在代码块上滚动时 wheel 被 Monaco 吞掉,滚到代码顶/底也无法继续滚预览页。
+      // 设 false 后:Monaco 仅在自身确有内容可滚时消费 wheel,到边界(或内容不溢出)即放行
+      // 冒泡到外层预览容器,嵌套滚动联动正常。对源码/脚本编辑态无影响(范围内仍滚代码)。
+      scrollbar: { alwaysConsumeMouseWheel: false },
       fontSize: 12.5,
       fontFamily: 'var(--font-mono, "JetBrains Mono", ui-monospace, monospace)',
       lineNumbers: 'on',

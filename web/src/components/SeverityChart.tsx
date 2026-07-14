@@ -7,7 +7,7 @@ export function SeverityChart({ findings }: { findings: Finding[] }) {
   for (const f of findings) counts[f.severity] = (counts[f.severity] ?? 0) + 1
   const total = findings.length || 1
   return (
-    <Card title="严重度分布">
+    <Card title="严重度分布" style={{ flex: 1, height: '100%' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {SEVERITY_ORDER.map((s) => (
           <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

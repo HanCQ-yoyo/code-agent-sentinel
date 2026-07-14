@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 )
 
 // discoverProjects 发现所有已知项目的项目级资产:settings / .mcp.json / memory /
@@ -107,5 +108,10 @@ func readProjectList(claudeJSON string) ([]Project, error) {
 	for path := range doc.Projects {
 		out = append(out, Project{Path: path, Name: filepath.Base(path)})
 	}
+	// projects 是 map,遍历顺序非确定(Go map 迭代随机化)。前端 Tabs 直接按返回顺序
+	// 渲染全局 + 项目标签,顺序每次请求都可能变 → 用户反馈「点标签后顺序会变、选中跳到
+	// 最右」。按 Path 字典序稳定排序,使标签页顺序跨请求一致(全局固定在最左,项目按路径
+	// 稳定排列)。
+	sort.Slice(out, func(i, j int) bool { return out[i].Path < out[j].Path })
 	return out, nil
 }

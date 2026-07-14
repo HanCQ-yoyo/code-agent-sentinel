@@ -154,3 +154,46 @@ func TestGetTreeProjectScopeNoCrossProjectLeak(t *testing.T) {
 		t.Errorf("projA 资产 %q 缺失(树应含选中项目资产)", projAID)
 	}
 }
+
+// TestGetTreeProjectRootMissingMcpOnly 回归:项目在 ~/.claude.json 登记,但磁盘上只有
+// 根级 .mcp.json 而无 .claude/ 子目录(discoverProjects 允许的场景)。此前 BuildTree 因
+// root(<p>/.claude)不存在返回 os.ErrNotExist → handler 500 tree_failed「file does not
+// exist」,前端点该标签即报错。修复:project root 缺失时降级 BuildTreeFromAssets,返回
+// 只含资产的树(200),保证 .mcp.json 资产仍可见。
+func TestGetTreeProjectRootMissingMcpOnly(t *testing.T) {
+	dir := t.TempDir()
+	// 全局 .claude(避免 Discover 全局目录缺失)
+	writeFile(t, filepath.Join(dir, ".claude", "settings.json"), `{}`)
+
+	// 项目只有根级 .mcp.json,无 .claude/ 子目录
+	projPath := filepath.Join(dir, "mcpOnly")
+	writeFile(t, filepath.Join(dir, ".claude.json"), `{"projects":{"`+projPath+`":{}}}`)
+	writeFile(t, filepath.Join(projPath, ".mcp.json"), `{"mcpServers":{"s1":{"command":"x"}}}`)
+
+	s := newTestServer(t, dir)
+	r := s.Router()
+
+	req := httptest.NewRequest("GET", "/api/tree?scope=project&path="+projPath, nil)
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("项目 root 缺失应降级返回 200, got %d: %s", w.Code, w.Body)
+	}
+	var root configengine.TreeNode
+	json.Unmarshal(w.Body.Bytes(), &root)
+	// 根级 .mcp.json 资产应挂在树里(无论作为 file 还是 synthetic 节点)
+	var ids []string
+	var walk func(n configengine.TreeNode)
+	walk = func(n configengine.TreeNode) {
+		ids = append(ids, n.AssetIDs...)
+		for _, c := range n.Children {
+			walk(c)
+		}
+	}
+	walk(root)
+	if len(ids) == 0 {
+		t.Errorf("项目 root 缺失时应仍展示资产,实际 asset_ids 为空")
+	}
+}

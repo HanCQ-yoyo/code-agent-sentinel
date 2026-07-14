@@ -40,11 +40,18 @@ export default function Assets() {
   useEffect(() => {
     fetchAssets()
     fetchProjects()
-    fetchTree(activeProjectTab)
     fetchAgents()
     fetchDirTags()
     fetchFavorites()
-  }, [fetchAssets, fetchProjects, fetchTree, fetchAgents, fetchDirTags, fetchFavorites, activeProjectTab])
+  }, [fetchAssets, fetchProjects, fetchAgents, fetchDirTags, fetchFavorites])
+
+  // 切换上方标签页 → 重新拉对应项目的文件树。与上面一次性 effect 分离:
+  // 原先 activeProjectTab 进了同一 effect deps,导致每次点标签页都重跑 fetchProjects,
+  // 后端 map 顺序非确定时标签顺序抖动、选中标签跳到最右。现在 projects 只挂载时拉一次,
+  // 切标签页只 fetchTree(树随项目变,本就该重拉)。
+  useEffect(() => {
+    fetchTree(activeProjectTab)
+  }, [fetchTree, activeProjectTab])
 
   // 一次性迁移:若后端收藏为空但旧 localStorage 有数据,并入后端后清掉本地。
   useEffect(() => {

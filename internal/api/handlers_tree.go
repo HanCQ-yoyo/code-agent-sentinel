@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -64,6 +65,17 @@ func (s *Server) getTree(c *gin.Context) {
 			assets = append(assets, a)
 		} else if scope == "project" && a.Scope == configengine.ScopeProject && strings.HasPrefix(a.SourcePath, p+string(filepath.Separator)) {
 			assets = append(assets, a)
+		}
+	}
+	// project 根可能缺失:discoverProjects 允许项目仅有根级 .mcp.json 而无 .claude/ 子目录
+	// (见 discover_project.go fileExists 分支),但 BuildTree 要求 root 存在,缺失时返回
+	// os.ErrNotExist → 此处 500 tree_failed「file does not exist」,前端点该标签即报错。
+	// 降级:root 不存在时用 BuildTreeFromAssets 只展示资产(无真实目录下钻),保证文件树
+	// 仍可见该项目的资产而非白屏。global 根缺失属异常配置,仍走 BuildTree 报错。
+	if scope == "project" {
+		if _, statErr := os.Stat(root); statErr != nil {
+			c.JSON(http.StatusOK, s.Engine.BuildTreeFromAssets(root, assets))
+			return
 		}
 	}
 	tree, err := s.Engine.BuildTree(root, assets)

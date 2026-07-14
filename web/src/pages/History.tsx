@@ -42,9 +42,9 @@ export default function History() {
         <Typography.Title level={5} style={{ color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>
           {detail.id} · {formatDateTime(detail.started_at)}
         </Typography.Title>
-        <Row gutter={16}>
-          <Col xs={24} lg={12}><HealthScoreCard h={detail.health_score} /></Col>
-          <Col xs={24} lg={12}><SeverityChart findings={detail.findings ?? []} /></Col>
+        <Row gutter={16} align="stretch">
+          <Col xs={24} lg={12} style={{ display: 'flex' }}><HealthScoreCard h={detail.health_score} /></Col>
+          <Col xs={24} lg={12} style={{ display: 'flex' }}><SeverityChart findings={detail.findings ?? []} /></Col>
         </Row>
         <FindingTable findings={detail.findings ?? []} />
       </div>
