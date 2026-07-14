@@ -22,7 +22,16 @@ export function antdTheme(mode: Mode): ThemeConfig {
       colorWarning: t.sevMedium,
       colorSuccess: t.sevLow,
       fontFamily: t.fontSans,
+      // 统一字号标准:正文 14 / 小号 12 / 大号 16 / 标题 16→28 阶梯,与 index.css --fs-* 对齐。
       fontSize: 14,
+      fontSizeSM: 12,
+      fontSizeLG: 16,
+      fontSizeXL: 20,
+      fontSizeHeading1: 28,
+      fontSizeHeading2: 24,
+      fontSizeHeading3: 20,
+      fontSizeHeading4: 18,
+      fontSizeHeading5: 16,
       borderRadius: mode === 'dark' ? 12 : 16,
     },
     components: {

@@ -1,8 +1,8 @@
 import { Card, Empty } from 'antd'
 import type { Finding, Severity } from '../types'
+import { SEVERITY_LABEL } from '../lib/severity'
 
 const sevWeight: Record<Severity, number> = { critical: 5, high: 4, medium: 3, low: 2, info: 1 }
-const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低', info: '信息' }
 
 export function TopRiskTypes({ findings, topN = 10 }: { findings: Finding[]; topN?: number }) {
   // 按 rule_id 分组:取组内最高严重度 + 计数。
@@ -32,7 +32,7 @@ export function TopRiskTypes({ findings, topN = 10 }: { findings: Finding[]; top
               <div style={{ flex: 1, background: 'var(--bg-border)', borderRadius: 4, height: 12, overflow: 'hidden' }}>
                 <div data-testid={`toprisk-${r.id}`} style={{ width: `${(r.count / maxCount) * 100}%`, minWidth: 8, height: '100%', background: `var(--sev-${r.sev})` }} />
               </div>
-              <span style={{ width: 60, textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11, color: `var(--sev-${r.sev})` }}>{sevLabel[r.sev]} {r.count}</span>
+              <span style={{ width: 60, textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11, color: `var(--sev-${r.sev})` }}>{SEVERITY_LABEL[r.sev]} {r.count}</span>
             </div>
           ))}
         </div>

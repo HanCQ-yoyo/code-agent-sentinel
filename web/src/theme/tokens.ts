@@ -25,9 +25,9 @@ export interface TokenSet {
 }
 
 export const fontSans =
-  "'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif"
+  "'Inter', 'Noto Sans SC', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif"
 export const fontMono =
-  "'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+  "'JetBrains Mono', 'Noto Sans SC', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
 
 export const tokens: Record<Mode, TokenSet> = {
   light: {

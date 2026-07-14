@@ -19,12 +19,27 @@
   --sev-medium: #B8901F;
   --sev-low: #2E8B4A;
   --sev-info: #6B7280;
+  /* 级别标签实色填充(白字专用):比图表基础色略深,保证 12px 加粗白字对比度 ≥ AA。
+     红→橙→铜→绿→石板,语义递进;两套主题共用同一组(标签自带填充,在浅/深卡片上都可读)。 */
+  --sev-critical-solid: #C2362C;
+  --sev-high-solid: #BC5A1A;
+  --sev-medium-solid: #946A12;
+  --sev-low-solid: #2C7A3E;
+  --sev-info-solid: #5C6573;
   --scope-global: #1B6E6A;
   --scope-project: #2E8B4A;
   --scope-managed: #C9742E;
   --scope-plugin: #6B3A8C;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  /* 字号统一标准:微标签 / 紧凑数据 / 正文 / 强调 / 页内标题 / 大数字。
+     antd 主题 fontSize(14)与本 scale 对齐;inline 文案优先用这些 token 而非裸数字。 */
+  --fs-xs: 11px;
+  --fs-sm: 12px;
+  --fs-base: 14px;
+  --fs-md: 16px;
+  --fs-lg: 20px;
+  --fs-xl: 28px;
+  --font-mono: 'JetBrains Mono', 'Noto Sans SC', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: 'Inter', 'Noto Sans SC', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
 /* D1 深色覆盖 */
@@ -44,18 +59,28 @@
   --sev-medium: #E8C547;
   --sev-low: #4FB868;
   --sev-info: #9CA3AF;
+  --sev-critical-solid: #C2362C;
+  --sev-high-solid: #BC5A1A;
+  --sev-medium-solid: #946A12;
+  --sev-low-solid: #2C7A3E;
+  --sev-info-solid: #5C6573;
   --scope-global: #2D4A6B;
   --scope-project: #2F5D3A;
   --scope-managed: #6B4A2D;
   --scope-plugin: #4A2D6B;
-  --font-mono: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-mono: 'JetBrains Mono', 'Noto Sans SC', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-sans: 'Inter', 'Noto Sans SC', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
 body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-sans);
+  font-size: var(--fs-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
 }
 
 /* 等宽工具类(供路径/ID/hash/时间/code 用) */

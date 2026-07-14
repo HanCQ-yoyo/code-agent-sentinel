@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Drawer, Descriptions, Typography, Alert, Spin, Empty, Button, Modal, Input, Popconfirm, Tag, message } from 'antd'
-import type { Finding, DetectorMeta, Severity, Asset } from '../types'
+import type { Finding, DetectorMeta, Asset } from '../types'
 import { apiGet } from '../api/client'
 import { useStore } from '../store'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { AssetDetailPanel } from './AssetDetailPanel'
 import { formatDateTime } from '../lib/format'
-
-const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低', info: '信息' }
+import { SEVERITY_LABEL } from '../lib/severity'
 
 interface FindingDrawerProps {
   finding: Finding | null
@@ -112,7 +111,7 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
           <Descriptions title="风险信息" size="small" column={1} bordered>
             <Descriptions.Item label="风险名称">{finding.message}</Descriptions.Item>
             <Descriptions.Item label="级别">
-              <SevBadge tone={`sev-${finding.severity}` as BadgeTone}>{sevLabel[finding.severity]}</SevBadge>
+              <SevBadge tone={`sev-${finding.severity}` as BadgeTone}>{SEVERITY_LABEL[finding.severity]}</SevBadge>
             </Descriptions.Item>
             <Descriptions.Item label="检测器">{detName(finding.detector_id)}</Descriptions.Item>
             <Descriptions.Item label="规则 ID">

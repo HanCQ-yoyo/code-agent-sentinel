@@ -15,11 +15,11 @@ export type BadgeTone =
   | 'sev-info'
 
 const sevFill: Record<string, string> = {
-  'sev-critical': 'var(--sev-critical)',
-  'sev-high': 'var(--sev-high)',
-  'sev-medium': 'var(--sev-medium)',
-  'sev-low': 'var(--sev-low)',
-  'sev-info': 'var(--sev-info)',
+  'sev-critical': 'var(--sev-critical-solid)',
+  'sev-high': 'var(--sev-high-solid)',
+  'sev-medium': 'var(--sev-medium-solid)',
+  'sev-low': 'var(--sev-low-solid)',
+  'sev-info': 'var(--sev-info-solid)',
 }
 
 const scopeColor: Record<string, string> = {
@@ -31,16 +31,18 @@ const scopeColor: Record<string, string> = {
 
 export function Badge({ tone, children }: { tone: BadgeTone; children: ReactNode }) {
   const base: React.CSSProperties = {
-    fontFamily: 'var(--font-mono, "JetBrains Mono", ui-monospace, monospace)',
-    fontSize: 12,
+    fontFamily: 'var(--font-sans)',
+    fontSize: 'var(--fs-sm)',
     marginInlineEnd: 0,
+    lineHeight: '20px',
+    padding: '0 8px',
+    borderRadius: 4,
   }
 
   if (tone in sevFill) {
-    // sev 填充:critical 白字,其余固定深墨 #1a1a1a(对比度硬规则)
-    const ink = tone === 'sev-critical' ? '#fff' : '#1a1a1a'
+    // 级别标签统一:实色填充 + 白字(全级别一致),实色 token 已保证白字对比度。
     return (
-      <Tag style={{ ...base, background: sevFill[tone], color: ink, border: 'none' }}>
+      <Tag style={{ ...base, background: sevFill[tone], color: '#fff', border: 'none', fontWeight: 600 }}>
         {children}
       </Tag>
     )

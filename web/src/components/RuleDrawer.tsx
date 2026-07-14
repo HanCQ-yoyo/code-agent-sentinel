@@ -1,9 +1,8 @@
 import { Drawer, Descriptions, Typography, Empty, Badge as AntBadge } from 'antd'
-import type { DetectorMeta, Severity } from '../types'
+import type { DetectorMeta } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { sourceLabel, type FlatRule } from './RulesTable'
-
-const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低', info: '信息' }
+import { SEVERITY_LABEL } from '../lib/severity'
 
 interface RuleDrawerProps {
   rule: FlatRule | null
@@ -39,7 +38,7 @@ export function RuleDrawer({ rule, detectors, onClose }: RuleDrawerProps) {
             </Descriptions.Item>
             <Descriptions.Item label="规则名称">{rule.description}</Descriptions.Item>
             <Descriptions.Item label="级别">
-              <SevBadge tone={`sev-${rule.severity}` as BadgeTone}>{sevLabel[rule.severity]}</SevBadge>
+              <SevBadge tone={`sev-${rule.severity}` as BadgeTone}>{SEVERITY_LABEL[rule.severity]}</SevBadge>
             </Descriptions.Item>
             <Descriptions.Item label="检测器">{rule.detector}</Descriptions.Item>
             <Descriptions.Item label="来源">{rule.source ? sourceLabel[rule.source] ?? rule.source : '--'}</Descriptions.Item>

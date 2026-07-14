@@ -167,9 +167,12 @@ test('结构化资产详情渲染', async ({ page }) => {
 test('设置页合并视图渲染检测器与规则', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
   await page.getByRole('menuitem', { name: /设置/i }).click()
-  // 合并后默认 Tab「规则配置」直接渲染:胶囊行 + 规则列表 Segmented 的「全部 N」
+  // 合并后默认 Tab「规则配置」直接渲染:检测器胶囊行 + 规则列表。
+  // detector-chips=胶囊行容器;规则表渲染出 ant-table-row 即证明规则已加载。
+  // (SevSegLabel 的「全部」文案与计数分属两个 span,textContent 为「全部63」无空格,
+  //  故不按 /全部 \d+/ 断言,改以规则行可见为准。)
   await expect(page.getByTestId('detector-chips')).toBeVisible({ timeout: 10000 })
-  await expect(page.getByText(/全部 \d+/)).toBeVisible({ timeout: 10000 })
+  await expect(page.locator('.ant-table-row').first()).toBeVisible({ timeout: 10000 })
   // 点一个检测器胶囊 → 该检测器规则数胶囊可见(快捷筛选)
   await page.getByTestId('detector-chip').first().click()
   await expect(page.getByTestId('detector-chip').first()).toHaveAttribute('aria-pressed', 'true')

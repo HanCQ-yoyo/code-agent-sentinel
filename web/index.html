@@ -1,7 +1,15 @@
 <!doctype html>
 <html lang="zh-CN">
-  <head><meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" /><title>Sentinel</title>
-  <script>(function(){var k='sentinel_theme';var s=localStorage.getItem(k);var t=(s==='light'||s==='dark')?s:'light';document.documentElement.setAttribute('data-theme',t);})();</script>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Sentinel</title>
+    <script>(function(){var k='sentinel_theme';var s=localStorage.getItem(k);var t=(s==='light'||s==='dark')?s:'light';document.documentElement.setAttribute('data-theme',t);})();</script>
+    <!-- 字体:Inter(UI 拉丁)+ JetBrains Mono(路径/ID/hash 等宽)+ Noto Sans SC(中文)。
+         系统未预装这些字体,需经 CDN 加载;离线时回退到 system-ui / 等宽 / 系统中文体。 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet" />
   </head>
   <body class="bg-bg text-text"><div id="root"></div><script type="module" src="/src/main.tsx"></script></body>
 </html>

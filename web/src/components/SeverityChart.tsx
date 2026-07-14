@@ -1,8 +1,6 @@
 import { Card } from 'antd'
 import type { Finding, Severity } from '../types'
-
-const order: Severity[] = ['critical', 'high', 'medium', 'low', 'info']
-const label: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低', info: '信息' }
+import { SEVERITY_ORDER, SEVERITY_LABEL } from '../lib/severity'
 
 export function SeverityChart({ findings }: { findings: Finding[] }) {
   const counts: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 }
@@ -11,9 +9,9 @@ export function SeverityChart({ findings }: { findings: Finding[] }) {
   return (
     <Card title="严重度分布">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-        {order.map((s) => (
+        {SEVERITY_ORDER.map((s) => (
           <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ width: 32, color: 'var(--text-muted)' }}>{label[s]}</span>
+            <span style={{ width: 32, color: 'var(--text-muted)' }}>{SEVERITY_LABEL[s]}</span>
             <div style={{ flex: 1, background: 'var(--bg-border)', borderRadius: 4, height: 12, overflow: 'hidden' }}>
               <div
                 data-testid={`severity-${s}`}

@@ -6,6 +6,7 @@ import type { Asset, Finding, Severity } from '../types'
 import { Badge, type BadgeTone } from './Badge'
 import { relativeClaudePath } from '../lib/path'
 import { resolveDirTag, type DirTag, type DirTagsMap } from '../lib/dirTags'
+import { SEVERITY_LABEL } from '../lib/severity'
 
 const rank: Record<Severity, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 0 }
 
@@ -21,8 +22,6 @@ function maxSev(findings: Finding[], assetId: string): Severity | undefined {
   }
   return best
 }
-
-const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低', info: '信息' }
 
 // tagLabel:资产生效标签(相对 .claude 根)。无标签 → 不显示。
 function assetTag(a: Asset, defaults: DirTagsMap, overrides: DirTagsMap): DirTag | undefined {
@@ -104,7 +103,7 @@ export function AssetTable({ assets, findings = [], onSelect, favorites, onToggl
       render: (_: unknown, a: Asset) => {
         const sev = maxSev(findings, a.id)
         return sev ? (
-          <Badge tone={`sev-${sev}` as BadgeTone}>{sevLabel[sev]}</Badge>
+          <Badge tone={`sev-${sev}` as BadgeTone}>{SEVERITY_LABEL[sev]}</Badge>
         ) : (
           <Tag style={{ borderStyle: 'dashed', color: 'var(--text-dim)', background: 'transparent' }}>无</Tag>
         )

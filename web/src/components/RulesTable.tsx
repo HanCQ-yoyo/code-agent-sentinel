@@ -4,8 +4,8 @@ import type { ColumnsType } from 'antd/es/table'
 import type { DetectorMeta, Severity } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { RuleDrawer } from './RuleDrawer'
+import { SEVERITY_ORDER, SEVERITY_LABEL, SEVERITY_DOT } from '../lib/severity'
 
-const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低', info: '信息' }
 export type FlatRule = {
   id: string; severity: Severity; description: string; syntax?: string
   asset_type?: string; remediation?: string; paths?: { include?: string[]; exclude?: string[] }
@@ -16,10 +16,6 @@ export type FlatRule = {
 }
 
 // 级别筛选配色与风险管理列表(FindingTable)共用 .sev-seg 体系:index.css 按 .sev-tab-* 给选中项填级别实色。
-const order: Severity[] = ['critical', 'high', 'medium', 'low', 'info']
-const sevDot: Record<Severity, string> = {
-  critical: 'var(--sev-critical)', high: 'var(--sev-high)', medium: 'var(--sev-medium)', low: 'var(--sev-low)', info: 'var(--sev-info)',
-}
 
 // 按 rule_id 前缀推导来源分组(baseline./injection./skill./custom.)。
 // 后端 RuleInfo 目前未带 source 字段;前端按前缀推导,后端补充后优先用 r.source。
@@ -39,7 +35,7 @@ function SevSegLabel({ text, count, sev }: { text: string; count: number; sev?: 
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
       <span
         className="sev-seg-dot"
-        style={{ width: 8, height: 8, borderRadius: '50%', background: sev ? sevDot[sev] : 'var(--accent)' }}
+        style={{ width: 8, height: 8, borderRadius: '50%', background: sev ? SEVERITY_DOT[sev] : 'var(--accent)' }}
       />
       <span>{text}</span>
       <span className="sev-seg-count" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{count}</span>
@@ -114,7 +110,7 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
         </Tooltip>
       ),
     },
-    { title: '级别', width: 80, render: (_: unknown, r: FlatRule) => <SevBadge tone={`sev-${r.severity}` as BadgeTone}>{sevLabel[r.severity]}</SevBadge> },
+    { title: '级别', width: 80, render: (_: unknown, r: FlatRule) => <SevBadge tone={`sev-${r.severity}` as BadgeTone}>{SEVERITY_LABEL[r.severity]}</SevBadge> },
     {
       // 来源:按 rule_id 前缀推导(baseline./injection./skill./custom.),后端带 source 则优先。
       title: '来源', width: 90, render: (_: unknown, r: FlatRule) => (
@@ -181,9 +177,9 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
         onChange={(v) => setSev(v as Severity | 'all')}
         options={[
           { value: 'all', label: <SevSegLabel text="全部" count={counts.all} />, className: 'sev-tab-all' },
-          ...order.map((s) => ({
+          ...SEVERITY_ORDER.map((s) => ({
             value: s,
-            label: <SevSegLabel text={sevLabel[s]} count={counts[s] ?? 0} sev={s} />,
+            label: <SevSegLabel text={SEVERITY_LABEL[s]} count={counts[s] ?? 0} sev={s} />,
             className: `sev-tab-${s}`,
           })),
         ]}

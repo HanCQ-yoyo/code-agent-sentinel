@@ -3,18 +3,10 @@ import { Card, Table, Segmented, Typography, Empty, Tooltip, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import type { Finding, Severity, DetectorMeta } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
+import { SEVERITY_ORDER, SEVERITY_LABEL, SEVERITY_DOT } from '../lib/severity'
 import { formatDateTime } from '../lib/format'
 
-const order: Severity[] = ['critical', 'high', 'medium', 'low', 'info']
-const sevLabel: Record<Severity, string> = { critical: '严重', high: '高', medium: '中', low: '低', info: '信息' }
 // 筛选标签内的色点颜色(复用 sev token);「全部」用 accent。
-const sevDot: Record<Severity, string> = {
-  critical: 'var(--sev-critical)', high: 'var(--sev-high)', medium: 'var(--sev-medium)', low: 'var(--sev-low)', info: 'var(--sev-info)',
-}
-
-// 抑制状态筛选:全部 | 活跃(未抑制)| 已抑制。与 sev 筛选 AND 组合。
-type SupprFilter = 'all' | 'active' | 'suppressed'
-
 // 级别筛选标签:左侧色点 + 文本 + 计数。色点颜色对应级别,选中时整块填该级别色(见 .sev-seg CSS),
 // 与未选中的透明底+色点形成明显差别。
 function SevSegLabel({ text, count, sev }: { text: string; count: number; sev?: Severity }) {
@@ -22,13 +14,16 @@ function SevSegLabel({ text, count, sev }: { text: string; count: number; sev?: 
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
       <span
         className="sev-seg-dot"
-        style={{ width: 8, height: 8, borderRadius: '50%', background: sev ? sevDot[sev] : 'var(--accent)' }}
+        style={{ width: 8, height: 8, borderRadius: '50%', background: sev ? SEVERITY_DOT[sev] : 'var(--accent)' }}
       />
       <span>{text}</span>
       <span className="sev-seg-count" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{count}</span>
     </span>
   )
 }
+
+// 抑制状态筛选:全部 | 活跃(未抑制)| 已抑制。与 sev 筛选 AND 组合。
+type SupprFilter = 'all' | 'active' | 'suppressed'
 
 interface FindingTableProps {
   findings: Finding[]
@@ -44,7 +39,7 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
   const [filter, setFilter] = useState<Severity | 'all'>('all')
   const [supprFilter, setSupprFilter] = useState<SupprFilter>('all')
   const counts: Record<string, number> = { all: findings.length }
-  for (const s of order) counts[s] = findings.filter((f) => f.severity === s).length
+  for (const s of SEVERITY_ORDER) counts[s] = findings.filter((f) => f.severity === s).length
   const supprCounts = {
     all: findings.length,
     active: findings.filter((f) => !f.suppressed).length,
@@ -55,7 +50,7 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
   let shown = filter === 'all' ? findings : findings.filter((f) => f.severity === filter)
   if (supprFilter === 'active') shown = shown.filter((f) => !f.suppressed)
   else if (supprFilter === 'suppressed') shown = shown.filter((f) => f.suppressed)
-  const sorted = [...shown].sort((a, b) => order.indexOf(a.severity) - order.indexOf(b.severity))
+  const sorted = [...shown].sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity))
 
   // detector_id → 中文名(供检测器列显示;无匹配则回退 id)。
   const detName = (id: string): string => {
@@ -65,7 +60,8 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
 
   const columns: ColumnsType<Finding> = [
     {
-      // 风险名称:不设固定宽度,作为弹性主列占据剩余空间并省略;资产列收窄后这里更宽。
+      // 风险名称:不设固定宽度,作为弹性主列占据剩余空间并省略;资产列加宽(280)后这里相应收窄,
+      // 把空间预留给资产列(用户反馈:风险名称过宽、资产偏挤)。
       // 已抑制 finding:名称后附「已抑制」标签(Tooltip 展示抑制来源 + reason),行整体降透明度。
       title: '风险名称', ellipsis: true, render: (_: unknown, f: Finding) => (
         <Tooltip title={f.message}>
@@ -83,14 +79,14 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
       ),
     },
     {
-      // 资产:文件名 + 类型两词,加宽到 220(预留给资产列);长名省略,Tooltip 兜底。
-      title: '资产', width: 220, ellipsis: true, render: (_: unknown, f: Finding) => (
+      // 资产:文件名 + 类型两词,加宽到 280(预留给资产列);长名省略,Tooltip 兜底。
+      title: '资产', width: 280, ellipsis: true, render: (_: unknown, f: Finding) => (
         <Tooltip title={`${f.asset_name} ${f.asset_type}`}>
           <span>{f.asset_name} <Typography.Text type="secondary" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{f.asset_type}</Typography.Text></span>
         </Tooltip>
       ),
     },
-    { title: '级别', width: 80, render: (_: unknown, f: Finding) => <SevBadge tone={`sev-${f.severity}` as BadgeTone}>{sevLabel[f.severity]}</SevBadge> },
+    { title: '级别', width: 80, render: (_: unknown, f: Finding) => <SevBadge tone={`sev-${f.severity}` as BadgeTone}>{SEVERITY_LABEL[f.severity]}</SevBadge> },
     {
       title: '检测器', width: 120, render: (_: unknown, f: Finding) => (
         <Typography.Text style={{ fontSize: 12 }}>{detName(f.detector_id)}</Typography.Text>
@@ -118,9 +114,9 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
           onChange={(v) => setFilter(v as Severity | 'all')}
           options={[
             { value: 'all', label: <SevSegLabel text="全部" count={counts.all} />, className: 'sev-tab-all' },
-            ...order.map((s) => ({
+            ...SEVERITY_ORDER.map((s) => ({
               value: s,
-              label: <SevSegLabel text={sevLabel[s]} count={counts[s]} sev={s} />,
+              label: <SevSegLabel text={SEVERITY_LABEL[s]} count={counts[s]} sev={s} />,
               className: `sev-tab-${s}`,
             })),
           ]}

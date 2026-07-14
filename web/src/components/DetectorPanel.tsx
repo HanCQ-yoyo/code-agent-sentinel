@@ -20,7 +20,7 @@ export function DetectorPanel({ detectors, selectedId, onSelect }: { detectors: 
   const selected = selectedId ? detectors.find((d) => d.id === selectedId) : undefined
   const availCount = detectors.filter((d) => d.enabled && d.available).length
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+    <div data-testid="detector-chips" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
         <button type="button" onClick={() => onSelect?.(undefined)} aria-pressed={!selectedId}
           style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 16, cursor: 'pointer', fontSize: 13, background: !selectedId ? 'var(--brand-soft)' : 'var(--bg-card)', border: `1px solid ${!selectedId ? 'var(--accent)' : 'var(--bg-border)'}`, color: 'var(--text)' }}>
@@ -36,7 +36,7 @@ export function DetectorPanel({ detectors, selectedId, onSelect }: { detectors: 
         ))}
       </div>
       {selected ? (
-        <Card size="small" style={{ background: 'var(--surface2)' }}>
+        <Card size="small" style={{ background: 'var(--surface-2)' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             <div>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>状态</Typography.Text>

@@ -10,7 +10,7 @@ function DetectorConfigControls({ d, draft, setDraft }: { d: DetectorMeta; draft
   if (!draft) return null
   const patch = (p: Partial<DetectorsConfig>) => setDraft({ ...draft, ...p })
   return (
-    <Card size="small" style={{ background: 'var(--surface2)', marginTop: 8 }}>
+    <Card size="small" style={{ background: 'var(--surface-2)', marginTop: 8 }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {d.id === 'rules' ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
