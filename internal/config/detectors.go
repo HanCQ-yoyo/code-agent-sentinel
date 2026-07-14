@@ -4,19 +4,19 @@ import "sync"
 
 // DetectorToggle 是无二进制的检测器启用开关(如 rules)。
 type DetectorToggle struct {
-	Enabled bool `yaml:"enabled"`
+	Enabled bool `yaml:"enabled" json:"enabled"`
 }
 
 // BinaryDetectorConfig 是带二进制路径的检测器/引擎配置(如 secret、dep 的各引擎)。
 type BinaryDetectorConfig struct {
-	Enabled bool   `yaml:"enabled"`
-	Binary  string `yaml:"binary"` // 空=用默认二进制名
+	Enabled bool   `yaml:"enabled" json:"enabled"`
+	Binary  string `yaml:"binary" json:"binary"` // 空=用默认二进制名
 }
 
 // DepDetectorConfig 是依赖检测器配置:检测器级开关 + 各引擎(npm/govulncheck)独立配置。
 type DepDetectorConfig struct {
-	Enabled bool                                `yaml:"enabled"`
-	Engines map[string]BinaryDetectorConfig     `yaml:"engines"` // keys: "npm","govulncheck"
+	Enabled bool                            `yaml:"enabled" json:"enabled"`
+	Engines map[string]BinaryDetectorConfig `yaml:"engines" json:"engines"` // keys: "npm","govulncheck"
 }
 
 // DetectorsConfig 汇总三个检测器的运行期配置。持有 sync.RWMutex:检测器读(RLock)
@@ -27,9 +27,9 @@ type DepDetectorConfig struct {
 // 能被持指针的检测器即时看到(不可整体替换指针,否则检测器持有的旧指针看不到更新)。
 type DetectorsConfig struct {
 	mu     sync.RWMutex
-	Rules  DetectorToggle       `yaml:"rules"`
-	Secret BinaryDetectorConfig `yaml:"secret"`
-	Dep    DepDetectorConfig    `yaml:"dep"`
+	Rules  DetectorToggle       `yaml:"rules" json:"rules"`
+	Secret BinaryDetectorConfig `yaml:"secret" json:"secret"`
+	Dep    DepDetectorConfig    `yaml:"dep" json:"dep"`
 }
 
 func (c *DetectorsConfig) RulesEnabled() bool {
