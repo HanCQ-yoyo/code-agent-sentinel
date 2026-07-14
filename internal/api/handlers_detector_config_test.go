@@ -60,7 +60,7 @@ func TestGetDetectorConfig(t *testing.T) {
 func TestPutDetectorConfig(t *testing.T) {
 	srv, cfgPath := newConfigTestServer(t)
 	r := srv.Router()
-	body := `{"rules":{"enabled":false},"secret":{"enabled":true,"binary":"/opt/gitleaks"},"dep":{"enabled":true,"engines":{"npm":{"enabled":false}}}}`
+	body := `{"rules":{"enabled":false},"secret":{"enabled":true,"binary":"/opt/gitleaks"},"dep":{"enabled":true,"engines":{"npm":{"enabled":false},"govulncheck":{"enabled":true}}}}`
 	req := httptest.NewRequest(http.MethodPut, "/api/detectors/config", strings.NewReader(body))
 	req.Host = "127.0.0.1"
 	req.Header.Set("Authorization", "Bearer tok")
@@ -111,5 +111,54 @@ func TestPutDetectorConfig(t *testing.T) {
 	}
 	if got := loaded.Detectors.SecretBinaryOrDefault(); got != "/opt/gitleaks" {
 		t.Errorf("持久化后 secret binary = %q, want /opt/gitleaks", got)
+	}
+}
+
+// TestPutDetectorConfigRejectsPartialBody 验证部分体(缺 secret/dep 顶层键)被拒绝。
+// 安全相关:部分体会因 bool 零值=false 静默禁用未指定的检测器。
+func TestPutDetectorConfigRejectsPartialBody(t *testing.T) {
+	srv, _ := newConfigTestServer(t)
+	r := srv.Router()
+	body := `{"rules":{"enabled":false}}`
+	req := httptest.NewRequest(http.MethodPut, "/api/detectors/config", strings.NewReader(body))
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body = %s", w.Code, w.Body.String())
+	}
+	var resp map[string]map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp["error"]["code"] != "invalid_config" {
+		t.Errorf("error code = %q, want invalid_config; body = %s", resp["error"]["code"], w.Body.String())
+	}
+}
+
+// TestPutDetectorConfigRejectsMissingDepEngine 验证 dep.engines 须含 npm + govulncheck。
+// 缺引擎会因 map 缺键导致该引擎默认启用,但配置不完整——应拒绝。
+func TestPutDetectorConfigRejectsMissingDepEngine(t *testing.T) {
+	srv, _ := newConfigTestServer(t)
+	r := srv.Router()
+	// 三顶层键齐全,但 dep.engines 缺 govulncheck
+	body := `{"rules":{"enabled":false},"secret":{"enabled":true,"binary":"/opt/gitleaks"},"dep":{"enabled":true,"engines":{"npm":{"enabled":false}}}}`
+	req := httptest.NewRequest(http.MethodPut, "/api/detectors/config", strings.NewReader(body))
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("status = %d, want 400; body = %s", w.Code, w.Body.String())
+	}
+	var resp map[string]map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp["error"]["code"] != "invalid_config" {
+		t.Errorf("error code = %q, want invalid_config; body = %s", resp["error"]["code"], w.Body.String())
 	}
 }

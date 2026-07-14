@@ -1,6 +1,9 @@
 package api
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -16,10 +19,42 @@ func (s *Server) getDetectorConfig(c *gin.Context) {
 
 // putDetectorConfig 校验并持久化检测器配置:ApplyFrom 原地改写运行期 cfg.Detectors
 // (检测器持指针即时生效),再 config.Save 回写文件。
+//
+// 安全校验(防部分体静默禁用):DetectorsConfig 用纯 bool 字段,零值=false=禁用,
+// JSON 反序列化后无法区分"键缺失"与"显式 false"。故 PUT 须校验请求体含全部三个
+// 顶层检测器键(rules/secret/dep)且 dep.engines 含 npm+govulncheck,否则部分体会
+// 因 bool 零值静默禁用未指定的检测器(安全相关:丢失检测覆盖)。
 func (s *Server) putDetectorConfig(c *gin.Context) {
-	var incoming config.DetectorsConfig
-	if err := c.ShouldBindJSON(&incoming); err != nil {
+	raw, err := io.ReadAll(c.Request.Body)
+	if err != nil {
 		c.JSON(http.StatusBadRequest, errorBody("invalid_config", err.Error()))
+		return
+	}
+	// 两遍解码:先 map 检查顶层键齐全(防部分体静默禁用),再结构体。
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &top); err != nil {
+		c.JSON(http.StatusBadRequest, errorBody("invalid_config", err.Error()))
+		return
+	}
+	for _, key := range []string{"rules", "secret", "dep"} {
+		if _, ok := top[key]; !ok {
+			c.JSON(http.StatusBadRequest, errorBody("invalid_config",
+				fmt.Sprintf("missing detector key %q; partial config silently disables unspecified detectors — send all of rules/secret/dep", key)))
+			return
+		}
+	}
+	var incoming config.DetectorsConfig
+	if err := json.Unmarshal(raw, &incoming); err != nil {
+		c.JSON(http.StatusBadRequest, errorBody("invalid_config", err.Error()))
+		return
+	}
+	// dep.engines 须含 npm + govulncheck(同因:防部分引擎配置静默禁用)。
+	if _, ok := incoming.Dep.Engines["npm"]; !ok {
+		c.JSON(http.StatusBadRequest, errorBody("invalid_config", `missing dep engine "npm"`))
+		return
+	}
+	if _, ok := incoming.Dep.Engines["govulncheck"]; !ok {
+		c.JSON(http.StatusBadRequest, errorBody("invalid_config", `missing dep engine "govulncheck"`))
 		return
 	}
 	s.Config.EnsureDetectors()

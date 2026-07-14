@@ -91,6 +91,12 @@ export const useStore = create<State>((set, get) => ({
     set({ loading: true, error: null })
     const res = await wrap(() => apiPost<ScanResult>(d ? `/api/scan?detectors=${d}` : '/api/scan'), set)
     set({ scan: res ?? null, loading: false })
+    // 扫描成功后刷新 Dashboard + History(新版 Dashboard 读 dashboard/history 而非 scan,
+    // 不刷新则点"重新扫描"后看板无可见更新)。镜像 saveDetectorConfig 的不 await 模式。
+    if (res) {
+      get().fetchDashboard()
+      get().fetchHistory()
+    }
   },
   fetchDetectors: async () => {
     const list = await wrap(() => apiGet<DetectorMeta[]>('/api/detectors'), set)

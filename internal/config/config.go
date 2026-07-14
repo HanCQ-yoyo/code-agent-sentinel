@@ -121,6 +121,12 @@ func (c *Config) ResolveSuppressionDiscount() float64 {
 // 注意:&DetectorsConfig{} 的零值是全 false(全禁用),与"全启用默认"语义相反,
 // 故需显式设 Enabled=true。bool 零值是 false,无法区分"未设"与"显式禁用",
 // 但 nil-safe 访问器已覆盖"无 detectors 段"的情况(nil→全启用),此处覆盖"新建"的情况。
+//
+// YAML 契约:若手写 detectors: 段,必须指定全部三个检测器(rules/secret/dep)。
+// 部分段(如只写 rules:)会因 bool 零值=false 静默禁用未指定的检测器。
+// 纯 bool 无法在反序列化后区分"键缺失"与"显式 false",故 Load 路径不做自动修复;
+// PUT /api/detectors/config 端点在 API 层做了顶层键齐全校验(见 putDetectorConfig),
+// 手编 YAML 由用户负责写完整。
 func (c *Config) EnsureDetectors() {
 	if c.Detectors == nil {
 		c.Detectors = &DetectorsConfig{
