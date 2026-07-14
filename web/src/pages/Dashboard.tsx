@@ -23,9 +23,9 @@ export default function Dashboard() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {error ? <Alert type="error" message="加载失败" description={error} showIcon /> : null}
-      <Row gutter={16}>
-        <Col xs={24} lg={8}><HealthScoreCard h={dashboard?.last_scan?.health_score} /></Col>
-        <Col xs={24} lg={16}><AssetStatTiles counts={counts} /></Col>
+      <Row gutter={16} align="stretch">
+        <Col xs={24} lg={8} style={{ display: 'flex' }}><HealthScoreCard h={dashboard?.last_scan?.health_score} /></Col>
+        <Col xs={24} lg={16} style={{ display: 'flex' }}><AssetStatTiles counts={counts} /></Col>
       </Row>
       <Card title="检测器状态" size="small">
         <DetectorPanel detectors={detectors} selectedId={selectedDetector} onSelect={setSelectedDetector} />

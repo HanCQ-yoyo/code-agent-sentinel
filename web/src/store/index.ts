@@ -45,6 +45,10 @@ interface State {
   setActiveProjectTab: (tab: ProjectTab) => void
   fetchDirTags: () => Promise<void>
   saveDirTags: (overrides: DirTagsMap) => Promise<void>
+  // 资产收藏/置顶:持久化到后端 config.yaml(跨重启/跨端口),非 localStorage。
+  favorites: string[]
+  fetchFavorites: () => Promise<void>
+  saveFavorites: (ids: string[]) => Promise<void>
   setSelectedTagFilter: (tag: DirTag | null) => void
   fetchRaw: (path: string) => Promise<RawFile | undefined>
   // 拉单资产(含 content),供发现页详情抽屉按 finding.asset_id 展示资产文件内容。
@@ -81,6 +85,7 @@ export const useStore = create<State>((set, get) => ({
   assets: null, scan: null, dashboard: null, detectors: [], detectorConfig: null, history: [], loading: false, error: null, authError: false,
   agents: null, tree: null, projects: [], activeProjectTab: { kind: 'global' },
   dirTagsDefaults: {}, dirTagsOverrides: {}, selectedTagFilter: null,
+  favorites: [],
   previewResult: null, editError: null,
   suppressions: [],
   fetchAssets: async () => {
@@ -179,6 +184,14 @@ export const useStore = create<State>((set, get) => ({
   saveDirTags: async (overrides) => {
     const res = await wrap(() => apiPut<DirTagsResponse>('/api/dir-tags', { overrides }), set)
     if (res) set({ dirTagsOverrides: res.overrides ?? {} })
+  },
+  fetchFavorites: async () => {
+    const res = await wrap(() => apiGet<{ favorites: string[] }>('/api/favorites'), set)
+    if (res) set({ favorites: res.favorites ?? [] })
+  },
+  saveFavorites: async (ids) => {
+    const res = await wrap(() => apiPut<{ favorites: string[] }>('/api/favorites', { favorites: ids }), set)
+    if (res) set({ favorites: res.favorites ?? [] })
   },
   setSelectedTagFilter: (tag) => set({ selectedTagFilter: tag }),
   fetchRaw: async (path) => wrap(() => apiGet<RawFile>(`/api/raw?path=${encodeURIComponent(path)}`), set),

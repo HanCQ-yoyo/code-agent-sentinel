@@ -22,6 +22,7 @@ type Config struct {
 	// 默认标签见 DefaultDirTags();生效标签由 ResolveDirTag 合并。
 	// 空表示用户未自定义,全用默认。见 dir_tags.go。
 	DirTags    DirTags `yaml:"dir_tags"`
+	Favorites  []string `yaml:"favorites"` // 资产收藏/置顶 id 列表(跨会话保留;localStorage 受端口影响故改存配置)
 	BackupDir  string  `yaml:"backup_dir"`  // 空=默认 ~/.claude-sentinel/backups
 	MaxBackups int     `yaml:"max_backups"` // 0=默认 20
 

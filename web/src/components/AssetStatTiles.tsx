@@ -20,8 +20,8 @@ export function AssetStatTiles({ counts }: { counts: Record<string, number> }) {
   const present = specs.filter((s) => (counts[s.type] ?? 0) > 0)
   const tiles = present.length > 0 ? present : specs
   return (
-    <Card title="资产统计">
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 12 }}>
+    <Card title="资产统计" style={{ flex: 1, height: '100%' }} styles={{ body: { height: '100%' } }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 12, height: '100%', alignContent: 'center' }}>
         {tiles.map((s) => (
           <Statistic key={s.type} title={s.label} value={counts[s.type] ?? 0} prefix={s.icon} />
         ))}

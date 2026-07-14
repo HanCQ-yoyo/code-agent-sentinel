@@ -15,7 +15,7 @@ export function HealthScoreCard({ h }: { h?: HealthScore }) {
   const r = 52
   const c = 2 * Math.PI * r
   return (
-    <Card title="健康分" styles={{ body: { display: 'flex', alignItems: 'center', gap: 20 } }}>
+    <Card title="健康分" style={{ flex: 1, height: '100%' }} styles={{ body: { display: 'flex', alignItems: 'center', gap: 20, height: '100%' } }}>
       <svg width={120} height={120} viewBox="0 0 120 120">
         <circle cx={60} cy={60} r={r} fill="none" stroke="var(--bg-border)" strokeWidth={10} />
         <circle

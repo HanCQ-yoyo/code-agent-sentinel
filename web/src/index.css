@@ -175,3 +175,12 @@ body {
 .sev-seg .ant-segmented-thumb {
   background: transparent;
 }
+
+/* antd Card 标题默认 nowrap + ellipsis,长标题(如「Top 风险类型(按严重度)」)在窄列
+   被截断成「Top 风险…」。改为允许换行完整展示——Card 标题本就该完整可读,不截断。 */
+.ant-card-head-title {
+  white-space: normal !important;
+  overflow: visible !important;
+  text-overflow: clip !important;
+  word-break: break-word;
+}

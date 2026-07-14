@@ -103,6 +103,8 @@ func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	api.GET("/tree", s.getTree)
 	api.GET("/dir-tags", s.getDirTags)
 	api.PUT("/dir-tags", s.putDirTags)
+	api.GET("/favorites", s.getFavorites)
+	api.PUT("/favorites", s.putFavorites)
 	api.GET("/raw", s.getRaw)
 	api.POST("/scan", s.postScan)
 	api.GET("/scan/result", s.getScanResult)

@@ -12,21 +12,10 @@ import { relativeClaudePath } from '../lib/path'
 
 type View = 'list' | 'tree'
 
-// 收藏持久化:asset id 稳定(scope:type:name:path 哈希),存 localStorage 跨会话保留。
-const FAV_KEY = 'sentinel_favorites'
-function loadFavorites(): Set<string> {
-  try {
-    const raw = localStorage.getItem(FAV_KEY)
-    if (!raw) return new Set()
-    const arr = JSON.parse(raw)
-    return Array.isArray(arr) ? new Set(arr.filter((x) => typeof x === 'string')) : new Set()
-  } catch {
-    return new Set()
-  }
-}
-function saveFavorites(s: Set<string>) {
-  try { localStorage.setItem(FAV_KEY, JSON.stringify([...s])) } catch { /* 忽略配额/隐私模式 */ }
-}
+// 收藏/置顶:持久化到后端 config.yaml(跨重启/跨端口)。
+// 原用 localStorage,但默认随机端口重启后 origin(host:port)变化 → localStorage 隔离丢失,
+// 故改存后端 /api/favorites(与 dir-tags 同模式)。asset id 稳定(scope:type:name:path 哈希)。
+const FAV_KEY = 'sentinel_favorites' // 仅作首次迁移:把旧 localStorage 收藏一次性并入后端
 
 export default function Assets() {
   const {
@@ -34,6 +23,7 @@ export default function Assets() {
     fetchProjects, fetchTree, setActiveProjectTab,
     fetchAgents, agents, fetchDirTags, dirTagsDefaults, dirTagsOverrides,
     saveDirTags, selectedTagFilter, setSelectedTagFilter,
+    favorites, fetchFavorites, saveFavorites,
   } = useStore()
   const [view, setView] = useState<View>('list')
   const [type, setType] = useState('')
@@ -44,7 +34,6 @@ export default function Assets() {
   const [rawPath, setRawPath] = useState<string | null>(null)
   // 树展开状态受控:默认全收起([])。「全部收起」按钮置空。
   const [expandedKeys, setExpandedKeys] = useState<React.Key[]>([])
-  const [favorites, setFavorites] = useState<Set<string>>(() => loadFavorites())
   // 标签编辑弹窗:点击树节点标签徽标时打开,选 配置/运行时/恢复默认。
   const [tagEdit, setTagEdit] = useState<{ relPath: string; current: DirTag | undefined } | null>(null)
 
@@ -54,7 +43,22 @@ export default function Assets() {
     fetchTree(activeProjectTab)
     fetchAgents()
     fetchDirTags()
-  }, [fetchAssets, fetchProjects, fetchTree, fetchAgents, fetchDirTags, activeProjectTab])
+    fetchFavorites()
+  }, [fetchAssets, fetchProjects, fetchTree, fetchAgents, fetchDirTags, fetchFavorites, activeProjectTab])
+
+  // 一次性迁移:若后端收藏为空但旧 localStorage 有数据,并入后端后清掉本地。
+  useEffect(() => {
+    if (favorites.length > 0) return
+    let raw: string | null = null
+    try { raw = localStorage.getItem(FAV_KEY) } catch { return }
+    if (!raw) return
+    let arr: unknown
+    try { arr = JSON.parse(raw) } catch { return }
+    if (!Array.isArray(arr)) return
+    const ids = arr.filter((x): x is string => typeof x === 'string')
+    if (ids.length === 0) return
+    saveFavorites(ids).then(() => { try { localStorage.removeItem(FAV_KEY) } catch { /* 忽略 */ } })
+  }, [favorites, saveFavorites])
 
   // 2.2:切换上方标签页 → 关闭详情抽屉(列表)与右栏(树),清选中态。
   // 单独 effect 监听 activeProjectTab 变化,避免与 fetch effect 耦合。
@@ -69,14 +73,12 @@ export default function Assets() {
     ? globalRoot
     : `${activeProjectTab.path.replace(/\/$/, '')}/.claude`
 
+  const favSet = new Set(favorites)
   const toggleFavorite = (id: string) => {
-    setFavorites((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      saveFavorites(next)
-      return next
-    })
+    const next = new Set(favSet)
+    if (next.has(id)) next.delete(id)
+    else next.add(id)
+    saveFavorites([...next])
   }
 
   if (!assets) return <Spin style={{ display: 'block', margin: '40px auto' }} />
@@ -105,8 +107,8 @@ export default function Assets() {
   )
   // 2.7 收藏置顶:收藏的排在前面(再按 name 稳定排序)。
   const list = [...searched].sort((a, b) => {
-    const fa = favorites.has(a.id) ? 0 : 1
-    const fb = favorites.has(b.id) ? 0 : 1
+    const fa = favSet.has(a.id) ? 0 : 1
+    const fb = favSet.has(b.id) ? 0 : 1
     if (fa !== fb) return fa - fb
     return a.name.localeCompare(b.name)
   })
@@ -175,8 +177,8 @@ export default function Assets() {
           {view === 'list' ? `${list.length} / ${tabFiltered.length} 资产` : `${tabFiltered.length} 资产`}
         </Typography.Text>
         {/* 收藏计数提示 */}
-        {favorites.size > 0 ? (
-          <Tag color="gold" style={{ marginInlineStart: 'auto' }}>★ {favorites.size} 置顶</Tag>
+        {favorites.length > 0 ? (
+          <Tag color="gold" style={{ marginInlineStart: 'auto' }}>★ {favorites.length} 置顶</Tag>
         ) : null}
       </div>
 
@@ -186,7 +188,7 @@ export default function Assets() {
             assets={list}
             findings={scan?.findings}
             onSelect={setSelected}
-            favorites={favorites}
+            favorites={favSet}
             onToggleFavorite={toggleFavorite}
             dirTagsDefaults={dirTagsDefaults}
             dirTagsOverrides={dirTagsOverrides}
