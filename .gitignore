@@ -1,5 +1,6 @@
 # Go 构建产物
 /bin/
+/dist/
 *.coverprofile
 
 # 前端依赖与构建产物
