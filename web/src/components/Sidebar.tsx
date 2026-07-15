@@ -1,5 +1,4 @@
 import { Layout, Menu } from 'antd'
-import { SafetyCertificateOutlined } from '@ant-design/icons'
 import {
   DashboardOutlined,
   AppstoreOutlined,
@@ -32,9 +31,8 @@ export function Sidebar() {
       {/* 品牌:落侧边栏最上方 = 平台最左上角 */}
       <div
         data-testid="brand"
-        style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '20px 24px' }}
+        style={{ display: 'flex', alignItems: 'center', padding: '20px 24px' }}
       >
-        <SafetyCertificateOutlined style={{ color: 'var(--accent)', fontSize: 20 }} />
         <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: 15, lineHeight: '20px' }}>
           Code Agent Sentinel
         </span>
