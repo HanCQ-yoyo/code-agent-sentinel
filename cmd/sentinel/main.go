@@ -60,6 +60,8 @@ func newRootCmd() *cobra.Command {
 	// Task 15:baseline / rules 子命令
 	cmd.AddCommand(newBaselineCmd())
 	cmd.AddCommand(newRulesCmd())
+	// Task 9:scan 子命令(一次性扫描写历史,不启动 HTTP server)
+	cmd.AddCommand(newScanCmd())
 	return cmd
 }
 
