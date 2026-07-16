@@ -13,6 +13,7 @@ import (
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/editor"
 	"code-agent-sentinel/internal/history"
+	"code-agent-sentinel/internal/scan"
 	"code-agent-sentinel/internal/security"
 )
 
@@ -26,6 +27,7 @@ type Server struct {
 	Agents          []configengine.Agent
 	SelectedAgentID string
 	Editor          *editor.Editor
+	Runner          *scan.Runner // HTTP/scheduler/CLI 共用的扫描路径
 }
 
 func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *config.Config, token string, hist *history.Store, agents []configengine.Agent, ed *editor.Editor) *Server {
@@ -36,7 +38,7 @@ func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *confi
 	if len(agents) > 0 {
 		current = agents[0].ID
 	}
-	return &Server{Engine: eng, Orchestrator: orch, Config: cfg, Token: token, History: hist, Agents: agents, SelectedAgentID: current, Editor: ed}
+	return &Server{Engine: eng, Orchestrator: orch, Config: cfg, Token: token, History: hist, Agents: agents, SelectedAgentID: current, Editor: ed, Runner: scan.NewRunner(eng, orch, hist)}
 }
 
 func (s *Server) Router() *gin.Engine {
