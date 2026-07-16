@@ -53,7 +53,7 @@ func newBaselineCmd() *cobra.Command {
 // runFullScan 镜像 main.go run() 的扫描设置,跑一次全量扫描返回 findings。
 // 不启动 HTTP server。用传入的 cfg 解析路径(供未来 detector 读 cfg)。
 func runFullScan(cfg *config.Config, home string) (*security.ScanResult, error) {
-	eng := configengine.NewEngine(home)
+	eng := configengine.NewEngine(home, "")
 	inv, err := eng.Discover()
 	if err != nil {
 		return nil, fmt.Errorf("发现资产失败: %w", err)

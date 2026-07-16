@@ -94,7 +94,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	}
 
 	cfg.EnsureDetectors() // 确保 Detectors 非 nil,检测器持其指针,API 写原地生效
-	eng := configengine.NewEngine(home)
+	eng := configengine.NewEngine(home, "")
 	r := security.NewRegistry()
 	r.Register(security.NewRulesDetector(home, cfg.Detectors))
 	r.Register(security.NewSecretDetector(cfg.Detectors))
@@ -109,7 +109,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	histPath := filepath.Join(home, ".claude-sentinel", "history")
 	hist := history.NewStore(histPath)
 	ed := editor.New(eng, cfg.BackupDir, cfg.MaxBackups)
-	srv := api.NewServer(eng, orch, cfg, token, hist, configengine.DefaultAgents(home), ed)
+	srv := api.NewServer(eng, orch, cfg, token, hist, configengine.DefaultAgents(home, ""), ed)
 	srv.ConfigPath = cfgPath
 	httpSrv := &http.Server{Handler: srv.Router()}
 

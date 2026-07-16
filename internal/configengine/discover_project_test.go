@@ -1,6 +1,7 @@
 package configengine
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -14,7 +15,7 @@ func TestDiscoverProject(t *testing.T) {
 	// 在 ~/.claude.json 登记 myproj 为已知项目(ListProjects 读 projects 的 key)
 	f.writeClaudeJSON(`{"projects":{"` + filepath.Join(f.home, "myproj") + `":{}}}`)
 
-	eng := NewEngine(f.home)
+	eng := NewEngine(f.home, "")
 	inv, err := eng.Discover()
 	if err != nil {
 		t.Fatal(err)
@@ -56,7 +57,7 @@ func TestDiscoverProjectNoScriptDup(t *testing.T) {
 	// 在 ~/.claude.json 登记 myproj 为已知项目(ListProjects 读 projects 的 key)。
 	f.writeClaudeJSON(`{"projects":{"` + filepath.Join(f.home, "myproj") + `":{}}}`)
 
-	eng := NewEngine(f.home)
+	eng := NewEngine(f.home, "")
 	inv, err := eng.Discover()
 	if err != nil {
 		t.Fatal(err)
@@ -110,7 +111,7 @@ func TestDiscoverProjectsNoCrossProjectScriptDup(t *testing.T) {
 	// 在 ~/.claude.json 登记两个项目(readProjectList 读 projects 的 key,绝对路径)。
 	f.writeClaudeJSON(`{"projects":{"` + filepath.Join(f.home, "myproj") + `":{},"` + filepath.Join(f.home, "otherproj") + `":{}}}`)
 
-	eng := NewEngine(f.home)
+	eng := NewEngine(f.home, "")
 	inv, err := eng.Discover()
 	if err != nil {
 		t.Fatal(err)
@@ -152,7 +153,7 @@ func TestDiscoverProjectRootClaudeMD(t *testing.T) {
 	f.writeProject("myproj/.claude/CLAUDE.md", `# proj claude dir`)
 	f.writeClaudeJSON(`{"projects":{"` + filepath.Join(f.home, "myproj") + `":{}}}`)
 
-	eng := NewEngine(f.home)
+	eng := NewEngine(f.home, "")
 	inv, err := eng.Discover()
 	if err != nil {
 		t.Fatal(err)
@@ -179,7 +180,7 @@ func TestDiscoverGlobalClaudeLocal(t *testing.T) {
 	f.write("CLAUDE.md", `# global`)
 	f.write("CLAUDE.local.md", `# global local`)
 
-	eng := NewEngine(f.home)
+	eng := NewEngine(f.home, "")
 	inv, err := eng.Discover()
 	if err != nil {
 		t.Fatal(err)
@@ -195,5 +196,33 @@ func TestDiscoverGlobalClaudeLocal(t *testing.T) {
 	}
 	if !names["CLAUDE.local.md"] {
 		t.Error("缺全局 CLAUDE.local.md")
+	}
+}
+
+func TestDiscoverProjectIgnoresGlobalClaudeDir(t *testing.T) {
+	home := t.TempDir()
+	customClaude := filepath.Join(home, "custom-claude")
+	os.MkdirAll(customClaude, 0o755)
+	// 项目自己的 .claude
+	proj := filepath.Join(home, "myproj")
+	os.MkdirAll(filepath.Join(proj, ".claude", "skills"), 0o755)
+	os.WriteFile(filepath.Join(proj, ".claude", "skills", "proj-skill.md"), []byte("# Proj\n"), 0o644)
+	// 登记项目
+	cj := filepath.Join(home, ".claude.json")
+	os.WriteFile(cj, []byte(`{"projects":{"`+proj+`":{}}}`), 0o644)
+	// 全局 claudeDir 指向 custom-claude,项目级发现应用 <project>/.claude
+	eng := NewEngine(home, customClaude)
+	inv, err := eng.Discover()
+	if err != nil {
+		t.Fatalf("Discover: %v", err)
+	}
+	var foundProjSkill bool
+	for _, a := range inv.Assets {
+		if a.Type == AssetSkill && a.Name == "proj-skill" && a.Scope == ScopeProject {
+			foundProjSkill = true
+		}
+	}
+	if !foundProjSkill {
+		t.Error("项目级发现应从 <project>/.claude 读,不受全局 claudeDir 影响")
 	}
 }

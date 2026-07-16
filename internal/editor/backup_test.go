@@ -14,7 +14,7 @@ func TestBackupCreatesVersionedFile(t *testing.T) {
 	home, claude := newFixture(t)
 	src := filepath.Join(claude, "settings.json")
 	writeFile(t, src, `{"model":"opus"}`)
-	e := New(configengine.NewEngine(home), "", 0)
+	e := New(configengine.NewEngine(home, ""), "", 0)
 	a := configengine.Asset{Type: configengine.AssetSettings, SourcePath: src}
 	bp, err := e.backup(a, []byte(`{"model":"opus"}`))
 	if err != nil {
@@ -49,7 +49,7 @@ func TestBackupRollsOverMaxBackups(t *testing.T) {
 	home, claude := newFixture(t)
 	src := filepath.Join(claude, "settings.json")
 	writeFile(t, src, `{"model":"opus"}`)
-	e := New(configengine.NewEngine(home), "", 3) // MaxBackups=3
+	e := New(configengine.NewEngine(home, ""), "", 3) // MaxBackups=3
 	a := configengine.Asset{Type: configengine.AssetSettings, SourcePath: src}
 	for i := 0; i < 5; i++ {
 		content := []byte(fmt.Sprintf(`{"model":"opus","n":%d}`, i))
@@ -81,7 +81,7 @@ func TestBackupSanitizesPath(t *testing.T) {
 	home, claude := newFixture(t)
 	src := filepath.Join(claude, "sub", "deep", "settings.json")
 	writeFile(t, src, `{"model":"opus"}`)
-	e := New(configengine.NewEngine(home), "", 0)
+	e := New(configengine.NewEngine(home, ""), "", 0)
 	a := configengine.Asset{Type: configengine.AssetSettings, SourcePath: src}
 	bp, err := e.backup(a, []byte("x"))
 	if err != nil {

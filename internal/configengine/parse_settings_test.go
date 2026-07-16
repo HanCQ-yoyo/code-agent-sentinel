@@ -184,7 +184,7 @@ func TestDiscoverSettingsAndSettingsLocalCoexist(t *testing.T) {
 	f := newFixture(t)
 	f.write("settings.json", `{"model":"opus"}`)
 	f.write("settings.local.json", `{"model":"sonnet"}`)
-	eng := NewEngine(f.home)
+	eng := NewEngine(f.home, "")
 	inv, err := eng.Discover()
 	if err != nil {
 		t.Fatal(err)

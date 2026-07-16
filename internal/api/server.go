@@ -30,7 +30,7 @@ type Server struct {
 
 func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *config.Config, token string, hist *history.Store, agents []configengine.Agent, ed *editor.Editor) *Server {
 	if len(agents) == 0 {
-		agents = configengine.DefaultAgents(eng.HomeDir)
+		agents = configengine.DefaultAgents(eng.HomeDir, eng.ClaudeDir)
 	}
 	current := ""
 	if len(agents) > 0 {

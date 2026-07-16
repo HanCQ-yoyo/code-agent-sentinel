@@ -200,7 +200,7 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 // loadProjectRules 加载所有已知项目的 ~/.sentinel/rules/ 规则,设置 ProjectPath 标记。
 // 项目列表来自 ~/.claude.json(ListProjects);文件缺失/损坏 → 空列表(安全降级)。
 func (d *RulesDetector) loadProjectRules() ([]ruleengine.Rule, []ruleengine.RuleLoadError) {
-	eng := configengine.NewEngine(d.home)
+	eng := configengine.NewEngine(d.home, "")
 	projects, err := eng.ListProjects()
 	if err != nil {
 		return nil, nil

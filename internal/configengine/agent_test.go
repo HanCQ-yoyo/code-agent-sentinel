@@ -6,7 +6,7 @@ import (
 )
 
 func TestDefaultAgents(t *testing.T) {
-	agents := DefaultAgents("/home/alice")
+	agents := DefaultAgents("/home/alice", "")
 	if len(agents) != 1 {
 		t.Fatalf("本轮只注册 Claude Code,期望 1 个 agent,实际 %d", len(agents))
 	}
@@ -29,7 +29,7 @@ func TestDefaultAgents(t *testing.T) {
 }
 
 func TestNewEngineFromAgent(t *testing.T) {
-	agents := DefaultAgents("/home/alice")
+	agents := DefaultAgents("/home/alice", "")
 	eng := NewEngineFromAgent(agents[0])
 	if eng.HomeDir != "/home/alice" {
 		t.Errorf("HomeDir = %q, 期望 /home/alice", eng.HomeDir)

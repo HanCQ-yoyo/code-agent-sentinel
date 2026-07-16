@@ -14,8 +14,8 @@ import (
 func TestGetAgents(t *testing.T) {
 	dir := t.TempDir()
 	gin.SetMode(gin.TestMode)
-	eng := configengine.NewEngine(dir)
-	agents := configengine.DefaultAgents(dir)
+	eng := configengine.NewEngine(dir, "")
+	agents := configengine.DefaultAgents(dir, "")
 	s := NewServer(eng, nil, config.DefaultConfig(), "tok", nil, agents, nil)
 	r := s.Router()
 	req := httptest.NewRequest("GET", "/api/agents", nil)

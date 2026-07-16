@@ -32,7 +32,7 @@ func writeFile(t *testing.T, path, content string) {
 func TestEditableGlobalSettings(t *testing.T) {
 	home, claude := newFixture(t)
 	writeFile(t, filepath.Join(claude, "settings.json"), `{"model":"opus"}`)
-	e := New(configengine.NewEngine(home), "", 0)
+	e := New(configengine.NewEngine(home, ""), "", 0)
 	inv, err := e.Engine.Discover()
 	if err != nil {
 		t.Fatal(err)
@@ -51,7 +51,7 @@ func TestEditableRejectsClaudeJSON(t *testing.T) {
 	// ~/.claude.json 全局 MCP(机器管理,只读)
 	writeFile(t, filepath.Join(home, ".claude.json"), `{"mcpServers":{"foo":{"command":"bar"}}}`)
 	writeFile(t, filepath.Join(claude, "settings.json"), `{"model":"opus"}`)
-	e := New(configengine.NewEngine(home), "", 0)
+	e := New(configengine.NewEngine(home, ""), "", 0)
 	inv, err := e.Engine.Discover()
 	if err != nil {
 		t.Fatal(err)
@@ -70,7 +70,7 @@ func TestEditableRejectsClaudeJSON(t *testing.T) {
 
 func TestEditableRejectsOutOfRoot(t *testing.T) {
 	home, _ := newFixture(t)
-	e := New(configengine.NewEngine(home), "", 0)
+	e := New(configengine.NewEngine(home, ""), "", 0)
 	// 伪造一个指向 /etc 的资产
 	rogue := configengine.Asset{
 		Type:       configengine.AssetSettings,
@@ -90,7 +90,7 @@ func TestEditableProjectRequiresKnownProject(t *testing.T) {
 	writeFile(t, filepath.Join(projDir, ".claude", "settings.json"), `{"model":"opus"}`)
 	writeFile(t, filepath.Join(home, ".claude.json"),
 		`{"projects":{"`+projDir+`":{}}}`)
-	e := New(configengine.NewEngine(home), "", 0)
+	e := New(configengine.NewEngine(home, ""), "", 0)
 	inv, err := e.Engine.Discover()
 	if err != nil {
 		t.Fatal(err)
@@ -124,7 +124,7 @@ func TestEditableProjectRequiresKnownProject(t *testing.T) {
 func TestFindAssetByID(t *testing.T) {
 	home, claude := newFixture(t)
 	writeFile(t, filepath.Join(claude, "settings.json"), `{"model":"opus"}`)
-	e := New(configengine.NewEngine(home), "", 0)
+	e := New(configengine.NewEngine(home, ""), "", 0)
 	inv, _ := e.Engine.Discover()
 	want := inv.Assets[0]
 	got, ok := e.findAsset(want.ID)
@@ -149,7 +149,7 @@ func TestEditableProjectMCPJSON(t *testing.T) {
 		`{"projects":{"`+projDir+`":{}}}`)
 	writeFile(t, filepath.Join(projDir, ".mcp.json"),
 		`{"mcpServers":{"foo":{"command":"bar"}}}`)
-	e := New(configengine.NewEngine(home), "", 0)
+	e := New(configengine.NewEngine(home, ""), "", 0)
 	inv, err := e.Engine.Discover()
 	if err != nil {
 		t.Fatal(err)
@@ -178,7 +178,7 @@ func TestEditableProjectScript(t *testing.T) {
 		`{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"bash scripts/deploy.sh"}]}]}}`)
 	writeFile(t, filepath.Join(projDir, "scripts", "deploy.sh"), `#!/bin/sh
 echo deploy`)
-	e := New(configengine.NewEngine(home), "", 0)
+	e := New(configengine.NewEngine(home, ""), "", 0)
 	inv, err := e.Engine.Discover()
 	if err != nil {
 		t.Fatal(err)
@@ -207,7 +207,7 @@ func TestEditableGlobalScript(t *testing.T) {
 		`{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"bash scripts/x.sh"}]}]}}`)
 	writeFile(t, filepath.Join(home, "scripts", "x.sh"), `#!/bin/sh
 echo x`)
-	e := New(configengine.NewEngine(home), "", 0)
+	e := New(configengine.NewEngine(home, ""), "", 0)
 	inv, err := e.Engine.Discover()
 	if err != nil {
 		t.Fatal(err)
@@ -238,7 +238,7 @@ func TestEditableRejectsSymlink(t *testing.T) {
 	if err := os.Symlink(realFile, linkPath); err != nil {
 		t.Skipf("symlink not supported: %v", err)
 	}
-	e := New(configengine.NewEngine(home), "", 0)
+	e := New(configengine.NewEngine(home, ""), "", 0)
 	inv, err := e.Engine.Discover()
 	if err != nil {
 		t.Fatal(err)
@@ -274,7 +274,7 @@ echo pwned`)
 	// settings.json 引用 scripts/deploy.sh,使 configengine 发现该脚本资产。
 	writeFile(t, filepath.Join(claude, "settings.json"),
 		`{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"bash scripts/deploy.sh"}]}]}}`)
-	e := New(configengine.NewEngine(home), "", 0)
+	e := New(configengine.NewEngine(home, ""), "", 0)
 	inv, err := e.Engine.Discover()
 	if err != nil {
 		t.Fatal(err)

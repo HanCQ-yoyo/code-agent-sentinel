@@ -202,7 +202,7 @@ func TestDiscoverIncludesClaudeJSONMCP(t *testing.T) {
 	f := newFixture(t)
 	f.write("settings.json", `{}`)
 	f.writeClaudeJSON(`{"mcpServers":{"gmail":{"type":"http","url":"https://x/mcp"}}}`)
-	eng := NewEngine(f.home)
+	eng := NewEngine(f.home, "")
 	inv, err := eng.Discover()
 	if err != nil {
 		t.Fatal(err)

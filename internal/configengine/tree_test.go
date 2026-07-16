@@ -35,7 +35,7 @@ func TestBuildTreeRealDirsAndMergedAssets(t *testing.T) {
 	f.write("settings.json", `{"model":"opus"}`)
 	f.write("skills/injection/SKILL.md", `# skill`)
 
-	eng := NewEngine(f.home)
+	eng := NewEngine(f.home, "")
 	inv, err := eng.Discover()
 	if err != nil {
 		t.Fatal(err)
@@ -72,7 +72,7 @@ func TestBuildTreeEmptyDirVisible(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	eng := NewEngine(f.home)
+	eng := NewEngine(f.home, "")
 	inv, _ := eng.Discover()
 	root, err := eng.BuildTree(f.claude, inv.Assets)
 	if err != nil {
@@ -100,7 +100,7 @@ func TestBuildTreeSyntheticForOutsideAssets(t *testing.T) {
 	f.write("../foo.sh", "#!/bin/bash\necho hi\n") // write 的 rel 是相对 .claude
 	f.write("settings.json", `{"hooks":{"PreToolUse":[{"matcher":"*","hooks":[{"type":"command","command":"bash `+fooSh+`"}]}]}}`)
 
-	eng := NewEngine(f.home)
+	eng := NewEngine(f.home, "")
 	inv, _ := eng.Discover()
 	root, err := eng.BuildTree(f.claude, inv.Assets)
 	if err != nil {
@@ -132,7 +132,7 @@ func TestBuildTreePluginsRealDrill(t *testing.T) {
 	f.write("plugins/cache/mkt/plug/0.0.1/.claude-plugin/plugin.json", `{"name":"plug","version":"0.0.1"}`)
 	f.write("plugins/cache/mkt/plug/0.0.1/skills/x/SKILL.md", `# plug skill`)
 
-	eng := NewEngine(f.home)
+	eng := NewEngine(f.home, "")
 	inv, _ := eng.Discover()
 	root, err := eng.BuildTree(f.claude, inv.Assets)
 	if err != nil {
@@ -145,7 +145,7 @@ func TestBuildTreePluginsRealDrill(t *testing.T) {
 }
 
 func TestBuildTreeRootMissing(t *testing.T) {
-	eng := NewEngine("/nonexistent-home-xyz")
+	eng := NewEngine("/nonexistent-home-xyz", "")
 	_, err := eng.BuildTree(filepath.Join("/nonexistent-home-xyz", ".claude"), nil)
 	if err == nil {
 		t.Error("root 不存在时应返回 error")
@@ -163,7 +163,7 @@ func TestBuildTreeRootUnreadable(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = os.Chmod(root, 0o755) })
 
-	eng := NewEngine(f.home)
+	eng := NewEngine(f.home, "")
 	_, err := eng.BuildTree(root, nil)
 	if err == nil {
 		t.Error("root 不可读时应返回 error")

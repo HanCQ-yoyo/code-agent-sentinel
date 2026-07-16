@@ -22,7 +22,7 @@ func newConfigTestServer(t *testing.T) (*Server, string) {
 	cfgPath := filepath.Join(dir, "config.yaml")
 	cfg := config.DefaultConfig()
 	cfg.EnsureDetectors()
-	eng := configengine.NewEngine(dir)
+	eng := configengine.NewEngine(dir, "")
 	r := security.NewRegistry()
 	r.Register(security.NewRulesDetector(dir, cfg.Detectors))
 	r.Register(security.NewSecretDetector(cfg.Detectors))

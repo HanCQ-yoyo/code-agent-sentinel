@@ -13,13 +13,16 @@ type Agent struct {
 }
 
 // DefaultAgents 返回内置 agent 列表(本轮仅 Claude Code)。
-// Claude Code 布局:配置根 = home/.claude,机器管理文件 = home/.claude.json。
-func DefaultAgents(home string) []Agent {
+// claudeDir 空 → home/.claude;ClaudeJSON 始终 home/.claude.json。
+func DefaultAgents(home, claudeDir string) []Agent {
+	if claudeDir == "" {
+		claudeDir = filepath.Join(home, ".claude")
+	}
 	return []Agent{
 		{
 			ID:         "claude-code",
 			Name:       "Claude Code",
-			RootDir:    filepath.Join(home, ".claude"),
+			RootDir:    claudeDir,
 			ClaudeJSON: filepath.Join(home, ".claude.json"),
 			HomeDir:    home,
 		},

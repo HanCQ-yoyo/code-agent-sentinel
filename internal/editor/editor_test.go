@@ -10,7 +10,7 @@ import (
 )
 
 func TestNewEditor(t *testing.T) {
-	eng := configengine.NewEngine(t.TempDir())
+	eng := configengine.NewEngine(t.TempDir(), "")
 	e := New(eng, "/tmp/backups", 20)
 	if e == nil || e.Engine == nil {
 		t.Fatal("New returned nil or nil Engine")
@@ -21,7 +21,7 @@ func TestNewEditor(t *testing.T) {
 }
 
 func TestNewEditorDefaults(t *testing.T) {
-	eng := configengine.NewEngine(t.TempDir())
+	eng := configengine.NewEngine(t.TempDir(), "")
 	e := New(eng, "", 0)
 	if e.MaxBackups != 20 {
 		t.Fatalf("default MaxBackups want 20 got %d", e.MaxBackups)
@@ -40,7 +40,7 @@ func TestErrorsAreSentinels(t *testing.T) {
 }
 
 func TestValidateContentJSONOk(t *testing.T) {
-	e := New(configengine.NewEngine(t.TempDir()), "", 0)
+	e := New(configengine.NewEngine(t.TempDir(), ""), "", 0)
 	a := configengine.Asset{Type: configengine.AssetSettings}
 	if err := e.validateContent(a, `{"model":"opus"}`); err != nil {
 		t.Fatalf("valid JSON should pass: %v", err)
@@ -48,7 +48,7 @@ func TestValidateContentJSONOk(t *testing.T) {
 }
 
 func TestValidateContentJSONBad(t *testing.T) {
-	e := New(configengine.NewEngine(t.TempDir()), "", 0)
+	e := New(configengine.NewEngine(t.TempDir(), ""), "", 0)
 	a := configengine.Asset{Type: configengine.AssetSettings}
 	err := e.validateContent(a, `{not json`)
 	if err != ErrBadContent {
@@ -57,7 +57,7 @@ func TestValidateContentJSONBad(t *testing.T) {
 }
 
 func TestValidateContentMarkdownNotJSONChecked(t *testing.T) {
-	e := New(configengine.NewEngine(t.TempDir()), "", 0)
+	e := New(configengine.NewEngine(t.TempDir(), ""), "", 0)
 	a := configengine.Asset{Type: configengine.AssetSkill}
 	// markdown 不做 JSON 校验,任意文本通过
 	if err := e.validateContent(a, "# title\nnot json {"); err != nil {
@@ -69,7 +69,7 @@ func TestPreviewReadOnly(t *testing.T) {
 	home, claude := newFixture(t)
 	src := filepath.Join(claude, "settings.json")
 	writeFile(t, src, `{"model":"opus"}`)
-	e := New(configengine.NewEngine(home), "", 0)
+	e := New(configengine.NewEngine(home, ""), "", 0)
 	inv, _ := e.Engine.Discover()
 	a := inv.Assets[0]
 	// 读盘原始内容做 base_hash
@@ -100,7 +100,7 @@ func TestPreviewNotEditable(t *testing.T) {
 	home, _ := newFixture(t)
 	// 伪造不可编辑资产 ID(指向 ~/.claude.json 的 MCP)
 	writeFile(t, filepath.Join(home, ".claude.json"), `{"mcpServers":{"foo":{"command":"bar"}}}`)
-	e := New(configengine.NewEngine(home), "", 0)
+	e := New(configengine.NewEngine(home, ""), "", 0)
 	inv, _ := e.Engine.Discover()
 	var rogue configengine.Asset
 	for _, a := range inv.Assets {
@@ -125,7 +125,7 @@ func TestCommitWritesAndBacksUp(t *testing.T) {
 	home, claude := newFixture(t)
 	src := filepath.Join(claude, "settings.json")
 	writeFile(t, src, `{"model":"opus"}`)
-	e := New(configengine.NewEngine(home), "", 0)
+	e := New(configengine.NewEngine(home, ""), "", 0)
 	inv, _ := e.Engine.Discover()
 	a := inv.Assets[0]
 	h, _, _ := configengine.HashAndMTime(src)
@@ -162,7 +162,7 @@ func TestCommitConcurrentModification(t *testing.T) {
 	home, claude := newFixture(t)
 	src := filepath.Join(claude, "settings.json")
 	writeFile(t, src, `{"model":"opus"}`)
-	e := New(configengine.NewEngine(home), "", 0)
+	e := New(configengine.NewEngine(home, ""), "", 0)
 	inv, _ := e.Engine.Discover()
 	a := inv.Assets[0]
 	// 盘上被 Claude Code 改了
@@ -179,7 +179,7 @@ func TestCommitBadContent(t *testing.T) {
 	home, claude := newFixture(t)
 	src := filepath.Join(claude, "settings.json")
 	writeFile(t, src, `{"model":"opus"}`)
-	e := New(configengine.NewEngine(home), "", 0)
+	e := New(configengine.NewEngine(home, ""), "", 0)
 	inv, _ := e.Engine.Discover()
 	a := inv.Assets[0]
 	h, _, _ := configengine.HashAndMTime(src)
@@ -194,7 +194,7 @@ func TestCommitBadContent(t *testing.T) {
 func TestCommitNotEditable(t *testing.T) {
 	home, _ := newFixture(t)
 	writeFile(t, filepath.Join(home, ".claude.json"), `{"mcpServers":{"foo":{"command":"bar"}}}`)
-	e := New(configengine.NewEngine(home), "", 0)
+	e := New(configengine.NewEngine(home, ""), "", 0)
 	inv, _ := e.Engine.Discover()
 	var rogue configengine.Asset
 	for _, a := range inv.Assets {
@@ -225,7 +225,7 @@ func TestStructuredEditPreservesFileContent(t *testing.T) {
 	// 用非平凡格式(嵌套 permissions + 特定缩进)以便检测格式归一化损坏。
 	original := `{"permissions":{"allow":["Bash(git:*)"],"deny":["Read(**)"]},"model":"opus"}`
 	writeFile(t, src, original)
-	e := New(configengine.NewEngine(home), "", 0)
+	e := New(configengine.NewEngine(home, ""), "", 0)
 	inv, _ := e.Engine.Discover()
 	// 找 settings 资产(首个;permissions 同 source_path)。
 	var a configengine.Asset

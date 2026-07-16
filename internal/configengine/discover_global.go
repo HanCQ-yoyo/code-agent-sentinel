@@ -13,7 +13,7 @@ import (
 // 项目级发现在 discover_project.go(Task 8)。
 func (e *Engine) Discover() (Inventory, error) {
 	inv := Inventory{}
-	claude := filepath.Join(e.HomeDir, ".claude")
+	claude := e.ClaudeDir
 
 	// settings.json:真实解析,拆成 settings + permissions + 每个 hook 一条。
 	// settings.local.json:本地覆盖层(Claude Code 在此写 project-scoped 覆盖,
@@ -70,9 +70,26 @@ func (e *Engine) Discover() (Inventory, error) {
 	// 上面的全局 parseScripts 重复(见 discover_project.go 偏差注释)。
 	e.discoverProjects(&inv)
 
+	// #2:按资产类型过滤(发现 + 解析照常跑,产出 Asset 后按 type 过滤)
+	inv.Assets = e.filterByEnabledTypes(inv.Assets)
+
 	// 重复检测:跨 scope / 跨 source_path 的同类型同名资产。
 	inv.Duplicates = detectDuplicates(inv.Assets)
 	return inv, nil
+}
+
+// filterByEnabledTypes 剔除被 DisabledAssetTypes 关闭的资产。
+func (e *Engine) filterByEnabledTypes(assets []Asset) []Asset {
+	if len(e.DisabledAssetTypes) == 0 {
+		return assets
+	}
+	out := assets[:0]
+	for _, a := range assets {
+		if !e.isAssetTypeDisabled(a.Type) {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // placeholder 产出一个仅含 hash/mtime 的占位资产(解析任务会填充 Fields/Content)。

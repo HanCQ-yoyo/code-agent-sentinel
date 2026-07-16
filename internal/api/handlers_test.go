@@ -20,13 +20,13 @@ import (
 func newTestServer(t *testing.T, home string) *Server {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
-	eng := configengine.NewEngine(home)
+	eng := configengine.NewEngine(home, "")
 	r := security.NewRegistry()
 	r.Register(security.NewRulesDetector(home, nil))
 	orch := &security.Orchestrator{Registry: r}
 	hist := history.NewStore(filepath.Join(home, "..", "history")) // 历史目录与 .claude 同级,在 home 之外
 	ed := editor.New(eng, "", 0)
-	return NewServer(eng, orch, config.DefaultConfig(), "tok", hist, configengine.DefaultAgents(home), ed)
+	return NewServer(eng, orch, config.DefaultConfig(), "tok", hist, configengine.DefaultAgents(home, ""), ed)
 }
 
 func TestGetAssets(t *testing.T) {
