@@ -83,3 +83,31 @@ func TestSchedulerReconfigure(t *testing.T) {
 		t.Errorf("Reconfigure(false) 后不应再触发")
 	}
 }
+
+// TestSchedulerReconfigureReenable 覆盖 Reconfigure 的"重新启用"路径:
+// Stop(关闭)→ Start(重新启用)。修复前 Stop 只等 in-flight tick 不等 loop 退出,
+// 旧 loop 可能仍读 s.ticker.C,与新 Start 写 s.ticker 产生数据竞争,且可能用已取消
+// ctx 触发陈旧 run。慢 run(80ms > 20ms 间隔)制造 in-flight tick + 缓冲 tick,
+// 让 Stop+Start 在 tick 边界附近交错,最大化暴露 race。修复后应 -race 干净、稳定通过。
+func TestSchedulerReconfigureReenable(t *testing.T) {
+	var n int32
+	run := func(ctx context.Context) error {
+		atomic.AddInt32(&n, 1)
+		select {
+		case <-time.After(80 * time.Millisecond):
+		case <-ctx.Done():
+		}
+		return nil
+	}
+	s := New(20*time.Millisecond, run)
+	s.Start()
+	time.Sleep(60 * time.Millisecond)
+	s.Reconfigure(false, 0)                  // 关闭,等 loop 退出
+	s.Reconfigure(true, 20*time.Millisecond) // 重新启用 —— 修复前此处 race
+	time.Sleep(120 * time.Millisecond)
+	s.Stop()
+	// 修复后:无 race、无陈旧 run panic。只要能稳定通过 + -race 干净即可。
+	if atomic.LoadInt32(&n) == 0 {
+		t.Error("重新启用后应能触发 run")
+	}
+}

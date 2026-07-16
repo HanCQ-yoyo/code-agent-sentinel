@@ -12,7 +12,7 @@ type Scheduler struct {
 	interval time.Duration
 	run      func(context.Context) error
 
-	mu       sync.Mutex // 保护 inFlight / running / lastRun / nextRun
+	mu       sync.Mutex // 保护 inFlight / running / lastRun / nextRun / loopDone
 	ticker   *time.Ticker
 	cancel   context.CancelFunc
 	inFlight bool
@@ -20,12 +20,14 @@ type Scheduler struct {
 	lastRun  time.Time
 	nextRun  time.Time
 
-	// wg 跟踪进行中的 tick,使 Stop 能等其结束。
-	// 计划稿原实现未等待 in-flight tick,导致 "Stop 后不再触发" 不成立:
-	// loop 收到 tick 后、tick 真正调 run 前,Stop 可能已返回;run 随后完成并
-	// 递增计数,触发 TestSchedulerTicksAndStops 的 "Stop 后不应再触发" 断言。
-	// 配合 tick 内的 !s.running 检查(防 Stop 后新 tick 启动)共同保证语义。
-	wg sync.WaitGroup
+	// loopDone 在 Start 时创建,作为局部变量传给 loop goroutine;loop 退出时 close。
+	// Stop 等 loopDone 关闭,即等 loop goroutine 完全退出(而非仅等 in-flight tick)。
+	// 这样 Reconfigure 紧接 Start 写 s.ticker 时旧 loop 已死,消除 s.ticker 上的数据竞争,
+	// 并杜绝旧 loop 用已取消 ctx 触发陈旧 run。
+	// 之前的 wg sync.WaitGroup 方案只等 in-flight tick 不等 loop 退出:cancel() 后 loop 仍
+	// 可能从 ticker.C 收到缓冲 tick(time.Ticker.Stop 不排空大小为 1 的缓冲)并重新进入
+	// select 读 s.ticker.C,与新 Start 写 s.ticker 无 happens-before → 数据竞争。
+	loopDone chan struct{}
 }
 
 // SchedulerStatus 是 GET /api/scheduler 的响应。
@@ -54,10 +56,18 @@ func (s *Scheduler) Start() {
 	s.cancel = cancel
 	s.running = true
 	s.nextRun = time.Now().Add(s.interval)
-	go s.loop(ctx)
+	// loopDone 作为局部变量传给 loop,而非让 loop 读 s.loopDone 字段:
+	// 避免 Reconfigure 替换字段后旧 loop defer close 的是新 chan。
+	done := make(chan struct{})
+	s.loopDone = done
+	go s.loop(ctx, done)
 }
 
-func (s *Scheduler) loop(ctx context.Context) {
+// loop 是调度主循环。done 在退出时 close,供 Stop 等待 loop 完全退出。
+// done 显式传参(局部 chan),不是 s.loopDone 字段,确保 defer close 的是 loop 启动时
+// 绑定的那个 chan,即便 Reconfigure 随后替换了 s.loopDone 字段也不受影响。
+func (s *Scheduler) loop(ctx context.Context, done chan struct{}) {
+	defer close(done)
 	for {
 		select {
 		case <-ctx.Done():
@@ -69,7 +79,9 @@ func (s *Scheduler) loop(ctx context.Context) {
 }
 
 // tick 执行一次 run;inFlight 时跳过(non-blocking 防重叠)。
-// 额外检查 !s.running:Stop 置 running=false 后,loop 已收到的 tick 不再触发 run。
+// 额外检查 !s.running:Stop 置 running=false 后,loop 已收到的缓冲 tick 不再触发 run。
+// (即便 Stop 已等 loop 退出,保留此检查作为纵深防御:loop 退出前收到的最后一个 tick 若
+// 在 Stop 置 running=false 之后被调度到这里,仍不会启动新 run。)
 func (s *Scheduler) tick(ctx context.Context) {
 	s.mu.Lock()
 	if s.inFlight || !s.running {
@@ -77,7 +89,6 @@ func (s *Scheduler) tick(ctx context.Context) {
 		return // 上次未结束或已 Stop,跳过本次 tick
 	}
 	s.inFlight = true
-	s.wg.Add(1)
 	s.mu.Unlock()
 
 	_ = s.run(ctx)
@@ -86,12 +97,13 @@ func (s *Scheduler) tick(ctx context.Context) {
 	s.inFlight = false
 	s.lastRun = time.Now()
 	s.nextRun = s.lastRun.Add(s.interval)
-	s.wg.Done()
 	s.mu.Unlock()
 }
 
 // Stop 停止 ticker 与 goroutine。可重复调用。
-// 会等待进行中的 tick 结束,以保证 "Stop 后不再有 run 完成"。
+// 在锁内 cancel + 停 ticker + 置 running=false 并捕获 loopDone chan,锁外等 loop
+// 完全退出。等 loop 退出即同时覆盖"等待进行中 tick"(loop 在 tick 返回前无法退出 →
+// loopDone 不会关闭),并消除 s.ticker 上的竞争(旧 loop 已死,新 Start 写 s.ticker 时无并发读)。
 func (s *Scheduler) Stop() {
 	s.mu.Lock()
 	if !s.running {
@@ -105,9 +117,11 @@ func (s *Scheduler) Stop() {
 		s.ticker.Stop()
 	}
 	s.running = false
+	done := s.loopDone // 捕获到局部变量,锁外等待;close 不需要 mu
 	s.mu.Unlock()
-	// 在锁外等待 in-flight tick:tick 需取 mu 才能调 wg.Done。
-	s.wg.Wait()
+	// 等待 loop goroutine 完全退出:defer close(done) 在 loop 返回时执行。
+	// done 必非 nil(仅在 running=true 且 Start 过时进入此分支,Start 必创建 loopDone)。
+	<-done
 }
 
 // Status 返回当前调度状态(线程安全)。
