@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"code-agent-sentinel/internal/config"
 )
 
 func TestResolveAccessMethodLoopback(t *testing.T) {
@@ -70,5 +72,33 @@ func TestClaudeDirFlagRegistered(t *testing.T) {
 	}
 	if f.DefValue != "" {
 		t.Errorf("--claude-dir 默认应空,got %q", f.DefValue)
+	}
+}
+
+// TestResolveSchedulerInterval 验证 Task 10:定时扫描配置解析。
+// run() 启动真实 HTTP server 难以单测,故抽 resolveSchedulerInterval 纯函数单测。
+// 总开关关 / 间隔空 / 无效 → (0, false);否则 (interval, true)。
+func TestResolveSchedulerInterval(t *testing.T) {
+	cases := []struct {
+		enabled  bool
+		interval string
+		wantDur  string
+		wantEn   bool
+	}{
+		{false, "30m", "0s", false},  // 总开关关 → 不启用
+		{true, "", "0s", false},      // 间隔空 → 不启用
+		{true, "bad", "0s", false},   // 无效 → 不启用
+		{true, "30m", "30m0s", true}, // 正常
+		{true, "1h", "1h0m0s", true},
+	}
+	for _, c := range cases {
+		cfg := &config.Config{ScanEnabled: c.enabled, ScanInterval: c.interval}
+		dur, en := resolveSchedulerInterval(cfg)
+		if en != c.wantEn {
+			t.Errorf("enabled=%v interval=%q: want en=%v got %v", c.enabled, c.interval, c.wantEn, en)
+		}
+		if c.wantEn && dur.String() != c.wantDur {
+			t.Errorf("interval=%q: want dur=%q got %q", c.interval, c.wantDur, dur)
+		}
 	}
 }

@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -20,6 +21,7 @@ import (
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/editor"
 	"code-agent-sentinel/internal/history"
+	"code-agent-sentinel/internal/scheduler"
 	"code-agent-sentinel/internal/security"
 )
 
@@ -127,6 +129,19 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	ed := editor.New(eng, cfg.BackupDir, cfg.MaxBackups)
 	srv := api.NewServer(eng, orch, cfg, token, hist, configengine.DefaultAgents(home, claudeDir), ed)
 	srv.ConfigPath = cfgPath
+	// #1:进程内定时扫描。构造 scheduler 并注入 srv,使 /api/scheduler 端点可读/重配;
+	// 仅在总开关开且间隔有效时 Start()。defer Stop 无条件注册(未 Start 的 scheduler
+	// Stop 是 nil-safe 空操作,见 scheduler.go Stop 的 !s.running 分支)。
+	interval, schedEnabled := resolveSchedulerInterval(cfg)
+	sched := scheduler.New(interval, func(ctx context.Context) error {
+		_, err := srv.Runner.RunScan(ctx, nil)
+		return err
+	})
+	srv.Scheduler = sched
+	if schedEnabled {
+		sched.Start()
+	}
+	defer sched.Stop()
 	httpSrv := &http.Server{Handler: srv.Router()}
 
 	ln, err := net.Listen("tcp", api.ResolveListenAddr(cfg))
@@ -164,6 +179,18 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	}
 	httpSrv.Serve(ln)
 	return nil
+}
+
+// resolveSchedulerInterval 解析定时扫描配置:总开关关 / 间隔空 / 无效 → (0, false);否则 (interval, true)。
+func resolveSchedulerInterval(cfg *config.Config) (time.Duration, bool) {
+	if !cfg.ScanEnabled || cfg.ScanInterval == "" {
+		return 0, false
+	}
+	d, err := time.ParseDuration(cfg.ScanInterval)
+	if err != nil || d <= 0 {
+		return 0, false
+	}
+	return d, true
 }
 
 type accessMethod struct {
