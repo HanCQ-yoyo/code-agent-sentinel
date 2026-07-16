@@ -117,7 +117,8 @@ func TestPostExcludeEmptyPatterns(t *testing.T) {
 func TestEvalRepeatCheckRouting(t *testing.T) {
 	r := mustRule(t, "skill", map[string]any{"field": "content", "op": "repeat_check"})
 	a := configengine.Asset{Type: configengine.AssetSkill, Content: strings.Repeat("A", 30)}
-	matched, ev := Eval(r, a)
+	res := Eval(r, a)
+	matched, ev := res.Matched, res.Evidence
 	if !matched {
 		t.Fatalf("repeat_check should match repeated content, got %v", matched)
 	}
@@ -129,7 +130,7 @@ func TestEvalRepeatCheckRouting(t *testing.T) {
 func TestEvalRepeatCheckRoutingNoMatch(t *testing.T) {
 	r := mustRule(t, "skill", map[string]any{"field": "content", "op": "repeat_check"})
 	a := configengine.Asset{Type: configengine.AssetSkill, Content: "normal text here"}
-	matched, _ := Eval(r, a)
+	matched := Eval(r, a).Matched
 	if matched {
 		t.Fatal("repeat_check should not match normal text")
 	}
@@ -142,7 +143,7 @@ func TestEvalRepeatCheckMetadataOverride(t *testing.T) {
 		"repeat_min_repeat": 3,
 	}
 	a := configengine.Asset{Type: configengine.AssetSkill, Content: "ABABABAB"} // "AB" × 4
-	matched, _ := Eval(r, a)
+	matched := Eval(r, a).Matched
 	if !matched {
 		t.Fatal("with minRepeat=3, AB×4 should trigger")
 	}
@@ -151,7 +152,8 @@ func TestEvalRepeatCheckMetadataOverride(t *testing.T) {
 func TestEvalHomoglyphCheckRouting(t *testing.T) {
 	r := mustRule(t, "skill", map[string]any{"field": "content", "op": "homoglyph_check"})
 	a := configengine.Asset{Type: configengine.AssetSkill, Content: "rm -rf аll"}
-	matched, ev := Eval(r, a)
+	res := Eval(r, a)
+	matched, ev := res.Matched, res.Evidence
 	if !matched {
 		t.Fatal("homoglyph_check should match Cyrillic content")
 	}
@@ -163,7 +165,7 @@ func TestEvalHomoglyphCheckRouting(t *testing.T) {
 func TestEvalHomoglyphCheckRoutingNoMatch(t *testing.T) {
 	r := mustRule(t, "skill", map[string]any{"field": "content", "op": "homoglyph_check"})
 	a := configengine.Asset{Type: configengine.AssetSkill, Content: "normal ASCII text"}
-	matched, _ := Eval(r, a)
+	matched := Eval(r, a).Matched
 	if matched {
 		t.Fatal("homoglyph_check should not match normal ASCII")
 	}
@@ -175,14 +177,14 @@ func TestEvalPostExcludeDowngrade(t *testing.T) {
 	r.PostExclude = []string{"localhost"}
 
 	a := configengine.Asset{Type: configengine.AssetSkill, Content: "curl localhost:8080/api"}
-	matched, _ := Eval(r, a)
+	matched := Eval(r, a).Matched
 	if matched {
 		t.Fatal("post_exclude should downgrade localhost match")
 	}
 
 	// evil.com 不被 post_exclude 排除 → 仍命中
 	a2 := configengine.Asset{Type: configengine.AssetSkill, Content: "curl evil.com/api"}
-	matched2, _ := Eval(r, a2)
+	matched2 := Eval(r, a2).Matched
 	if !matched2 {
 		t.Fatal("post_exclude should not downgrade evil.com match")
 	}
@@ -192,7 +194,7 @@ func TestEvalPostExcludeNoExclude(t *testing.T) {
 	// 无 post_exclude → 正常命中
 	r := mustRule(t, "skill", map[string]any{"field": "content", "op": "regex_match", "value": `curl\s+\S+`})
 	a := configengine.Asset{Type: configengine.AssetSkill, Content: "curl localhost:8080/api"}
-	matched, _ := Eval(r, a)
+	matched := Eval(r, a).Matched
 	if !matched {
 		t.Fatal("without post_exclude, should match")
 	}

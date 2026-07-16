@@ -37,8 +37,8 @@ type RulesDetector struct {
 	// Scan 时追加项目规则错误,合并成 load-error findings。
 	loadErrs []ruleengine.RuleLoadError
 
-	baseline *suppression.BaselineSet   // 已知指纹快照(命中 → Suppression="baseline");nil=无
-	supprs   *suppression.Suppressions  // 行内豁免(命中 → Suppression="inline");nil=无
+	baseline *suppression.BaselineSet  // 已知指纹快照(命中 → Suppression="baseline");nil=无
+	supprs   *suppression.Suppressions // 行内豁免(命中 → Suppression="inline");nil=无
 }
 
 // NewRulesDetector 构造检测器:加载内置 + 全局规则 + 抑制配置。
@@ -88,11 +88,11 @@ func NewRulesDetector(home string, cfg *config.DetectorsConfig) *RulesDetector {
 	return d
 }
 
-func (d *RulesDetector) ID() string                     { return "rules" }
+func (d *RulesDetector) ID() string                       { return "rules" }
 func (d *RulesDetector) Covers() []configengine.AssetType { return nil } // 见类型注释
 func (d *RulesDetector) Enabled() bool                    { return d.cfg.RulesEnabled() }
-func (d *RulesDetector) Available() bool                 { return true }
-func (d *RulesDetector) Reason() string                  { return "" }
+func (d *RulesDetector) Available() bool                  { return true }
+func (d *RulesDetector) Reason() string                   { return "" }
 
 // Meta 返回检测器能力元数据(UI 展示用,纯静态描述)。
 // Rules 摘要来自 baseRules(内置 + 全局);项目规则是动态的、按资产来源项目变化,不入 Meta。
@@ -157,7 +157,8 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 			if r.ProjectPath != "" && !pathInProject(a.SourcePath, r.ProjectPath) {
 				continue
 			}
-			matched, evidence := ruleengine.Eval(r, a)
+			res := ruleengine.Eval(r, a)
+			matched, evidence := res.Matched, res.Evidence
 			if !matched {
 				continue
 			}
@@ -185,12 +186,12 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 	// 但 Medium 系数 1.5 会让合成 AssetID 以 w=1.0 兜底权重扣分,破坏该决策,故改 Info。
 	for _, e := range loadErrs {
 		out = append(out, Finding{
-			DetectorID: d.ID(),
-			RuleID:     "rules.load-error",
-			Severity:   SeverityInfo,
-			AssetID:    "rules:" + e.Source,
-			Message:    "规则加载错误",
-			Evidence:   e.Reason,
+			DetectorID:  d.ID(),
+			RuleID:      "rules.load-error",
+			Severity:    SeverityInfo,
+			AssetID:     "rules:" + e.Source,
+			Message:     "规则加载错误",
+			Evidence:    e.Reason,
 			Remediation: "修复规则文件语法或配置(详见 evidence)",
 		})
 	}

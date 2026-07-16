@@ -9,17 +9,22 @@ import (
 	"code-agent-sentinel/internal/configengine"
 )
 
-// Eval 对单个资产求值规则。返回是否命中 + 人类可读的 evidence。
-// 禁用规则(Match.raw 为 nil)返回 (false, "")。
-func Eval(rule Rule, a configengine.Asset) (bool, string) {
+// Eval 对单个资产求值规则。返回 EvalResult(命中 + 证据 + 命中位置)。
+// 禁用规则(Match.raw 为 nil)返回零值 EvalResult。
+// 仅 content 字段的 regex_match/contains 叶子产生 Location;not_*、字段级匹配、
+// 反混淆 candidate 命中不产位置。命中位置不进入 Fingerprint(见 fingerprint.go)。
+func Eval(rule Rule, a configengine.Asset) EvalResult {
 	if len(rule.Match.raw) == 0 {
-		return false, "" // 禁用
+		return EvalResult{} // 禁用
 	}
-	return evalMatch(rule.Match.raw, a, &rule)
+	var locs []Location
+	matched, evidence := evalMatch(rule.Match.raw, a, &rule, &locs)
+	return EvalResult{Matched: matched, Evidence: evidence, Locations: locs}
 }
 
 // evalMatch 递归求值 match 节点。node 是 raw map(布尔节点或叶子)。
-func evalMatch(node map[string]any, a configengine.Asset, rule *Rule) (bool, string) {
+// locs 用于收集 content 字段叶子命中位置;NOT 子树传 nil(取反不产位置)。
+func evalMatch(node map[string]any, a configengine.Asset, rule *Rule, locs *[]Location) (bool, string) {
 	if len(node) == 0 {
 		return false, ""
 	}
@@ -36,7 +41,7 @@ func evalMatch(node map[string]any, a configengine.Asset, rule *Rule) (bool, str
 			if !ok {
 				return false, ""
 			}
-			ok2, e := evalMatch(child, a, rule)
+			ok2, e := evalMatch(child, a, rule, locs)
 			if !ok2 {
 				return false, "" // 短路
 			}
@@ -57,7 +62,7 @@ func evalMatch(node map[string]any, a configengine.Asset, rule *Rule) (bool, str
 			if !ok {
 				continue
 			}
-			ok2, e := evalMatch(child, a, rule)
+			ok2, e := evalMatch(child, a, rule, locs)
 			if ok2 {
 				return true, e // 短路:取命中者的 evidence
 			}
@@ -70,18 +75,20 @@ func evalMatch(node map[string]any, a configengine.Asset, rule *Rule) (bool, str
 		if !ok {
 			return false, ""
 		}
-		ok2, e := evalMatch(child, a, rule)
+		// NOT 语义:子节点命中位置不外传(取反 = 无命中点)
+		ok2, e := evalMatch(child, a, rule, nil)
 		return !ok2, "NOT(" + e + ")"
 	}
 
 	// 叶子节点
-	return evalLeaf(node, a, rule)
+	return evalLeaf(node, a, rule, locs)
 }
 
 // evalLeaf 求值叶子节点(field + op + value)。
 // field=="content" 取 a.Content;否则取 a.Fields[field]。
 // 字段缺失:exists→false / not_exists→true / 其它→false。
-func evalLeaf(node map[string]any, a configengine.Asset, rule *Rule) (bool, string) {
+// locs 非 nil 时,content 字段的 contains/regex_match 会向其追加命中位置。
+func evalLeaf(node map[string]any, a configengine.Asset, rule *Rule, locs *[]Location) (bool, string) {
 	fieldStr, ok := node["field"].(string)
 	if !ok {
 		return false, ""
@@ -132,10 +139,10 @@ func evalLeaf(node map[string]any, a configengine.Asset, rule *Rule) (bool, stri
 		return false, "" // 字段存在,not_exists 不命中
 
 	case OpContains:
-		return evalContains(fieldVal, node["value"])
+		return evalContains(fieldVal, node["value"], fieldStr, locs)
 
 	case OpNotContains:
-		matched, _ := evalContains(fieldVal, node["value"])
+		matched, _ := evalContains(fieldVal, node["value"], fieldStr, nil) // not 不产位置
 		return !matched, fmt.Sprintf("field %q 不含 %v", fieldStr, node["value"])
 
 	case OpEq:
@@ -149,10 +156,10 @@ func evalLeaf(node map[string]any, a configengine.Asset, rule *Rule) (bool, stri
 		return s != valStr, fmt.Sprintf("%s != %q", fieldStr, valStr)
 
 	case OpRegexMatch:
-		return evalRegexMatch(fieldStr, fieldVal, node["value"], rule, OpRegexMatch)
+		return evalRegexMatch(fieldStr, fieldVal, node["value"], rule, OpRegexMatch, locs)
 
 	case OpNotRegexMatch:
-		matched, ev := evalRegexMatch(fieldStr, fieldVal, node["value"], rule, OpNotRegexMatch)
+		matched, ev := evalRegexMatch(fieldStr, fieldVal, node["value"], rule, OpNotRegexMatch, nil) // not 不产位置
 		return !matched, fmt.Sprintf("NOT(%s)", ev)
 
 	case OpKeyMatches:
@@ -173,7 +180,9 @@ func evalLeaf(node map[string]any, a configengine.Asset, rule *Rule) (bool, stri
 // evalContains:字段值是 slice → 检查成员(任一元素 stringify 后含 value,或等于 value);
 // 非 slice → stringify 后子串检查。
 // 支持 []any(YAML 解析默认)和 []string(configengine parse_settings/parse_mcp 的真实类型)。
-func evalContains(fieldVal any, value any) (bool, string) {
+// fieldStr + locs 用于位置计算:仅 fieldStr=="content" 且 locs 非 nil 时,slice 之外的标量命中
+// 会向 locs 追加所有命中区间(字段级匹配 locs 为 nil,不算)。
+func evalContains(fieldVal any, value any, fieldStr string, locs *[]Location) (bool, string) {
 	valStr, ok := value.(string)
 	if !ok {
 		return false, ""
@@ -200,6 +209,10 @@ func evalContains(fieldVal any, value any) (bool, string) {
 	}
 	s := stringify(fieldVal)
 	if strings.Contains(s, valStr) {
+		// content 字段:算所有命中位置(字段级匹配 locs 为 nil,不算)
+		if fieldStr == "content" && locs != nil {
+			*locs = append(*locs, locationsFromOffsets(s, containsAllOffsets(s, valStr))...)
+		}
 		return true, valStr
 	}
 	return false, ""
@@ -209,7 +222,9 @@ func evalContains(fieldVal any, value any) (bool, string) {
 // 若缓存未命中(未跑 Validate),惰性编译并缓存。
 // op 参数用于缓存键区分 regex_match 与 not_regex_match(validate 按 op 分别存储)。
 // 若 rule.Deobfuscation 非空,对每个反混淆 candidate 跑正则(作用于任意字段),任一命中即 matched。
-func evalRegexMatch(field string, fieldVal any, value any, rule *Rule, op string) (bool, string) {
+// locs 非 nil 时,field=="content" 的原始文本命中会向其追加所有未排除命中区间;
+// 反混淆 candidate 命中不映射回原文,不产位置。
+func evalRegexMatch(field string, fieldVal any, value any, rule *Rule, op string, locs *[]Location) (bool, string) {
 	pattern, ok := value.(string)
 	if !ok {
 		return false, ""
@@ -227,16 +242,21 @@ func evalRegexMatch(field string, fieldVal any, value any, rule *Rule, op string
 		excludePats = compilePostExcludePatterns(rule)
 	}
 
-	// 无反混淆:直接对原始文本跑(遍历全部匹配,首个未被 post_exclude 排除的命中)。
+	// 无反混淆:对原始文本跑(首个未排除命中 + 全部未排除命中偏移)。
 	// Finding #1 修复:旧实现用 FindString 只取最左匹配,若该匹配被 post_exclude 排除就
 	// 直接放弃,从不检查后续匹配 → 漏报(如 PE2 对 "sudo -v && sudo rm" 漏报 sudo rm)。
-	if hit, ok := firstNonExcludedHit(re, text, excludePats); ok {
+	if hit, indices, ok := firstNonExcludedHit(re, text, excludePats); ok {
+		// content 字段原始文本命中:算位置(反混淆 candidate 命中不映射回原文,不算)
+		if field == "content" && locs != nil {
+			*locs = append(*locs, locationsFromOffsets(text, indices)...)
+		}
 		return true, hit
 	}
 
 	// 有反混淆:对每个 candidate 跑(不链式)。
 	// Task 14 修复:移除 field=="content" 限制 — deobfuscation 应作用于任意字段
 	// (skill rules 需要对 description 字段做反混淆)。原有 field==content 规则不受影响。
+	// candidate 偏移不映射回原文 → 不产 location。
 	if len(rule.Deobfuscation) > 0 {
 		candidates := Deobfuscate(text, rule.Deobfuscation)
 		for _, c := range candidates {
@@ -244,7 +264,7 @@ func evalRegexMatch(field string, fieldVal any, value any, rule *Rule, op string
 				continue // 原始文本,已跑过
 			}
 			// post_exclude 同样作用于反混淆命中(遍历全部匹配)
-			if hit, ok := firstNonExcludedHit(re, c.Text, excludePats); ok {
+			if hit, _, ok := firstNonExcludedHit(re, c.Text, excludePats); ok {
 				return true, fmt.Sprintf("[%s] %s", c.Method, hit)
 			}
 		}
@@ -253,17 +273,25 @@ func evalRegexMatch(field string, fieldVal any, value any, rule *Rule, op string
 	return false, ""
 }
 
-// firstNonExcludedHit 在 text 上迭代正则的全部匹配,返回第一个未被 post_exclude 排除的命中串。
+// firstNonExcludedHit 在 text 上迭代正则全部匹配,返回首个未被 post_exclude 排除的命中串
+// 及所有未排除命中的字节区间 [start,end)。全部被排除(或无匹配)才 ok=false。
 // Finding #1:旧实现只取最左匹配(FindString),若被 post_exclude 排除就放弃 → 漏报后续匹配。
-// 现遍历 FindAllString 的所有匹配,在首个未被排除的匹配上命中;全部被排除(或无匹配)才返回 false。
+// 现遍历 FindAllStringIndex 的所有匹配,收集未排除的命中区间;首个未排除的作为 first。
 // post_exclude 缺省时 excludePats 为空 → applyPostExclude 恒 false → 首个匹配命中,与旧行为一致。
-func firstNonExcludedHit(re *regexp.Regexp, text string, excludePats []*regexp.Regexp) (string, bool) {
-	for _, hit := range re.FindAllString(text, -1) {
-		if !applyPostExclude(hit, excludePats) {
-			return hit, true
+func firstNonExcludedHit(re *regexp.Regexp, text string, excludePats []*regexp.Regexp) (string, [][2]int, bool) {
+	var first string
+	var indices [][2]int
+	for _, idx := range re.FindAllStringIndex(text, -1) {
+		hit := text[idx[0]:idx[1]]
+		if applyPostExclude(hit, excludePats) {
+			continue
 		}
+		if first == "" {
+			first = hit
+		}
+		indices = append(indices, [2]int{idx[0], idx[1]})
 	}
-	return "", false
+	return first, indices, first != ""
 }
 
 // evalKeyMatches:字段值是 map,对其 KEY 跑正则。
@@ -392,4 +420,76 @@ func stringify(v any) string {
 	default:
 		return fmt.Sprint(v)
 	}
+}
+
+// ── Location 位置计算辅助(Task 4)──
+
+// lineStartOffsets 返回每行起始字节偏移(starts[i] = 第 i+1 行起点)。第 1 行起点 0。
+func lineStartOffsets(text string) []int {
+	starts := []int{0}
+	for i := 0; i < len(text); i++ {
+		if text[i] == '\n' {
+			starts = append(starts, i+1)
+		}
+	}
+	return starts
+}
+
+// offsetLineCol 把字节偏移转成 1-based (行号, 列号)。starts 来自 lineStartOffsets。
+func offsetLineCol(starts []int, offset int) (int, int) {
+	// 二分找最大 starts[i] <= offset
+	lo, hi := 0, len(starts)-1
+	lineIdx := 0
+	for lo <= hi {
+		mid := (lo + hi) / 2
+		if starts[mid] <= offset {
+			lineIdx = mid
+			lo = mid + 1
+		} else {
+			hi = mid - 1
+		}
+	}
+	return lineIdx + 1, offset - starts[lineIdx] + 1
+}
+
+// locationsFromOffsets 把字节区间 [start,end) 列表转成 Location(基于 text 换行结构),最多 50 个。
+// EndCol 为半开区间末列:末字节列 +1 后再 +1(因 offsetLineCol 返回 1-based 列,
+// end-1 指向命中末字节,其列 +1 即为 EndCol 的半开边界)。
+func locationsFromOffsets(text string, offsets [][2]int) []Location {
+	if len(offsets) == 0 {
+		return nil
+	}
+	starts := lineStartOffsets(text)
+	out := make([]Location, 0, len(offsets))
+	for _, o := range offsets {
+		if len(out) >= 50 {
+			break
+		}
+		line, startCol := offsetLineCol(starts, o[0])
+		_, endCol := offsetLineCol(starts, o[1]-1) // end exclusive → 末字节列 +1
+		out = append(out, Location{Line: line, StartCol: startCol, EndCol: endCol + 1})
+	}
+	return out
+}
+
+// containsAllOffsets 返回 sub 在 s 中所有非重叠出现的字节区间 [start,end),最多 50 个。
+func containsAllOffsets(s, sub string) [][2]int {
+	var out [][2]int
+	if sub == "" {
+		return out
+	}
+	start := 0
+	for {
+		i := strings.Index(s[start:], sub)
+		if i < 0 {
+			break
+		}
+		b := start + i
+		out = append(out, [2]int{b, b + len(sub)})
+		start = b + len(sub)
+		if len(out) >= 50 {
+			break
+		}
+	}
+	return out
 }

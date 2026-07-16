@@ -68,6 +68,22 @@ type MatchNode struct {
 	raw map[string]any
 }
 
+// Location 是 content 字段命中的文件位置(1-based)。
+// Line=行号;StartCol/EndCol=字节列半开区间 [StartCol, EndCol),便于 Monaco 高亮。
+// 仅 content 字段的 regex_match/contains 产生;字段级匹配与反混淆命中无位置。
+type Location struct {
+	Line     int `json:"line"`
+	StartCol int `json:"start_col"`
+	EndCol   int `json:"end_col"`
+}
+
+// EvalResult 是 Eval 的返回:是否命中 + 证据 + 命中位置列表。
+type EvalResult struct {
+	Matched   bool
+	Evidence  string
+	Locations []Location
+}
+
 // UnmarshalYAML 将 YAML 节点解码到 raw map,保留原始结构。
 func (m *MatchNode) UnmarshalYAML(node *yaml.Node) error {
 	var v map[string]any
