@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"code-agent-sentinel/internal/configengine"
+	"code-agent-sentinel/internal/security/ruleengine"
 )
 
 // Severity 表示检测结果的严重等级。
@@ -30,9 +31,12 @@ type Finding struct {
 	Evidence    string                 `json:"evidence"`
 	Remediation string                 `json:"remediation"`
 	Fingerprint string                 `json:"fingerprint,omitempty"` // 规则指纹(baseline/inline 抑制用);仅 RulesDetector 填充
-	Suppressed  bool                   `json:"suppressed,omitempty"`
-	Suppression string                 `json:"suppression,omitempty"` // "baseline" / "inline"
-	Reason      string                 `json:"reason,omitempty"`
+	// Locations 是 content 字段命中的文件位置(仅 RulesDetector 填充;子进程检测器无)。
+	// 供 UI(Task 18)在 Monaco 高亮命中行;不参与健康分,不进 Fingerprint。
+	Locations   []ruleengine.Location `json:"locations,omitempty"`
+	Suppressed  bool                  `json:"suppressed,omitempty"`
+	Suppression string                `json:"suppression,omitempty"` // "baseline" / "inline"
+	Reason      string                `json:"reason,omitempty"`
 }
 
 // DetectorStatus 是一个检测器的运行状态。

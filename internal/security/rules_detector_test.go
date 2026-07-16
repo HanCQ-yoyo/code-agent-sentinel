@@ -424,3 +424,49 @@ func TestRulesDetectorProjectRuleScoped(t *testing.T) {
 		t.Error("projA 项目规则不应命中 projB 资产 (项目隔离失效)")
 	}
 }
+
+// TestRulesFindingLocationsPropagated 验证 RulesDetector 透传 ruleengine.EvalResult.Locations
+// 到 Finding.Locations(content regex_match 命中应带行位置,供 UI Monaco 高亮)。
+// 规则经全局规则目录(.claude-sentinel/rules/)注入(沿用 TestRulesDetectorLoadErrorNotInHealth
+// 的构造模式);MatchNode.raw 未导出,security 包无法直构 Rule,必走 YAML 加载路径。
+func TestRulesFindingLocationsPropagated(t *testing.T) {
+	home := newRulesHome(t)
+
+	// 写一条 content regex 规则到全局规则目录,NewRulesDetector 会经 LoadForScan 加载
+	globalDir := filepath.Join(home, ".claude-sentinel", "rules")
+	if err := os.MkdirAll(globalDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	ruleYAML := `rules:
+  - id: test.content-hit
+    severity: medium
+    asset_type: skill
+    match: { field: content, op: regex_match, value: "rm -rf" }
+    description: "危险命令"
+`
+	if err := os.WriteFile(filepath.Join(globalDir, "test.yaml"), []byte(ruleYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	assets := []configengine.Asset{{
+		ID:      "skill:danger",
+		Type:    configengine.AssetSkill,
+		Name:    "danger",
+		Content: "safe line\ndanger: rm -rf /\nend",
+	}}
+
+	d := NewRulesDetector(home, nil)
+	out, err := d.Scan(context.Background(), assets)
+	if err != nil {
+		t.Fatalf("Scan: %v", err)
+	}
+	if len(out) != 1 {
+		t.Fatalf("应 1 条 finding, got %d: %+v", len(out), out)
+	}
+	if len(out[0].Locations) != 1 {
+		t.Fatalf("应透传 1 个 location, got %d", len(out[0].Locations))
+	}
+	if out[0].Locations[0].Line != 2 {
+		t.Errorf("命中应在第 2 行, got %d", out[0].Locations[0].Line)
+	}
+}

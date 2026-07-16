@@ -158,8 +158,7 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 				continue
 			}
 			res := ruleengine.Eval(r, a)
-			matched, evidence := res.Matched, res.Evidence
-			if !matched {
+			if !res.Matched {
 				continue
 			}
 			fp := ruleengine.Fingerprint(r, a.ID)
@@ -171,9 +170,10 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 				AssetType:   a.Type,
 				AssetName:   a.Name,
 				Message:     r.Description,
-				Evidence:    truncate(evidence, 200),
+				Evidence:    truncate(res.Evidence, 200),
 				Remediation: r.Remediation,
 				Fingerprint: fp,
+				Locations:   res.Locations,
 			}
 			applySuppression(&f, fp, d.baseline, d.supprs)
 			out = append(out, f)
