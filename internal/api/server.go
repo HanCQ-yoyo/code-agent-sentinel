@@ -131,6 +131,8 @@ func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	api.PUT("/scheduler", s.putScheduler)
 	api.GET("/settings", s.getSettings)
 	api.PUT("/settings", s.putSettings)
+	api.GET("/pinned-projects", s.getPinnedProjects)
+	api.PUT("/pinned-projects", s.putPinnedProjects)
 }
 
 func (s *Server) notImplemented(c *gin.Context) {
