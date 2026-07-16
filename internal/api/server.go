@@ -14,6 +14,7 @@ import (
 	"code-agent-sentinel/internal/editor"
 	"code-agent-sentinel/internal/history"
 	"code-agent-sentinel/internal/scan"
+	"code-agent-sentinel/internal/scheduler"
 	"code-agent-sentinel/internal/security"
 )
 
@@ -27,7 +28,8 @@ type Server struct {
 	Agents          []configengine.Agent
 	SelectedAgentID string
 	Editor          *editor.Editor
-	Runner          *scan.Runner // HTTP/scheduler/CLI 共用的扫描路径
+	Runner          *scan.Runner         // HTTP/scheduler/CLI 共用的扫描路径
+	Scheduler       *scheduler.Scheduler // 进程内定时扫描调度器(main.go 注入)
 }
 
 func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *config.Config, token string, hist *history.Store, agents []configengine.Agent, ed *editor.Editor) *Server {
@@ -125,6 +127,10 @@ func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	api.GET("/suppressions", s.getSuppressions)
 	api.DELETE("/suppressions/:id", s.deleteSuppression)
 	api.POST("/baseline", s.postBaseline)
+	api.GET("/scheduler", s.getScheduler)
+	api.PUT("/scheduler", s.putScheduler)
+	api.GET("/settings", s.getSettings)
+	api.PUT("/settings", s.putSettings)
 }
 
 func (s *Server) notImplemented(c *gin.Context) {
