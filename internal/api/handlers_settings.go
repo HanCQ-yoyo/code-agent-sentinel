@@ -64,7 +64,15 @@ func (s *Server) putSettings(c *gin.Context) {
 	}
 	if scanChanged && s.Scheduler != nil {
 		interval, _ := time.ParseDuration(s.Config.ScanInterval)
-		s.Scheduler.Reconfigure(s.Config.ScanEnabled, interval)
+		enabled := s.Config.ScanEnabled
+		// interval<=0 视为关闭(Task 7 语义:Start 对 interval<=0 no-op)。
+		// 与 putScheduler 行为一致:零/负 interval 强制 enabled=false 再 Reconfigure,
+		// 避免 Reconfigure(enabled, 0) 与 config.ScanEnabled=true 的语义不一致,
+		// 也避免空 scan_interval 绕过校验(ParseDuration("") 返回错误被 _ 丢弃)。
+		if interval <= 0 {
+			enabled = false
+		}
+		s.Scheduler.Reconfigure(enabled, interval)
 	}
 	for _, k := range []string{"claude_dir", "discovery", "home_dir"} {
 		if _, ok := raw[k]; ok {

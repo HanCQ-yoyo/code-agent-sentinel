@@ -18,14 +18,39 @@ type schedulerResponse struct {
 	NextRun  string `json:"next_run"`
 }
 
+// schedulerStatusResponse 构造 scheduler 响应,nil-safe。
+// 优先用 s.Scheduler.Status()(实时调度状态);否则从 s.Config 退化构造:
+//   - Enabled 退化为 s.Config.ScanEnabled
+//   - Interval 退化为 s.Config.ScanInterval 字符串(空则 "0s",与 duration 零值一致)
+//   - LastRun/NextRun 退化空串(无运行记录)
+//
+// 这保证 s.Scheduler == nil 时(main.go 未注入、测试、或未启动调度)
+// GET / PUT /api/scheduler 仍返回 200 + 基于 config 的状态,不 panic。
+func (s *Server) schedulerStatusResponse() schedulerResponse {
+	if s.Scheduler != nil {
+		st := s.Scheduler.Status()
+		return schedulerResponse{
+			Enabled:  st.Enabled,
+			Interval: st.Interval.String(),
+			LastRun:  formatTime(st.LastRun),
+			NextRun:  formatTime(st.NextRun),
+		}
+	}
+	// 退化:基于 config 构造。ScanInterval 空串时用 "0s"(duration 零值的 String())。
+	interval := s.Config.ScanInterval
+	if interval == "" {
+		interval = "0s"
+	}
+	return schedulerResponse{
+		Enabled:  s.Config.ScanEnabled,
+		Interval: interval,
+		LastRun:  "",
+		NextRun:  "",
+	}
+}
+
 func (s *Server) getScheduler(c *gin.Context) {
-	st := s.Scheduler.Status()
-	c.JSON(http.StatusOK, schedulerResponse{
-		Enabled:  st.Enabled,
-		Interval: st.Interval.String(),
-		LastRun:  formatTime(st.LastRun),
-		NextRun:  formatTime(st.NextRun),
-	})
+	c.JSON(http.StatusOK, s.schedulerStatusResponse())
 }
 
 type putSchedulerBody struct {
@@ -45,9 +70,15 @@ func (s *Server) putScheduler(c *gin.Context) {
 		return
 	}
 	enabled := body.Enabled != nil && *body.Enabled
+	// interval<=0 视为关闭(Task 7 语义:Start 对 interval<=0 no-op)。
+	// 与 putSettings 行为一致:零/负 interval 强制 enabled=false 再 Reconfigure。
+	if interval <= 0 {
+		enabled = false
+	}
+	// 始终更新内存 config(与 putSettings 一致);仅当 ConfigPath 非空时落盘。
+	s.Config.ScanEnabled = enabled
+	s.Config.ScanInterval = body.Interval
 	if s.ConfigPath != "" {
-		s.Config.ScanEnabled = enabled
-		s.Config.ScanInterval = body.Interval
 		if err := config.Save(s.ConfigPath, s.Config); err != nil {
 			c.JSON(http.StatusInternalServerError, errorBody("save_failed", err.Error()))
 			return
@@ -56,7 +87,7 @@ func (s *Server) putScheduler(c *gin.Context) {
 	if s.Scheduler != nil {
 		s.Scheduler.Reconfigure(enabled, interval)
 	}
-	s.getScheduler(c) // 返回最新状态
+	c.JSON(http.StatusOK, s.schedulerStatusResponse()) // 返回最新状态(nil-safe)
 }
 
 // formatTime 把 time.Time 格式化为 RFC3339;零值返回 ""。
