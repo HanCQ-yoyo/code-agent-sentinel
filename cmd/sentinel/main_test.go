@@ -59,3 +59,16 @@ func TestTokenFlagRegistered(t *testing.T) {
 		t.Errorf("--token 默认值应为空(随机 token),got %q", flag.DefValue)
 	}
 }
+
+// TestClaudeDirFlagRegistered 验证 Task 3:--claude-dir flag 已注册,默认空。
+// run() 在 flag 非空时覆盖 cfg.ResolveClaudeDir(home),空则走配置/默认回退。
+func TestClaudeDirFlagRegistered(t *testing.T) {
+	cmd := newRootCmd()
+	f := cmd.Flags().Lookup("claude-dir")
+	if f == nil {
+		t.Fatal("--claude-dir flag 未注册")
+	}
+	if f.DefValue != "" {
+		t.Errorf("--claude-dir 默认应空,got %q", f.DefValue)
+	}
+}

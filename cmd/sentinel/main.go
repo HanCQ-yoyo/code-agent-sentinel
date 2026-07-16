@@ -31,19 +31,20 @@ func main() {
 
 func newRootCmd() *cobra.Command {
 	var (
-		cfgPath   string
-		bindFlag  string
-		portFlag  int
-		noBrowser bool
-		risky     bool
-		homeFlag  string
-		tokenFlag string
+		cfgPath       string
+		bindFlag      string
+		portFlag      int
+		noBrowser     bool
+		risky         bool
+		homeFlag      string
+		tokenFlag     string
+		claudeDirFlag string
 	)
 	cmd := &cobra.Command{
 		Use:   "sentinel",
 		Short: "Claude Code 配置安全态势看板(P1 只读)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context(), cfgPath, bindFlag, portFlag, noBrowser, risky, homeFlag, tokenFlag)
+			return run(cmd.Context(), cfgPath, bindFlag, portFlag, noBrowser, risky, homeFlag, tokenFlag, claudeDirFlag)
 		},
 	}
 	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.claude-sentinel/config.yaml)")
@@ -54,13 +55,15 @@ func newRootCmd() *cobra.Command {
 	cmd.Flags().StringVar(&homeFlag, "home", "", "覆盖 home 目录(调试)")
 	// C-BUILD-1: 调试/测试用固定 token,覆盖随机 genToken()。生产场景应留空走随机。
 	cmd.Flags().StringVar(&tokenFlag, "token", "", "覆盖随机生成的 token(调试/测试用,生产场景留空)")
+	// Task 3:--claude-dir 覆盖 cfg.ResolveClaudeDir(home);空走配置/默认回退。
+	cmd.Flags().StringVar(&claudeDirFlag, "claude-dir", "", ".claude 目录绝对路径(默认 home/.claude)")
 	// Task 15:baseline / rules 子命令
 	cmd.AddCommand(newBaselineCmd())
 	cmd.AddCommand(newRulesCmd())
 	return cmd
 }
 
-func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser, risky bool, homeFlag, tokenFlag string) error {
+func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser, risky bool, homeFlag, tokenFlag, claudeDirFlag string) error {
 	if cfgPath == "" {
 		p, err := config.DefaultPath()
 		if err != nil {
@@ -92,9 +95,20 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 		}
 		home = h
 	}
+	// #2:.claude 目录解析:--claude-dir > cfg.ClaudeDir > home/.claude
+	claudeDir := cfg.ResolveClaudeDir(home)
+	if claudeDirFlag != "" {
+		claudeDir = claudeDirFlag
+	}
 
 	cfg.EnsureDetectors() // 确保 Detectors 非 nil,检测器持其指针,API 写原地生效
-	eng := configengine.NewEngine(home, "")
+	eng := configengine.NewEngine(home, claudeDir)
+	// #2:发现范围桥接(config 不导入 configengine,在此转 []AssetType)
+	if cfg.Discovery != nil {
+		for _, s := range cfg.Discovery.DisabledAssetTypes {
+			eng.DisabledAssetTypes = append(eng.DisabledAssetTypes, configengine.AssetType(s))
+		}
+	}
 	r := security.NewRegistry()
 	r.Register(security.NewRulesDetector(home, cfg.Detectors))
 	r.Register(security.NewSecretDetector(cfg.Detectors))
@@ -109,7 +123,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	histPath := filepath.Join(home, ".claude-sentinel", "history")
 	hist := history.NewStore(histPath)
 	ed := editor.New(eng, cfg.BackupDir, cfg.MaxBackups)
-	srv := api.NewServer(eng, orch, cfg, token, hist, configengine.DefaultAgents(home, ""), ed)
+	srv := api.NewServer(eng, orch, cfg, token, hist, configengine.DefaultAgents(home, claudeDir), ed)
 	srv.ConfigPath = cfgPath
 	httpSrv := &http.Server{Handler: srv.Router()}
 
