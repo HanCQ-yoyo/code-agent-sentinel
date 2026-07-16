@@ -31,8 +31,8 @@ func TestRouterXFFNotTrusted(t *testing.T) {
 	r.GET("/probe", func(c *gin.Context) { c.String(200, "ok") })
 
 	req := httptest.NewRequest("GET", "/probe", nil)
-	req.Host = "0.0.0.0" // 命中 hostMiddleware 允许列表(Bind 非 loopback 时加入)
-	req.RemoteAddr = "192.168.1.5:54321" // 真实 IP,不在白名单
+	req.Host = "0.0.0.0"                          // 命中 hostMiddleware 允许列表(Bind 非 loopback 时加入)
+	req.RemoteAddr = "192.168.1.5:54321"          // 真实 IP,不在白名单
 	req.Header.Set("X-Forwarded-For", "10.5.5.5") // 伪造,在白名单内
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
