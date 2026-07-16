@@ -35,6 +35,31 @@ type Config struct {
 	// 检测器运行期配置(启用开关 + 二进制路径)。nil=全启用默认(向后兼容)。
 	// main.go 启动时 EnsureDetectors 确保非 nil,使 API 写能原地被检测器读到。
 	Detectors *DetectorsConfig `yaml:"detectors"`
+
+	// #2:.claude 目录绝对路径;空 = home/.claude
+	ClaudeDir string `yaml:"claude_dir"`
+	// #2:发现范围开关;nil = 全发现
+	Discovery *DiscoveryCfg `yaml:"discovery"`
+	// #1:定时扫描间隔(如 "30m"/"1h");空/0/无效 = 关
+	ScanInterval string `yaml:"scan_interval"`
+	// #1:定时扫描总开关
+	ScanEnabled bool `yaml:"scan_enabled"`
+	// #5:"zh"/"en";空 = 浏览器探测后回退 zh
+	Language string `yaml:"language"`
+	// #4:置顶项目列表
+	PinnedProjects []PinnedProject `yaml:"pinned_projects"`
+}
+
+// DiscoveryCfg 控制资产发现范围(按资产类型开关)。configengine 不导入本包,
+// 故此处用 []string(11 个 AssetType 之一),main.go 桥接为 configengine.AssetType。
+type DiscoveryCfg struct {
+	DisabledAssetTypes []string `yaml:"disabled_asset_types"`
+}
+
+// PinnedProject 是 Assets 页置顶的项目(右键置顶 + 颜色标识)。
+type PinnedProject struct {
+	Path  string `yaml:"path"`
+	Color string `yaml:"color"`
 }
 
 func DefaultConfig() *Config {
@@ -89,6 +114,14 @@ func (c *Config) ResolveSentinelRulesDir(home string) string {
 		return c.SentinelRulesDir
 	}
 	return filepath.Join(home, ".claude-sentinel", "rules")
+}
+
+// ResolveClaudeDir 解析 .claude 目录绝对路径:非空用配置值,空回退 home/.claude。
+func (c *Config) ResolveClaudeDir(home string) string {
+	if c.ClaudeDir != "" {
+		return c.ClaudeDir
+	}
+	return filepath.Join(home, ".claude")
 }
 
 // ResolveSuppressPath 返回 suppressions 文件路径。空=默认 <home>/.claude-sentinel/suppressions.yaml。

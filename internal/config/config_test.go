@@ -97,3 +97,82 @@ func TestConfigResolveOverrides(t *testing.T) {
 		t.Errorf("ResolveSuppressionDiscount override = %v", got)
 	}
 }
+
+func TestConfigNewFieldsDefaults(t *testing.T) {
+	cfg := DefaultConfig()
+	if cfg.ClaudeDir != "" {
+		t.Errorf("ClaudeDir 默认应空,got %q", cfg.ClaudeDir)
+	}
+	if cfg.Discovery != nil {
+		t.Error("Discovery 默认应 nil(全发现)")
+	}
+	if cfg.ScanInterval != "" {
+		t.Errorf("ScanInterval 默认应空(关),got %q", cfg.ScanInterval)
+	}
+	if cfg.ScanEnabled {
+		t.Error("ScanEnabled 默认应 false")
+	}
+	if cfg.Language != "" {
+		t.Errorf("Language 默认应空(回退 zh),got %q", cfg.Language)
+	}
+	if cfg.PinnedProjects != nil {
+		t.Error("PinnedProjects 默认应 nil")
+	}
+}
+
+func TestConfigResolveClaudeDir(t *testing.T) {
+	home := "/home/alice"
+	// 空 → 默认 home/.claude
+	cfg := DefaultConfig()
+	if got := cfg.ResolveClaudeDir(home); got != filepath.Join(home, ".claude") {
+		t.Errorf("空 claude_dir 应回退 %q,got %q", filepath.Join(home, ".claude"), got)
+	}
+	// 非空 → 用配置值
+	cfg.ClaudeDir = "/custom/.claude"
+	if got := cfg.ResolveClaudeDir(home); got != "/custom/.claude" {
+		t.Errorf("非空应原样返回,got %q", got)
+	}
+}
+
+func TestConfigLoadDiscoveryAndPinned(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	write := `claude_dir: /custom/.claude
+discovery:
+  disabled_asset_types: [skill, command]
+scan_interval: 30m
+scan_enabled: true
+language: en
+pinned_projects:
+  - path: /proj/a
+    color: red
+`
+	if err := os.WriteFile(path, []byte(write), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.ClaudeDir != "/custom/.claude" {
+		t.Errorf("ClaudeDir: %q", cfg.ClaudeDir)
+	}
+	if cfg.Discovery == nil || len(cfg.Discovery.DisabledAssetTypes) != 2 {
+		t.Fatalf("Discovery 解析错误: %+v", cfg.Discovery)
+	}
+	if cfg.Discovery.DisabledAssetTypes[0] != "skill" {
+		t.Errorf("DisabledAssetTypes[0]: %q", cfg.Discovery.DisabledAssetTypes[0])
+	}
+	if cfg.ScanInterval != "30m" {
+		t.Errorf("ScanInterval: %q", cfg.ScanInterval)
+	}
+	if !cfg.ScanEnabled {
+		t.Error("ScanEnabled 应 true")
+	}
+	if cfg.Language != "en" {
+		t.Errorf("Language: %q", cfg.Language)
+	}
+	if len(cfg.PinnedProjects) != 1 || cfg.PinnedProjects[0].Path != "/proj/a" || cfg.PinnedProjects[0].Color != "red" {
+		t.Errorf("PinnedProjects: %+v", cfg.PinnedProjects)
+	}
+}
