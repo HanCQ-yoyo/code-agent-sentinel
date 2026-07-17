@@ -17,6 +17,7 @@ func TestGetSettings(t *testing.T) {
 	s.ConfigPath = filepath.Join(dir, "config.yaml")
 	s.Config.Language = "en"
 	s.Config.ClaudeDir = "/custom/.claude"
+	s.Config.Discovery = &config.DiscoveryCfg{DisabledAssetTypes: []string{"mcp_server"}}
 	w := reqScheduler(t, s, "GET", "/api/settings", nil)
 	if w.Code != 200 {
 		t.Fatalf("got %d", w.Code)
@@ -25,6 +26,18 @@ func TestGetSettings(t *testing.T) {
 	json.Unmarshal(w.Body.Bytes(), &st)
 	if st["language"] != "en" || st["claude_dir"] != "/custom/.claude" {
 		t.Errorf("settings: %+v", st)
+	}
+	// DiscoveryCfg 必须以 snake_case json tag 序列化(与 PinnedProject 同类约束,防 gin
+	// 默认大写驼峰 DisabledAssetTypes 污染 /api/settings 响应)。
+	disc, ok := st["discovery"].(map[string]any)
+	if !ok {
+		t.Fatalf("discovery 缺失或类型错误: %+v", st["discovery"])
+	}
+	if _, ok := disc["disabled_asset_types"]; !ok {
+		t.Errorf("discovery 应含 disabled_asset_types(snake_case json tag),got: %+v", disc)
+	}
+	if _, ok := disc["DisabledAssetTypes"]; ok {
+		t.Errorf("discovery 不应含大写驼峰 DisabledAssetTypes(缺 json tag 的回归),got: %+v", disc)
 	}
 }
 
