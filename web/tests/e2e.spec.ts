@@ -4,8 +4,10 @@ import { writeFileSync, mkdirSync, unlinkSync } from 'fs'
 test.beforeAll(async () => {
   // 清理上次运行残留的 sentinel config(pinned_projects / favorites 跨运行持久化,
   // 不清理会导致置顶 / 收藏测试初始态非确定)。
-  // 配置文件实际在 ~/.claude-sentinel/config.yaml(默认路径,非 --home 指定的 /tmp),
-  // 文件删除够不到;用 API 原子清空 pinned_projects,确保项目置顶测试初始态干净。
+  // playwright.config.ts 的 webServer.command 传了 --config /tmp/sentinel-e2e-home/.claude-sentinel/config.yaml,
+  // 故 sentinel 实际读写该沙箱路径(不再碰开发者真实 ~/.claude-sentinel/config.yaml)。
+  // unlinkSync 够得到该路径:每次 e2e 运行前清空上次残留;config.Load 对缺失文件返回默认空配置,
+  // sentinel 启动不受影响。再叠加下面的 API PUT 清空 pinned_projects 作双保险。
   try {
     await fetch('http://127.0.0.1:41999/api/pinned-projects', {
       method: 'PUT',
