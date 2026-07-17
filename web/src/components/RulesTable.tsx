@@ -1,6 +1,7 @@
 import { useState, useMemo, type HTMLAttributes } from 'react'
 import { Table, Segmented, Empty, Typography, Card, Tooltip, Alert, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
+import { useTranslation } from 'react-i18next'
 import type { DetectorMeta, Severity } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { RuleDrawer } from './RuleDrawer'
@@ -25,7 +26,11 @@ function ruleSource(r: FlatRule): string {
   return i > 0 ? r.id.slice(0, i) : 'other'
 }
 export const sourceLabel: Record<string, string> = {
-  baseline: '基线', injection: '注入', skill: '技能', custom: '自定义', other: '其他',
+  baseline: 'ruleTable.sourceBaseline',
+  injection: 'ruleTable.sourceInjection',
+  skill: 'ruleTable.sourceSkill',
+  custom: 'ruleTable.sourceCustom',
+  other: 'ruleTable.sourceOther',
 }
 const sourceOrder = ['baseline', 'injection', 'skill', 'custom', 'other']
 
@@ -46,6 +51,7 @@ function SevSegLabel({ text, count, sev }: { text: string; count: number; sev?: 
 // 规则总览:汇总所有检测器的规则,按 sev + 检测器筛选。规则号 mono,sev 标签,检测器名,说明。
 // detectorFilter(可选):外部胶囊行点击检测器后传入,只显示该检测器规则。
 export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorMeta[]; detectorFilter?: string }) {
+  const { t } = useTranslation()
   const [sev, setSev] = useState<Severity | 'all'>('all')
   const [src, setSrc] = useState<string>('all')
   const [selected, setSelected] = useState<FlatRule | null>(null)
@@ -102,35 +108,35 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
   // 规则号/规则语法加宽并 mono;规则名称作弹性列(ellipsis 截断),收窄其占比。
   // 行可点击 → 打开规则详情抽屉(展示完整语法 + 所属检测器上下文)。
   const columns: ColumnsType<FlatRule> = [
-    { title: '规则号', width: 260, dataIndex: 'id', render: (id: string) => <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{id}</Typography.Text> },
+    { title: t('ruleTable.colRuleId'), width: 260, dataIndex: 'id', render: (id: string) => <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{id}</Typography.Text> },
     {
-      title: '规则名称', ellipsis: true, render: (_: unknown, r: FlatRule) => (
+      title: t('ruleTable.colRuleName'), ellipsis: true, render: (_: unknown, r: FlatRule) => (
         <Tooltip title={r.description}>
           <span>{r.description}</span>
         </Tooltip>
       ),
     },
-    { title: '级别', width: 80, render: (_: unknown, r: FlatRule) => <SevBadge tone={`sev-${r.severity}` as BadgeTone}>{SEVERITY_LABEL[r.severity]}</SevBadge> },
+    { title: t('ruleTable.colSeverity'), width: 80, render: (_: unknown, r: FlatRule) => <SevBadge tone={`sev-${r.severity}` as BadgeTone}>{SEVERITY_LABEL[r.severity]}</SevBadge> },
     {
       // 来源:按 rule_id 前缀推导(baseline./injection./skill./custom.),后端带 source 则优先。
-      title: '来源', width: 90, render: (_: unknown, r: FlatRule) => (
+      title: t('ruleTable.colSource'), width: 90, render: (_: unknown, r: FlatRule) => (
         <Tag style={{ marginInlineEnd: 0, fontSize: 11, borderColor: 'var(--bg-border)', color: 'var(--text-muted)', background: 'transparent' }}>
-          {sourceLabel[ruleSource(r)] ?? ruleSource(r)}
+          {t(sourceLabel[ruleSource(r)] ?? '') || ruleSource(r)}
         </Tag>
       ),
     },
     {
       // 校验:valid 默认 true(Meta() 只返回已 Validate 的规则);false → 红色标记。
-      title: '校验', width: 70, render: (_: unknown, r: FlatRule) => (
+      title: t('ruleTable.colValidity'), width: 70, render: (_: unknown, r: FlatRule) => (
         r.valid === false
-          ? <Tag color="error" style={{ marginInlineEnd: 0 }}>无效</Tag>
-          : <Tag color="success" style={{ marginInlineEnd: 0 }}>有效</Tag>
+          ? <Tag color="error" style={{ marginInlineEnd: 0 }}>{t('ruleTable.invalid')}</Tag>
+          : <Tag color="success" style={{ marginInlineEnd: 0 }}>{t('ruleTable.valid')}</Tag>
       ),
     },
-    { title: '检测器', width: 120, dataIndex: 'detector' },
+    { title: t('ruleTable.colDetector'), width: 120, dataIndex: 'detector' },
     {
       // 规则语法:baseline 按 op 拼、injection 为正则原文;无则 '--'。列表截断,详情抽屉展示完整。
-      title: '规则语法', width: 320, ellipsis: true, render: (_: unknown, r: FlatRule) => (
+      title: t('ruleTable.colRuleSyntax'), width: 320, ellipsis: true, render: (_: unknown, r: FlatRule) => (
         <Tooltip title={r.syntax || '--'}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{r.syntax || '--'}</span>
         </Tooltip>
@@ -138,7 +144,7 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
     },
   ]
 
-  if (allRules.length === 0) return <Empty description="暂无规则" />
+  if (allRules.length === 0) return <Empty description={t('ruleTable.empty')} />
 
   return (
     <Card>
@@ -149,7 +155,7 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
           type="warning"
           showIcon
           style={{ marginBottom: 12 }}
-          message={`${invalidRules.length} 条规则校验失败`}
+          message={t('ruleTable.invalidAlert', { count: invalidRules.length })}
           description={invalidRules.map((r) => r.id).join('、')}
         />
       ) : null}
@@ -161,10 +167,10 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
         value={src}
         onChange={(v) => setSrc(v as string)}
         options={[
-          { value: 'all', label: <SevSegLabel text="全部" count={sourceCounts.all} />, className: 'sev-tab-all' },
+          { value: 'all', label: <SevSegLabel text={t('ruleTable.all')} count={sourceCounts.all} />, className: 'sev-tab-all' },
           ...sourceOrder.map((s) => ({
             value: s,
-            label: <SevSegLabel text={sourceLabel[s]} count={sourceCounts[s] ?? 0} />,
+            label: <SevSegLabel text={t(sourceLabel[s])} count={sourceCounts[s] ?? 0} />,
             className: 'sev-tab-all',
           })),
         ]}
@@ -176,7 +182,7 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
         value={sev}
         onChange={(v) => setSev(v as Severity | 'all')}
         options={[
-          { value: 'all', label: <SevSegLabel text="全部" count={counts.all} />, className: 'sev-tab-all' },
+          { value: 'all', label: <SevSegLabel text={t('ruleTable.all')} count={counts.all} />, className: 'sev-tab-all' },
           ...SEVERITY_ORDER.map((s) => ({
             value: s,
             label: <SevSegLabel text={SEVERITY_LABEL[s]} count={counts[s] ?? 0} sev={s} />,

@@ -1,4 +1,5 @@
 import { Drawer } from 'antd'
+import { useTranslation } from 'react-i18next'
 import type { Asset } from '../types'
 import { AssetDetailPanel } from './AssetDetailPanel'
 
@@ -6,9 +7,10 @@ import { AssetDetailPanel } from './AssetDetailPanel'
 // 抽屉打开时遮罩覆盖左半表格——切看 B 需先点遮罩关闭再点 B 行(与风险/规则详情抽屉一致)。
 // rootClassName="asset-drawer":保留 data-testid 钩子供 e2e 定位(Task 15 重写时用 .asset-drawer 选择器)。
 export function AssetDrawer({ asset, onClose }: { asset: Asset | null; onClose: () => void }) {
+  const { t } = useTranslation()
   return (
     <Drawer
-      title="资产详情"
+      title={t('assetDrawer.title')}
       placement="right"
       width="50%"
       open={asset !== null}

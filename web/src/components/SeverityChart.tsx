@@ -1,13 +1,15 @@
 import { Card } from 'antd'
+import { useTranslation } from 'react-i18next'
 import type { Finding, Severity } from '../types'
 import { SEVERITY_ORDER, SEVERITY_LABEL } from '../lib/severity'
 
 export function SeverityChart({ findings }: { findings: Finding[] }) {
+  const { t } = useTranslation()
   const counts: Record<Severity, number> = { critical: 0, high: 0, medium: 0, low: 0, info: 0 }
   for (const f of findings) counts[f.severity] = (counts[f.severity] ?? 0) + 1
   const total = findings.length || 1
   return (
-    <Card title="严重度分布" style={{ flex: 1, height: '100%' }}>
+    <Card title={t('chart.severityTitle')} style={{ flex: 1, height: '100%' }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {SEVERITY_ORDER.map((s) => (
           <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>

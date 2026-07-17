@@ -1,4 +1,5 @@
 import { Descriptions, Typography, Alert } from 'antd'
+import { useTranslation } from 'react-i18next'
 import type { Asset } from '../types'
 import { Badge, type BadgeTone } from './Badge'
 import { relativeClaudePath } from '../lib/path'
@@ -11,6 +12,7 @@ import { AssetEditor } from './AssetEditor'
 //  3. 内容撑满:ContentArea flex:1。
 // header h2 保留 data-testid="asset-detail-name"(e2e 钩子,阶段 A 硬规则延续)。
 export function AssetDetailPanel({ asset }: { asset: Asset }) {
+  const { t } = useTranslation()
   const description = (asset.fields as Record<string, unknown> | undefined)?.description
   const isMarkdown = ['memory', 'skill', 'command', 'agent'].includes(asset.type)
 
@@ -28,17 +30,17 @@ export function AssetDetailPanel({ asset }: { asset: Asset }) {
       </div>
 
       {asset.parse_error ? (
-        <Alert type="error" message="解析失败" description={asset.parse_error} showIcon />
+        <Alert type="error" message={t('assetDetail.parseError')} description={asset.parse_error} showIcon />
       ) : null}
 
       <Descriptions size="small" column={2} bordered>
-        <Descriptions.Item label="路径" span={2}>
+        <Descriptions.Item label={t('assetDetail.path')} span={2}>
           <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{relativeClaudePath(asset.source_path)}</Typography.Text>
         </Descriptions.Item>
-        <Descriptions.Item label="hash">
+        <Descriptions.Item label={t('assetDetail.hash')}>
           <Typography.Text code copyable style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{asset.hash}</Typography.Text>
         </Descriptions.Item>
-        <Descriptions.Item label="修改时间">
+        <Descriptions.Item label={t('assetDetail.mtime')}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{asset.mtime ?? '--'}</span>
         </Descriptions.Item>
       </Descriptions>

@@ -1,4 +1,5 @@
 import { Card, Typography } from 'antd'
+import { useTranslation } from 'react-i18next'
 import type { HealthScore } from '../types'
 
 function bandColor(score: number | undefined): string {
@@ -10,6 +11,7 @@ function bandColor(score: number | undefined): string {
 }
 
 export function HealthScoreCard({ h }: { h?: HealthScore }) {
+  const { t } = useTranslation()
   const score = h?.score
   const pct = score === undefined ? 0 : Math.max(0, Math.min(100, score))
   const r = 52
@@ -20,7 +22,7 @@ export function HealthScoreCard({ h }: { h?: HealthScore }) {
     // 修复:根 .ant-card 设 display:flex + flexDirection:column,使标题占自然高、
     // body 用 flex:1 占剩余高(减去标题),alignItems:'center' 在 body 剩余区内真正垂直居中。
     <Card
-      title="健康分"
+      title={t('health.title')}
       style={{ flex: 1, height: '100%', display: 'flex', flexDirection: 'column' }}
       styles={{ body: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 20, flex: 1, minHeight: 0 } }}
     >

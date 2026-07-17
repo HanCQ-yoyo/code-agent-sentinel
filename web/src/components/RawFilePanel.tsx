@@ -1,5 +1,6 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from 'react'
 import { Card, Spin, Alert, Descriptions, Typography, Empty, Segmented } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
 import { useTheme } from '../theme'
 import { langByExt } from '../lib/monaco-lang'
@@ -14,6 +15,7 @@ const MonacoViewer = lazy(() => import('./MonacoViewer'))
 // .json 文本:自动格式化(JSON.parse + stringify 缩进 2,失败回退原文)。
 // 其余文本:Monaco 按扩展名高亮;二进制/超大显示提示。
 export function RawFilePanel({ path }: { path: string }) {
+  const { t } = useTranslation()
   const { theme } = useTheme()
   const fetchRaw = useStore((s) => s.fetchRaw)
   const [data, setData] = useState<RawFile | null>(null)
@@ -51,31 +53,31 @@ export function RawFilePanel({ path }: { path: string }) {
   }, [data, lang])
 
   if (loading) return <Spin style={{ display: 'block', margin: '40px auto' }} />
-  if (err) return <Alert type="error" message="读取失败" description={err} showIcon />
-  if (!data) return <Empty description="无法读取该文件" />
+  if (err) return <Alert type="error" message={t('rawFile.loadFailed')} description={err} showIcon />
+  if (!data) return <Empty description={t('rawFile.notFound')} />
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
       <div>
         <h2 data-testid="raw-file-name" style={{ color: 'var(--text)', margin: '0 0 4px', fontFamily: 'var(--font-mono)', fontSize: 18 }}>{data.name}</h2>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-          运行时/非配置文件(只读原始内容)
+          {t('rawFile.subtitle')}
         </Typography.Text>
       </div>
       <Descriptions size="small" column={2} bordered>
-        <Descriptions.Item label="路径" span={2}>
+        <Descriptions.Item label={t('rawFile.path')} span={2}>
           <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{data.path}</Typography.Text>
         </Descriptions.Item>
-        <Descriptions.Item label="大小">
+        <Descriptions.Item label={t('rawFile.size')}>
           <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{formatSize(data.size)}</span>
         </Descriptions.Item>
-        <Descriptions.Item label="类型">
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{data.is_text ? '文本' : '二进制'}</span>
+        <Descriptions.Item label={t('rawFile.type')}>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{data.is_text ? t('rawFile.typeText') : t('rawFile.typeBinary')}</span>
         </Descriptions.Item>
       </Descriptions>
       <Card
         size="small"
-        title="内容"
+        title={t('rawFile.content')}
         style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }}
         styles={{ body: { flex: 1, padding: isMarkdown && mdView === 'preview' ? 0 : 12, overflow: 'hidden', display: 'flex', flexDirection: 'column' } }}
         extra={isMarkdown ? (
@@ -83,7 +85,7 @@ export function RawFilePanel({ path }: { path: string }) {
             size="small"
             value={mdView}
             onChange={(v) => setMdView(v as 'preview' | 'source')}
-            options={[{ value: 'preview', label: '预览' }, { value: 'source', label: '源码' }]}
+            options={[{ value: 'preview', label: t('rawFile.preview') }, { value: 'source', label: t('rawFile.source') }]}
           />
         ) : undefined}
       >

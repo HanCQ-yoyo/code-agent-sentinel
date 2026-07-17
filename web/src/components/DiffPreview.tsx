@@ -1,4 +1,5 @@
 import { Modal, Alert, Typography } from 'antd'
+import { useTranslation } from 'react-i18next'
 import type { PreviewResult } from '../types'
 
 // DiffPreview:预览变更 Modal。diff 文本(危险行标红)+ dangerous 列表 + base_hash 状态。
@@ -15,15 +16,16 @@ export function DiffPreview({
   onConfirm: () => void
   onCancel: () => void
 }) {
+  const { t } = useTranslation()
   if (!preview) return null
   return (
     <Modal
-      title="预览变更"
+      title={t('diff.title')}
       open={open}
       onOk={onConfirm}
       onCancel={onCancel}
-      okText="确认保存"
-      cancelText="取消"
+      okText={t('diff.confirm')}
+      cancelText={t('diff.cancel')}
       okButtonProps={{ disabled: !preview.base_hash_ok }}
       width={720}
     >
@@ -31,8 +33,8 @@ export function DiffPreview({
         <Alert
           type="warning"
           showIcon
-          message="文件已被外部修改(编辑期间)"
-          description="基准 hash 不符,保存可能覆盖他人改动。请重新加载资产后再编辑。"
+          message={t('diff.hashChanged')}
+          description={t('diff.hashChangedDesc')}
           style={{ marginBottom: 12 }}
         />
       )}
@@ -40,12 +42,12 @@ export function DiffPreview({
         <Alert
           type="error"
           showIcon
-          message="检测到危险变更"
+          message={t('diff.dangerous')}
           description={
             <ul style={{ margin: 0, paddingLeft: 18 }}>
               {(preview.dangerous ?? []).map((d, i) => (
                 <li key={i}>
-                  <Typography.Text type="danger">[{d.kind}]</Typography.Text> {d.message}(行 {d.line})
+                  <Typography.Text type="danger">[{d.kind}]</Typography.Text> {d.message}{t('diff.line', { line: d.line })}
                 </li>
               ))}
             </ul>
@@ -65,7 +67,7 @@ export function DiffPreview({
           whiteSpace: 'pre-wrap',
         }}
       >
-        {preview.diff || '(无变更)'}
+        {preview.diff || t('diff.noChange')}
       </pre>
     </Modal>
   )

@@ -1,5 +1,6 @@
 import { useState, type HTMLAttributes } from 'react'
 import { Card, Table, Segmented, Typography, Empty, Tooltip, Tag } from 'antd'
+import { useTranslation } from 'react-i18next'
 import type { ColumnsType } from 'antd/es/table'
 import type { Finding, Severity, DetectorMeta } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
@@ -36,6 +37,7 @@ interface FindingTableProps {
 }
 
 export function FindingTable({ findings, startedAt, detectors, onSelect }: FindingTableProps) {
+  const { t } = useTranslation()
   const [filter, setFilter] = useState<Severity | 'all'>('all')
   const [supprFilter, setSupprFilter] = useState<SupprFilter>('all')
   const counts: Record<string, number> = { all: findings.length }
@@ -63,14 +65,14 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
       // 风险名称:不设固定宽度,作为弹性主列占据剩余空间并省略;资产列加宽(280)后这里相应收窄,
       // 把空间预留给资产列(用户反馈:风险名称过宽、资产偏挤)。
       // 已抑制 finding:名称后附「已抑制」标签(Tooltip 展示抑制来源 + reason),行整体降透明度。
-      title: '风险名称', ellipsis: true, render: (_: unknown, f: Finding) => (
+      title: t('findingTable.colName'), ellipsis: true, render: (_: unknown, f: Finding) => (
         <Tooltip title={f.message}>
           <span>
             {f.message}
             {f.suppressed ? (
-              <Tooltip title={`抑制来源:${f.suppression ?? '--'}${f.reason ? ` · 原因:${f.reason}` : ''}`}>
+              <Tooltip title={t('findingTable.supprTooltip', { source: f.suppression ?? '--', reason: f.reason ? t('findingTable.reasonPart', { reason: f.reason }) : '' })}>
                 <Tag style={{ marginInlineEnd: 0, marginLeft: 6, fontSize: 10, lineHeight: '16px', padding: '0 5px', borderColor: 'var(--bg-border)', color: 'var(--text-muted)', background: 'var(--surface-2)' }}>
-                  已抑制
+                  {t('findingTable.suppressedTag')}
                 </Tag>
               </Tooltip>
             ) : null}
@@ -80,26 +82,26 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
     },
     {
       // 资产:文件名 + 类型两词,加宽到 280(预留给资产列);长名省略,Tooltip 兜底。
-      title: '资产', width: 280, ellipsis: true, render: (_: unknown, f: Finding) => (
+      title: t('findingTable.colAsset'), width: 280, ellipsis: true, render: (_: unknown, f: Finding) => (
         <Tooltip title={`${f.asset_name} ${f.asset_type}`}>
           <span>{f.asset_name} <Typography.Text type="secondary" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{f.asset_type}</Typography.Text></span>
         </Tooltip>
       ),
     },
-    { title: '级别', width: 80, render: (_: unknown, f: Finding) => <SevBadge tone={`sev-${f.severity}` as BadgeTone}>{SEVERITY_LABEL[f.severity]}</SevBadge> },
+    { title: t('findingTable.colSeverity'), width: 80, render: (_: unknown, f: Finding) => <SevBadge tone={`sev-${f.severity}` as BadgeTone}>{SEVERITY_LABEL[f.severity]}</SevBadge> },
     {
-      title: '检测器', width: 120, render: (_: unknown, f: Finding) => (
+      title: t('findingTable.colDetector'), width: 120, render: (_: unknown, f: Finding) => (
         <Typography.Text style={{ fontSize: 12 }}>{detName(f.detector_id)}</Typography.Text>
       ),
     },
     {
       // 规则列加宽 1 倍(160→320),容纳完整 rule_id mono 文本,不再截断;字体放大到 13 便于阅读。
-      title: '规则', width: 320, render: (_: unknown, f: Finding) => (
+      title: t('findingTable.colRule'), width: 320, render: (_: unknown, f: Finding) => (
         <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{f.rule_id}</Typography.Text>
       ),
     },
     {
-      title: '扫描时间', width: 150, render: () => (
+      title: t('findingTable.colScanTime'), width: 150, render: () => (
         <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{startedAt ? formatDateTime(startedAt) : '--'}</span>
       ),
     },
@@ -113,7 +115,7 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
           value={filter}
           onChange={(v) => setFilter(v as Severity | 'all')}
           options={[
-            { value: 'all', label: <SevSegLabel text="全部" count={counts.all} />, className: 'sev-tab-all' },
+            { value: 'all', label: <SevSegLabel text={t('findingTable.all')} count={counts.all} />, className: 'sev-tab-all' },
             ...SEVERITY_ORDER.map((s) => ({
               value: s,
               label: <SevSegLabel text={SEVERITY_LABEL[s]} count={counts[s]} sev={s} />,
@@ -127,9 +129,9 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
           value={supprFilter}
           onChange={(v) => setSupprFilter(v as SupprFilter)}
           options={[
-            { value: 'all', label: `全部 ${supprCounts.all}` },
-            { value: 'active', label: `活跃 ${supprCounts.active}` },
-            { value: 'suppressed', label: `已抑制 ${supprCounts.suppressed}` },
+            { value: 'all', label: `${t('findingTable.all')} ${supprCounts.all}` },
+            { value: 'active', label: `${t('findingTable.active')} ${supprCounts.active}` },
+            { value: 'suppressed', label: `${t('findingTable.suppressed')} ${supprCounts.suppressed}` },
           ]}
         />
       </div>
@@ -147,7 +149,7 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
           onClick: () => onSelect?.(f),
           style: { ...(onSelect ? { cursor: 'pointer' } : {}), ...(f.suppressed ? { opacity: 0.55 } : {}) },
         }) as HTMLAttributes<HTMLElement>}
-        locale={{ emptyText: findings.length === 0 ? <Empty description="暂无发现 · 扫描后显示" /> : '无匹配发现' }}
+        locale={{ emptyText: findings.length === 0 ? <Empty description={t('findingTable.empty')} /> : t('findingTable.noMatch') }}
       />
     </Card>
   )

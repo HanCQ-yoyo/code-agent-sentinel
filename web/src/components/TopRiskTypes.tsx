@@ -1,10 +1,12 @@
 import { Card, Empty } from 'antd'
+import { useTranslation } from 'react-i18next'
 import type { Finding, Severity } from '../types'
 import { SEVERITY_LABEL } from '../lib/severity'
 
 const sevWeight: Record<Severity, number> = { critical: 5, high: 4, medium: 3, low: 2, info: 1 }
 
 export function TopRiskTypes({ findings, topN = 10 }: { findings: Finding[]; topN?: number }) {
+  const { t } = useTranslation()
   // 按 rule_id 分组:取组内最高严重度 + 计数。
   const groups = new Map<string, { sev: Severity; count: number }>()
   for (const f of findings) {
@@ -23,8 +25,8 @@ export function TopRiskTypes({ findings, topN = 10 }: { findings: Finding[]; top
     .slice(0, topN)
   const maxCount = rows.reduce((m, r) => Math.max(m, r.count), 1)
   return (
-    <Card title="Top 风险类型(按严重度)">
-      {rows.length === 0 ? <Empty description="暂无发现" /> : (
+    <Card title={t('chart.topRiskTitle')}>
+      {rows.length === 0 ? <Empty description={t('chart.topRiskEmpty')} /> : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {rows.map((r) => (
             <div key={r.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

@@ -1,5 +1,6 @@
 import { lazy, Suspense, useState } from 'react'
 import { Card, Segmented, Spin, Empty } from 'antd'
+import { useTranslation } from 'react-i18next'
 import type { Asset } from '../types'
 import { MarkdownPreview } from './MarkdownPreview'
 import { langByExt } from '../lib/monaco-lang'
@@ -51,6 +52,7 @@ export function ContentArea({
   readOnly?: boolean
   onChange?: (v: string) => void
 }) {
+  const { t } = useTranslation()
   // 编辑态默认源码视图(让用户进入编辑即可直接修改,无需手动切「源码」)。
   const [view, setView] = useState<'preview' | 'source'>(onChange ? 'source' : 'preview')
 
@@ -63,7 +65,7 @@ export function ContentArea({
     return (
       <Card
         size="small"
-        title="内容"
+        title={t('content.title')}
         style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }}
         styles={{ body: { flex: 1, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' } }}
         extra={
@@ -71,7 +73,7 @@ export function ContentArea({
             size="small"
             value={view}
             onChange={(v) => setView(v as 'preview' | 'source')}
-            options={[{ value: 'preview', label: '预览' }, { value: 'source', label: '源码' }]}
+            options={[{ value: 'preview', label: t('content.preview') }, { value: 'source', label: t('content.source') }]}
           />
         }
       >
@@ -95,7 +97,7 @@ export function ContentArea({
     return (
       <Card
         size="small"
-        title="内容"
+        title={t('content.title')}
         style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }}
         styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
       >
@@ -121,12 +123,12 @@ export function ContentArea({
       : JSON.stringify(asset.fields ?? {}, null, 2)
     const value = onChange ? (asset.content ?? '') : readOnlyValue
     if (!onChange && (value === '{}' || value === '')) {
-      return <Card size="small" title="内容"><Empty description="该资产无解析字段" /></Card>
+      return <Card size="small" title={t('content.title')}><Empty description={t('content.emptyNoFields')} /></Card>
     }
     return (
       <Card
         size="small"
-        title="内容"
+        title={t('content.title')}
         style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }}
         styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
       >
@@ -139,7 +141,7 @@ export function ContentArea({
 
   // 空 content + 空 fields(或 type 不在已知集合)
   if (!asset.content && (!asset.fields || Object.keys(asset.fields).length === 0)) {
-    return <Card size="small" title="内容"><Empty description="该资产无内容" /></Card>
+    return <Card size="small" title={t('content.title')}><Empty description={t('content.emptyNoContent')} /></Card>
   }
 
   // 兜底:有 content 但 type 非 markdown/script(罕见),按 plaintext Monaco
@@ -147,7 +149,7 @@ export function ContentArea({
     return (
       <Card
         size="small"
-        title="内容"
+        title={t('content.title')}
         style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }}
         styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
       >
@@ -163,7 +165,7 @@ export function ContentArea({
   return (
     <Card
       size="small"
-      title="内容"
+      title={t('content.title')}
       style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }}
       styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
     >

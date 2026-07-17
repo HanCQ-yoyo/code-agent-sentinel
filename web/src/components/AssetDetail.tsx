@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Card, Button, Spin } from 'antd'
 import { ArrowLeftOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import { apiGet } from '../api/client'
 import type { Asset } from '../types'
 import { AssetDetailPanel } from './AssetDetailPanel'
 
 export default function AssetDetail() {
+  const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
   const [asset, setAsset] = useState<Asset | null>(null)
   const [loading, setLoading] = useState(true)
@@ -23,10 +25,10 @@ export default function AssetDetail() {
   }, [id])
 
   if (loading) return <Spin style={{ display: 'block', margin: '40px auto' }} />
-  if (err || !asset) return <Card>{err ?? '未找到资产'}</Card>
+  if (err || !asset) return <Card>{err ?? t('assetDetail.notFound')}</Card>
   return (
     <div>
-      <Link to="/assets"><Button type="link" icon={<ArrowLeftOutlined />}>返回资产列表</Button></Link>
+      <Link to="/assets"><Button type="link" icon={<ArrowLeftOutlined />}>{t('assetDetail.back')}</Button></Link>
       <Card><AssetDetailPanel asset={asset} /></Card>
     </div>
   )

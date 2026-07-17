@@ -1,6 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Tree } from 'antd'
 import { FolderOutlined, FileOutlined, FolderOpenOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import type { DataNode } from 'antd/es/tree'
 import type { Asset, Finding, Severity, TreeNode } from '../types'
 import { Badge, type BadgeTone } from './Badge'
@@ -56,6 +57,7 @@ function subtreeHasTag(n: TreeNode, tag: DirTag, defaults: DirTagsMap, overrides
 }
 
 export function AssetTree({ tree, assets, findings = [], onSelect, onOpenRaw, rootAbs, tagFilter, dirTagsDefaults, dirTagsOverrides, onEditTag, expandedKeys, onExpandedKeysChange }: AssetTreeProps) {
+  const { t } = useTranslation()
   const byId = useMemo(() => {
     const m = new Map<string, Asset>()
     for (const a of assets) m.set(a.id, a)
@@ -89,7 +91,7 @@ export function AssetTree({ tree, assets, findings = [], onSelect, onOpenRaw, ro
     const color = tag === 'config' ? 'var(--accent)' : 'var(--text-dim)'
     return (
       <span
-        title={`${tag} · 点击修改标签`}
+        title={t('assetTree.tagEditTip', { tag })}
         onClick={(e) => { e.stopPropagation(); onEditTag(relPath, tag) }}
         style={{
           marginLeft: 6, fontSize: 10, padding: '0 5px', borderRadius: 8,
@@ -97,7 +99,7 @@ export function AssetTree({ tree, assets, findings = [], onSelect, onOpenRaw, ro
           fontFamily: 'var(--font-sans)', flexShrink: 0,
         }}
       >
-        {tag === 'config' ? '配置' : '运行时'}
+        {tag === 'config' ? t('assetTree.tagConfig') : t('assetTree.tagRuntime')}
       </span>
     )
   }
@@ -188,7 +190,7 @@ export function AssetTree({ tree, assets, findings = [], onSelect, onOpenRaw, ro
 
   if (treeData.length === 0) {
     // 标签筛选下整树不命中:显示空提示(不渲染 Tree,避免 antd 空状态样式问题)。
-    return <div style={{ padding: 24, color: 'var(--text-dim)', textAlign: 'center' }}>当前标签筛选下无匹配项</div>
+    return <div style={{ padding: 24, color: 'var(--text-dim)', textAlign: 'center' }}>{t('assetTree.noMatch')}</div>
   }
 
   return (

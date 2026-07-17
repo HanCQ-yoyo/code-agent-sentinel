@@ -1,6 +1,7 @@
 import { type HTMLAttributes } from 'react'
 import { Table, Tag, Typography, Tooltip } from 'antd'
 import { StarFilled, StarOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import type { ColumnsType } from 'antd/es/table'
 import type { Asset, Finding, Severity } from '../types'
 import { Badge, type BadgeTone } from './Badge'
@@ -40,15 +41,16 @@ interface AssetTableProps {
 }
 
 export function AssetTable({ assets, findings = [], onSelect, favorites, onToggleFavorite, dirTagsDefaults, dirTagsOverrides }: AssetTableProps) {
+  const { t } = useTranslation()
   const columns: ColumnsType<Asset> = [
     {
-      title: '★',
+      title: t('assetTable.colFav'),
       width: 40,
       // 收藏列:点击星标切换置顶(列排序 + 收藏优先排序由 dataSource 顺序保证)。
       render: (_: unknown, a: Asset) => {
         const fav = favorites.has(a.id)
         return (
-          <Tooltip title={fav ? '取消置顶' : '置顶'}>
+          <Tooltip title={fav ? t('assetTable.favUnpin') : t('assetTable.favPin')}>
             <span
               data-testid="fav-toggle"
               onClick={(e) => { e.stopPropagation(); onToggleFavorite(a.id) }}
@@ -61,7 +63,7 @@ export function AssetTable({ assets, findings = [], onSelect, favorites, onToggl
       },
     },
     {
-      title: '名称',
+      title: t('assetTable.colName'),
       dataIndex: 'name',
       width: '28%',
       render: (name: string, a: Asset) => (
@@ -72,19 +74,19 @@ export function AssetTable({ assets, findings = [], onSelect, favorites, onToggl
       ),
     },
     {
-      title: '类型',
+      title: t('assetTable.colType'),
       dataIndex: 'type',
       width: 110,
       render: (t: string) => <Badge tone="neutral">{t}</Badge>,
     },
     {
-      title: 'scope',
+      title: t('assetTable.colScope'),
       dataIndex: 'scope',
       width: 96,
       render: (s: string) => <Badge tone={`scope-${s}` as BadgeTone}>{s}</Badge>,
     },
     {
-      title: '标签',
+      title: t('assetTable.colTag'),
       width: 84,
       render: (_: unknown, a: Asset) => {
         const tag = assetTag(a, dirTagsDefaults, dirTagsOverrides)
@@ -92,25 +94,25 @@ export function AssetTable({ assets, findings = [], onSelect, favorites, onToggl
         const color = tag === 'config' ? 'var(--accent)' : 'var(--text-dim)'
         return (
           <span style={{ fontSize: 11, padding: '0 6px', borderRadius: 8, border: `1px solid ${color}`, color, fontFamily: 'var(--font-sans)' }}>
-            {tag === 'config' ? '配置' : '运行时'}
+            {tag === 'config' ? t('assetTable.tagConfig') : t('assetTable.tagRuntime')}
           </span>
         )
       },
     },
     {
-      title: '风险',
+      title: t('assetTable.colRisk'),
       width: 84,
       render: (_: unknown, a: Asset) => {
         const sev = maxSev(findings, a.id)
         return sev ? (
           <Badge tone={`sev-${sev}` as BadgeTone}>{SEVERITY_LABEL[sev]}</Badge>
         ) : (
-          <Tag style={{ borderStyle: 'dashed', color: 'var(--text-dim)', background: 'transparent' }}>无</Tag>
+          <Tag style={{ borderStyle: 'dashed', color: 'var(--text-dim)', background: 'transparent' }}>{t('assetTable.noRisk')}</Tag>
         )
       },
     },
     {
-      title: '路径',
+      title: t('assetTable.colPath'),
       dataIndex: 'source_path',
       render: (p: string) => (
         <Typography.Text style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-dim)' }} title={p}>
@@ -126,9 +128,9 @@ export function AssetTable({ assets, findings = [], onSelect, favorites, onToggl
       columns={columns}
       dataSource={assets}
       // 分页:默认每页 20,显示总数 + 可跳页。资产多时(项目树 align 后可能有几十条)避免长列表。
-      pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: ['10', '20', '50', '100'], showTotal: (t) => `共 ${t} 条`, size: 'small' }}
+      pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: ['10', '20', '50', '100'], showTotal: (total) => t('assetTable.total', { count: total }), size: 'small' }}
       size="middle"
-      locale={{ emptyText: '暂无资产' }}
+      locale={{ emptyText: t('assetTable.empty') }}
       // 保留 asset-row testid 供 e2e;cast 与 FindingTable onRow 一致(antd Table onRow 无 data-* 索引签名)。
       onRow={(a) => ({ 'data-testid': 'asset-row', onClick: () => onSelect(a.id) }) as HTMLAttributes<HTMLElement>}
       rowClassName={() => 'cursor-pointer'}

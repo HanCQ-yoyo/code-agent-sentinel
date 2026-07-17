@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Button, Space, message, Modal } from 'antd'
 import { EditOutlined, FullscreenOutlined } from '@ant-design/icons'
+import { useTranslation } from 'react-i18next'
 import { ContentArea, editableText } from './ContentArea'
 import { DiffPreview } from './DiffPreview'
 import { useStore } from '../store'
@@ -20,6 +21,7 @@ import type { Asset, PreviewResult } from '../types'
 // key={editing ? 'edit' : 'view'}:编辑态切换时强制 ContentArea 重挂载,
 // 使 Segmented view state 重置(编辑态默认源码、只读态默认预览)且 Monaco 以新 readOnly 加载。
 export function AssetEditor({ asset }: { asset: Asset }) {
+  const { t } = useTranslation()
   const { theme } = useTheme()
   const { previewAssetEdit, commitAssetEdit } = useStore()
   const [editing, setEditing] = useState(false)
@@ -46,11 +48,11 @@ export function AssetEditor({ asset }: { asset: Asset }) {
       const pr = await previewAssetEdit(asset.id, asset.content ?? '', asset.hash)
       if (!pr) return
       if (!pr.editable) {
-        message.warning(pr.not_editable_reason || '该资产不可编辑')
+        message.warning(pr.not_editable_reason || t('assetEditor.notEditable'))
         return
       }
       if (!pr.base_hash_ok) {
-        message.warning('文件已被外部修改,请重新加载资产后再编辑')
+        message.warning(t('assetEditor.hashMismatch'))
         return
       }
       setDraft(pr.original_content ?? editableText(asset))
@@ -66,7 +68,7 @@ export function AssetEditor({ asset }: { asset: Asset }) {
       const pr = await previewAssetEdit(asset.id, draft, asset.hash)
       if (pr) {
         if (!pr.editable) {
-          message.warning(`该资产不可编辑:${pr.not_editable_reason ?? '未知原因'}`)
+          message.warning(pr.not_editable_reason ? t('assetEditor.previewNotEditable', { reason: pr.not_editable_reason }) : t('assetEditor.previewNotEditableUnknown'))
           return
         }
         setPreview(pr)
@@ -85,14 +87,14 @@ export function AssetEditor({ asset }: { asset: Asset }) {
         setPreviewOpen(false)
         setEditing(false)
         if (res.rescan_error) {
-          message.warning(`已保存,但部分重扫失败,请手动全量重扫(${res.rescan_error})`)
+          message.warning(t('assetEditor.savedWithRescanError', { error: res.rescan_error }))
           return
         }
         const n = (res.new_findings ?? []).length
         if (n > 0) {
-          message.warning(`已保存;部分重扫发现 ${n} 项新增风险。可点「重新扫描」做全量。`)
+          message.warning(t('assetEditor.savedNewFindings', { count: n }))
         } else {
-          message.success('已保存;部分重扫未发现新增风险。')
+          message.success(t('assetEditor.savedNoNewFindings'))
         }
       }
     } finally {
@@ -105,10 +107,10 @@ export function AssetEditor({ asset }: { asset: Asset }) {
       <>
         <Space style={{ marginBottom: 8 }}>
           <Button icon={<EditOutlined />} onClick={enterEdit} loading={saving} size="small">
-            编辑
+            {t('assetEditor.edit')}
           </Button>
           <Button icon={<FullscreenOutlined />} onClick={() => setFsOpen(true)} size="small">
-            全屏
+            {t('assetEditor.fullscreen')}
           </Button>
         </Space>
         <ContentArea key="view" asset={asset} theme={theme} />
@@ -117,7 +119,7 @@ export function AssetEditor({ asset }: { asset: Asset }) {
             避免上一资产的全屏视图态泄漏。body 无 padding,ContentArea 自带 Card 内边距。
             destroyOnClose:关闭后卸载内嵌 Monaco,释放编辑器实例。 */}
         <Modal
-          title={`资产内容 · ${asset.name}`}
+          title={t('assetEditor.title', { name: asset.name })}
           open={fsOpen}
           onCancel={() => setFsOpen(false)}
           footer={null}
@@ -137,10 +139,10 @@ export function AssetEditor({ asset }: { asset: Asset }) {
     <>
       <Space style={{ marginBottom: 8 }}>
         <Button onClick={() => setEditing(false)} disabled={saving}>
-          取消
+          {t('assetEditor.cancel')}
         </Button>
         <Button type="primary" onClick={doPreview} loading={saving} data-testid="preview-edit">
-          预览变更
+          {t('assetEditor.previewChange')}
         </Button>
       </Space>
       <ContentArea

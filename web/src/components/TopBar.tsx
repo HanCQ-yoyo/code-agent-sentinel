@@ -17,9 +17,9 @@ interface Props {
 }
 
 // 末段面包屑文案(含动态 :id 路由)。父段用 navLabels(侧栏文案单一来源)。
-function leafLabel(pathname: string): string | null {
-  if (pathname.match(/^\/assets\/[^/]+$/)) return '资产详情'
-  if (pathname.match(/^\/history\/[^/]+$/)) return '扫描详情'
+function leafLabel(pathname: string, t: (k: string) => string): string | null {
+  if (pathname.match(/^\/assets\/[^/]+$/)) return t('topbar.leafAsset')
+  if (pathname.match(/^\/history\/[^/]+$/)) return t('topbar.leafScan')
   return null
 }
 
@@ -33,7 +33,7 @@ export function TopBar({ onScan, loading }: Props) {
   // 当前一级路由(用于面包屑首段)。navLabels 存 i18n key,需 t() 翻译。
   const root = loc.pathname === '/' ? '/dashboard' : `/${loc.pathname.split('/')[1]}`
   const rootLabel = navLabels[root] ? t(navLabels[root]) : undefined
-  const leaf = leafLabel(loc.pathname)
+  const leaf = leafLabel(loc.pathname, t)
 
   // agent 加载:移出 render body 防 render 中触发副作用。
   useEffect(() => {
@@ -90,8 +90,8 @@ export function TopBar({ onScan, loading }: Props) {
         <Switch
           checked={theme === 'dark'}
           onChange={toggle}
-          checkedChildren="深"
-          unCheckedChildren="浅"
+          checkedChildren={t('topbar.dark')}
+          unCheckedChildren={t('topbar.light')}
           aria-label={t('topbar.theme')}
         />
         <Button type="primary" icon={<ReloadOutlined />} loading={loading} onClick={onScan}>

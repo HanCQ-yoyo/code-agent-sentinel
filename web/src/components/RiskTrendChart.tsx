@@ -1,14 +1,16 @@
 import { Card, Empty } from 'antd'
+import { useTranslation } from 'react-i18next'
 import type { ScanSummary } from '../types'
 import { formatDateTimeShort } from '../lib/format'
 
 // 风险指数趋势:历史扫描 health_score 随时间折线。纯前端聚合 store.history(已按时间倒序)。
 // SVG 自绘:不引依赖。明暗用 CSS 变量。y 轴 0-100(健康分范围),x 轴时间。
 export function RiskTrendChart({ history }: { history: ScanSummary[] }) {
+  const { t } = useTranslation()
   // 升序(旧→新)绘趋势。
   const pts = [...history].sort((a, b) => a.started_at.localeCompare(b.started_at))
   if (pts.length === 0) {
-    return <Card title="风险指数趋势"><Empty description="暂无历史扫描" /></Card>
+    return <Card title={t('chart.riskTrendTitle')}><Empty description={t('chart.riskTrendEmpty')} /></Card>
   }
   const W = 600, H = 180, P = 32
   const xStep = pts.length > 1 ? (W - 2 * P) / (pts.length - 1) : 0
@@ -17,8 +19,8 @@ export function RiskTrendChart({ history }: { history: ScanSummary[] }) {
   const line = pts.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(p.health_score)}`).join(' ')
   const area = `${line} L${x(pts.length - 1)},${H - P} L${x(0)},${H - P} Z`
   return (
-    <Card title="风险指数趋势">
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 200 }} role="img" aria-label="风险指数趋势">
+    <Card title={t('chart.riskTrendTitle')}>
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 200 }} role="img" aria-label={t('chart.riskTrendAria')}>
         {/* y 轴参考线 0/50/100 */}
         {[0, 50, 100].map((v) => (
           <g key={v}>
