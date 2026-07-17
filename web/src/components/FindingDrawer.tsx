@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Drawer, Descriptions, Typography, Alert, Spin, Empty, Button, Modal, Input, Popconfirm, Tag, message } from 'antd'
 import { useTranslation } from 'react-i18next'
 import type { Finding, DetectorMeta, Asset } from '../types'
@@ -28,7 +28,11 @@ function findSyntax(detectors: DetectorMeta[], detectorId: string, ruleId: strin
 // 资产区:按 finding.asset_id 拉完整 Asset(含 content),复用 AssetDetailPanel 展示路径/hash/文件内容。
 // 直接走 apiGet(不经 store.wrap):wrap 吞所有错误返 undefined,会让 .catch 死代码、失败时误报「未找到资产」。
 // 此处需细粒度错误,故与 AssetDetail.tsx 同模式自管 err。
-function AssetSection({ assetId }: { assetId: string }) {
+//
+// locations:从 finding 透传(后端 ruleengine.Location 序列化为 snake_case line/start_col/end_col,
+// 仅 RulesDetector 填充;子进程检测器 finding 无此字段)。在此边界映射为 camelCase highlights
+// 传给 AssetDetailPanel→AssetEditor→ContentArea→MonacoViewer(Monaco Range API 用 camelCase)。
+function AssetSection({ assetId, locations }: { assetId: string, locations?: { line: number; start_col: number; end_col: number }[] }) {
   const { t } = useTranslation()
   const [asset, setAsset] = useState<Asset | null>(null)
   const [loading, setLoading] = useState(true)
@@ -46,10 +50,23 @@ function AssetSection({ assetId }: { assetId: string }) {
     return () => { stale = true }
   }, [assetId])
 
+  // snake_case → camelCase 映射(必须在 early return 之前,遵守 Hooks 顺序规则)。
+  // 无 locations(undefined/空)→ highlights 为 undefined,MonacoViewer 不加装饰
+  //(优雅降级:子进程检测器 finding 无 locations 不高亮、不报错)。
+  // useMemo 稳定引用:FindingDrawer 因抑制 Modal 输入等状态变化重渲染时,locations 引用不变,
+  // highlights 不重建 → MonacoViewer highlights effect 不重跑 → 避免 revealLineInCenter 在每次
+  // 键盘输入时把编辑器滚回命中行。
+  const highlights = useMemo(
+    () => locations && locations.length > 0
+      ? locations.map((l) => ({ line: l.line, startCol: l.start_col, endCol: l.end_col }))
+      : undefined,
+    [locations],
+  )
+
   if (loading) return <Spin style={{ display: 'block', margin: '40px auto' }} />
   if (err) return <Alert type="error" message={t('findingDrawer.loadFailed')} description={err} showIcon />
   if (!asset) return <Empty description={t('findingDrawer.notFound')} />
-  return <AssetDetailPanel asset={asset} />
+  return <AssetDetailPanel asset={asset} highlights={highlights} />
 }
 
 export function FindingDrawer({ finding, detectors, startedAt, onClose }: FindingDrawerProps) {
@@ -151,7 +168,7 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
 
           <div>
             <Typography.Title level={5} style={{ marginTop: 8 }}>{t('findingDrawer.assetInfo')}</Typography.Title>
-            <AssetSection key={finding.asset_id} assetId={finding.asset_id} />
+            <AssetSection key={finding.asset_id} assetId={finding.asset_id} locations={finding.locations} />
           </div>
 
           {/* 抑制操作:添加到 suppressions(需 fingerprint)+ 加入 baseline(全量扫描合并)。

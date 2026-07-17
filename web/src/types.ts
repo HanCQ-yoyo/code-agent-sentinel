@@ -17,6 +17,10 @@ export interface Finding {
   fingerprint?: string
   // 抑制状态:suppressed=true 表示已被 baseline/inline 豁免,不计入健康分。
   suppressed?: boolean; suppression?: string; reason?: string
+  // 命中位置(仅 RulesDetector 填充;子进程检测器无)。后端 ruleengine.Location 序列化为
+  // snake_case(line/start_col/end_col)。供 UI(Task 18)在 Monaco 高亮命中行,不参与健康分。
+  // 前端在 FindingDrawer→AssetSection 边界映射为 camelCase 传给 MonacoViewer.highlights。
+  locations?: { line: number; start_col: number; end_col: number }[]
 }
 export interface HealthScore { score: number; band: string; deductions: { asset_name: string; rule_id: string; severity: Severity; points: number }[] }
 export interface DetectorStatus { id: string; available: boolean; reason?: string }

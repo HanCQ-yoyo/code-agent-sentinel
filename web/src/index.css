@@ -209,3 +209,10 @@ body {
   text-overflow: clip !important;
   word-break: break-word;
 }
+
+/* #7 命中行高亮:Monaco deltaDecorations 整行背景(isWholeLine:true)。
+   固定 rgba(无 --warn-bg 变量),浅深色通用——命中行是警示色,不随主题切换。
+   !important 压过 Monaco 默认行背景。 */
+.hit-line {
+  background: rgba(250, 173, 20, 0.18) !important;
+}

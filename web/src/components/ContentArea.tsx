@@ -46,15 +46,20 @@ export function ContentArea({
   theme,
   readOnly,
   onChange,
+  highlights,
 }: {
   asset: Asset
   theme: 'light' | 'dark'
   readOnly?: boolean
   onChange?: (v: string) => void
+  // #7 命中位置高亮:透传到 MonacoViewer;有非空 highlights 时 markdown 默认切源码视图
+  //(否则高亮被预览挡住,看不见)。camelCase 与 MonacoViewer.highlights 对齐。
+  highlights?: { line: number; startCol: number; endCol: number }[]
 }) {
   const { t } = useTranslation()
   // 编辑态默认源码视图(让用户进入编辑即可直接修改,无需手动切「源码」)。
-  const [view, setView] = useState<'preview' | 'source'>(onChange ? 'source' : 'preview')
+  // 有命中位置(#7)时也默认源码:让 hit-line 高亮可见,不被 markdown 预览挡住。
+  const [view, setView] = useState<'preview' | 'source'>(highlights && highlights.length > 0 ? 'source' : (onChange ? 'source' : 'preview'))
 
   const isMarkdown = MARKDOWN_TYPES.has(asset.type)
   const isScript = asset.type === 'script'
@@ -84,7 +89,7 @@ export function ContentArea({
         ) : (
           <div style={{ padding: 12 }}>
             <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
-              <MonacoViewer value={asset.content ?? ''} language="markdown" theme={theme} readOnly={readOnly} onChange={onChange} />
+              <MonacoViewer value={asset.content ?? ''} language="markdown" theme={theme} readOnly={readOnly} onChange={onChange} highlights={highlights} />
             </Suspense>
           </div>
         )}
@@ -102,7 +107,7 @@ export function ContentArea({
         styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
       >
         <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
-          <MonacoViewer value={asset.content ?? ''} language={langByExt(asset.source_path)} theme={theme} readOnly={readOnly} onChange={onChange} />
+          <MonacoViewer value={asset.content ?? ''} language={langByExt(asset.source_path)} theme={theme} readOnly={readOnly} onChange={onChange} highlights={highlights} />
         </Suspense>
       </Card>
     )
@@ -133,7 +138,7 @@ export function ContentArea({
         styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
       >
         <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
-          <MonacoViewer value={value} language="json" theme={theme} readOnly={readOnly} onChange={onChange} />
+          <MonacoViewer value={value} language="json" theme={theme} readOnly={readOnly} onChange={onChange} highlights={highlights} />
         </Suspense>
       </Card>
     )
@@ -154,7 +159,7 @@ export function ContentArea({
         styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
       >
         <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
-          <MonacoViewer value={asset.content} language="plaintext" theme={theme} readOnly={readOnly} onChange={onChange} />
+          <MonacoViewer value={asset.content} language="plaintext" theme={theme} readOnly={readOnly} onChange={onChange} highlights={highlights} />
         </Suspense>
       </Card>
     )
@@ -170,7 +175,7 @@ export function ContentArea({
       styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
     >
       <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
-        <MonacoViewer value={value} language="json" theme={theme} readOnly={readOnly} onChange={onChange} />
+        <MonacoViewer value={value} language="json" theme={theme} readOnly={readOnly} onChange={onChange} highlights={highlights} />
       </Suspense>
     </Card>
   )

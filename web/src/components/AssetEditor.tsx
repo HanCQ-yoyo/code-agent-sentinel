@@ -20,7 +20,7 @@ import type { Asset, PreviewResult } from '../types'
 // useTheme() 返回 { theme, toggle },取 theme 字段(非对象)传给 ContentArea。
 // key={editing ? 'edit' : 'view'}:编辑态切换时强制 ContentArea 重挂载,
 // 使 Segmented view state 重置(编辑态默认源码、只读态默认预览)且 Monaco 以新 readOnly 加载。
-export function AssetEditor({ asset }: { asset: Asset }) {
+export function AssetEditor({ asset, highlights }: { asset: Asset, highlights?: { line: number; startCol: number; endCol: number }[] }) {
   const { t } = useTranslation()
   const { theme } = useTheme()
   const { previewAssetEdit, commitAssetEdit } = useStore()
@@ -113,7 +113,7 @@ export function AssetEditor({ asset }: { asset: Asset }) {
             {t('assetEditor.fullscreen')}
           </Button>
         </Space>
-        <ContentArea key="view" asset={asset} theme={theme} />
+        <ContentArea key="view" asset={asset} theme={theme} highlights={highlights} />
         {/* 全屏 Modal:近全屏(宽 96vw / 高 92vh),内部只读 ContentArea 撑满。
             key={asset.id}:切资产时重挂载,使 ContentArea 的 Segmented view 回默认(预览),
             避免上一资产的全屏视图态泄漏。body 无 padding,ContentArea 自带 Card 内边距。
@@ -128,7 +128,7 @@ export function AssetEditor({ asset }: { asset: Asset }) {
           destroyOnClose
         >
           {fsOpen ? (
-            <ContentArea key={asset.id} asset={asset} theme={theme} />
+            <ContentArea key={asset.id} asset={asset} theme={theme} highlights={highlights} />
           ) : null}
         </Modal>
       </>
@@ -151,6 +151,7 @@ export function AssetEditor({ asset }: { asset: Asset }) {
         theme={theme}
         readOnly={false}
         onChange={setDraft}
+        highlights={highlights}
       />
       <DiffPreview
         open={previewOpen}

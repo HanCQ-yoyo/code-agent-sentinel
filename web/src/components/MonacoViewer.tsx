@@ -18,6 +18,7 @@ export default function MonacoViewer({
   height = 'min(60vh, 560px)',
   readOnly = true,
   onChange,
+  highlights,
 }: {
   value: string
   language: string
@@ -25,6 +26,9 @@ export default function MonacoViewer({
   height?: string
   readOnly?: boolean
   onChange?: (value: string) => void
+  // #7 命中位置高亮:RulesDetector finding 带 locations 时,整行背景高亮 + 滚到首个命中。
+  // camelCase 与 Monaco Range API 对齐;由 FindingDrawer 在边界从 snake_case 映射而来。
+  highlights?: { line: number; startCol: number; endCol: number }[]
 }) {
   const ref = useRef<HTMLDivElement>(null)
   const editorRef = useRef<monaco.editor.IStandaloneCodeEditor | null>(null)
@@ -32,6 +36,10 @@ export default function MonacoViewer({
   // 调用方传内联箭头或 undefined→defined 切换时,编辑回调不会失效(P2 编辑路径不可丢编辑)。
   const onChangeRef = useRef(onChange)
   useEffect(() => { onChangeRef.current = onChange })
+
+  // #7 命中行装饰引用:deltaDecorations 返回新 decorations id 数组,下次运行作为旧 decorations 清除。
+  // null/空 highlights 时不加装饰(优雅降级:子进程检测器无 locations 不报错)。
+  const decorationsRef = useRef<string[]>([])
 
   // 创建 editor(仅一次,依 mount)
   useEffect(() => {
@@ -95,6 +103,33 @@ export default function MonacoViewer({
       editorRef.current.updateOptions({ theme: theme === 'dark' ? 'sentinel-dark' : 'sentinel-light' })
     }
   }, [theme])
+
+  // #7 highlights 变化 → deltaDecorations 整行高亮 + revealLineInCenter 滚到首个命中。
+  // 依赖 editorRef.current(value effect 已 setValue、editor 必已存在)。
+  // 空/undefined highlights:不加装饰,不滚动(优雅降级:子进程检测器 finding 无 locations)。
+  // 清旧加新:deltaDecorations 接收旧 id 数组 + 新 decorations,返回新 id 数组存回 ref。
+  useEffect(() => {
+    const editor = editorRef.current
+    if (!editor) return
+    if (!highlights || highlights.length === 0) {
+      // 清除上一轮装饰(切到无 locations 的 finding 时)
+      if (decorationsRef.current.length > 0) {
+        decorationsRef.current = editor.deltaDecorations(decorationsRef.current, [])
+      }
+      return
+    }
+    const decos = highlights.map((h) => ({
+      range: new monaco.Range(h.line, h.startCol, h.line, h.endCol),
+      options: {
+        isWholeLine: true,
+        className: 'hit-line',
+        // backgroundColor 用固定 rgba(--warn-bg 变量不存在,见 index.css 注释)。
+        backgroundColor: 'rgba(250,173,20,0.18)',
+      },
+    }))
+    editor.revealLineInCenter(highlights[0].line)
+    decorationsRef.current = editor.deltaDecorations(decorationsRef.current, decos)
+  }, [highlights])
 
   return <div ref={ref} style={{ height, width: '100%' }} />
 }

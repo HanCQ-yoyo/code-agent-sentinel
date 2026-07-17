@@ -11,7 +11,7 @@ import { AssetEditor } from './AssetEditor'
 //  2. 二合一:旧「解析字段 Card + 文件内容 Card」→ 单一 ContentArea(structured 字段即内容,二合一)。
 //  3. 内容撑满:ContentArea flex:1。
 // header h2 保留 data-testid="asset-detail-name"(e2e 钩子,阶段 A 硬规则延续)。
-export function AssetDetailPanel({ asset }: { asset: Asset }) {
+export function AssetDetailPanel({ asset, highlights }: { asset: Asset, highlights?: { line: number; startCol: number; endCol: number }[] }) {
   const { t } = useTranslation()
   const description = (asset.fields as Record<string, unknown> | undefined)?.description
   const isMarkdown = ['memory', 'skill', 'command', 'agent'].includes(asset.type)
@@ -47,7 +47,7 @@ export function AssetDetailPanel({ asset }: { asset: Asset }) {
 
       {/* key={asset.id}:切资产时重挂载 AssetEditor(含 ContentArea),使其 Segmented view state
           和编辑态(editing/draft/preview)回默认,避免上一资产的草稿/视图泄漏到新资产。 */}
-      <AssetEditor key={asset.id} asset={asset} />
+      <AssetEditor key={asset.id} asset={asset} highlights={highlights} />
     </div>
   )
 }
