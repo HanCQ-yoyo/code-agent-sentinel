@@ -128,7 +128,7 @@ export function AssetEditor({ asset, highlights }: { asset: Asset, highlights?: 
           destroyOnClose
         >
           {fsOpen ? (
-            <ContentArea key={asset.id} asset={asset} theme={theme} highlights={highlights} />
+            <ContentArea key={asset.id} asset={asset} theme={theme} highlights={highlights} fill />
           ) : null}
         </Modal>
       </>
