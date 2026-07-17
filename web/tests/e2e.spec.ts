@@ -283,3 +283,17 @@ test('编辑 CLAUDE.md 保存后部分重扫反馈', async ({ page }) => {
   await page.getByRole('button', { name: /确认保存/ }).click()
   await expect(page.locator('.ant-message-notice')).toBeVisible({ timeout: 10000 })
 })
+
+test('语言切换:中→英后侧栏与按钮变英文', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  // 切英文
+  await page.getByRole('combobox', { name: '语言' }).selectOption('en')
+  // 侧栏导航变英文
+  await expect(page.getByRole('menuitem', { name: 'Dashboard' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: 'Assets' })).toBeVisible()
+  // 重新扫描按钮变英文
+  await expect(page.getByRole('button', { name: 'Rescan' })).toBeVisible()
+  // 切回中文
+  await page.getByRole('combobox', { name: '语言' }).selectOption('zh')
+  await expect(page.getByRole('menuitem', { name: /仪表盘/ })).toBeVisible()
+})

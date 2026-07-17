@@ -1,0 +1,5 @@
+{
+  "nav": { "dashboard": "仪表盘", "assets": "资产发现", "findings": "风险管理", "history": "历史扫描", "settings": "系统设置" },
+  "topbar": { "rescan": "重新扫描", "scanning": "扫描中…", "language": "语言", "theme": "主题" },
+  "common": { "global": "全局" }
+}

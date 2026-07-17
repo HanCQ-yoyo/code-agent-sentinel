@@ -1,0 +1,5 @@
+{
+  "nav": { "dashboard": "Dashboard", "assets": "Assets", "findings": "Findings", "history": "History", "settings": "Settings" },
+  "topbar": { "rescan": "Rescan", "scanning": "Scanning…", "language": "Language", "theme": "Theme" },
+  "common": { "global": "Global" }
+}
