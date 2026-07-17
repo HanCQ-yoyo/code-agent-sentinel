@@ -2,6 +2,7 @@ import { create } from 'zustand'
 import { apiGet, apiPost, apiPut, apiDelete, AuthError } from '../api/client'
 import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, TreeNode, Project, DirTagsResponse, RawFile, PreviewResult, EditResult, SuppressionItem, BaselineResult, DetectorsConfig, DashboardData } from '../types'
 import { type DirTag, type DirTagsMap } from '../lib/dirTags'
+import i18n from '../i18n'
 
 type ProjectTab = { kind: 'global' } | { kind: 'project'; path: string }
 
@@ -49,6 +50,10 @@ interface State {
   favorites: string[]
   fetchFavorites: () => Promise<void>
   saveFavorites: (ids: string[]) => Promise<void>
+  // 语言:持久化到后端 /api/settings(跨重启/跨端口),i18n 同步。
+  language: string
+  fetchSettings: () => Promise<void>
+  saveLanguage: (lang: string) => Promise<void>
   setSelectedTagFilter: (tag: DirTag | null) => void
   fetchRaw: (path: string) => Promise<RawFile | undefined>
   // 拉单资产(含 content),供发现页详情抽屉按 finding.asset_id 展示资产文件内容。
@@ -86,6 +91,7 @@ export const useStore = create<State>((set, get) => ({
   agents: null, tree: null, projects: [], activeProjectTab: { kind: 'global' },
   dirTagsDefaults: {}, dirTagsOverrides: {}, selectedTagFilter: null,
   favorites: [],
+  language: '',
   previewResult: null, editError: null,
   suppressions: [],
   fetchAssets: async () => {
@@ -192,6 +198,20 @@ export const useStore = create<State>((set, get) => ({
   saveFavorites: async (ids) => {
     const res = await wrap(() => apiPut<{ favorites: string[] }>('/api/favorites', { favorites: ids }), set)
     if (res) set({ favorites: res.favorites ?? [] })
+  },
+  fetchSettings: async () => {
+    const res = await wrap(() => apiGet<{ language: string; scan_interval: string; scan_enabled: boolean }>('/api/settings'), set)
+    if (res) {
+      set({ language: res.language })
+      // 若 localStorage 未设语言,用后端配置
+      if (!localStorage.getItem('sentinel.lang') && res.language) {
+        i18n.changeLanguage(res.language)
+      }
+    }
+  },
+  saveLanguage: async (lang) => {
+    const res = await wrap(() => apiPut<{ language: string }>('/api/settings', { language: lang }), set)
+    if (res) set({ language: res.language })
   },
   setSelectedTagFilter: (tag) => set({ selectedTagFilter: tag }),
   fetchRaw: async (path) => wrap(() => apiGet<RawFile>(`/api/raw?path=${encodeURIComponent(path)}`), set),

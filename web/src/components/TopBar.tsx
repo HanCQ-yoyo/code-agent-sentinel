@@ -2,6 +2,7 @@ import { useEffect } from 'react'
 import { Layout, Button, Switch, Space, Select, Breadcrumb } from 'antd'
 import { ReloadOutlined, HomeOutlined } from '@ant-design/icons'
 import { Link, useLocation } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { useTheme } from '../theme'
 import { useStore } from '../store'
 import { agentMeta } from '../lib/agents'
@@ -24,7 +25,8 @@ function leafLabel(pathname: string): string | null {
 
 export function TopBar({ onScan, loading }: Props) {
   const { theme, toggle } = useTheme()
-  const { agents, fetchAgents } = useStore()
+  const { t, i18n } = useTranslation()
+  const { agents, fetchAgents, language, saveLanguage } = useStore()
   const loc = useLocation()
   const currentAgent = agents?.current
 
@@ -71,15 +73,29 @@ export function TopBar({ onScan, loading }: Props) {
         />
       </Space>
       <Space size="middle">
+        <Select
+          value={i18n.language?.startsWith('en') ? 'en' : 'zh'}
+          onChange={(v) => {
+            localStorage.setItem('sentinel.lang', v)
+            i18n.changeLanguage(v)
+            saveLanguage(v)
+          }}
+          aria-label={t('topbar.language')}
+          style={{ width: 96 }}
+          options={[
+            { value: 'zh', label: '中文' },
+            { value: 'en', label: 'English' },
+          ]}
+        />
         <Switch
           checked={theme === 'dark'}
           onChange={toggle}
           checkedChildren="深"
           unCheckedChildren="浅"
-          aria-label="主题"
+          aria-label={t('topbar.theme')}
         />
         <Button type="primary" icon={<ReloadOutlined />} loading={loading} onClick={onScan}>
-          {loading ? '扫描中…' : '重新扫描'}
+          {loading ? t('topbar.scanning') : t('topbar.rescan')}
         </Button>
       </Space>
     </Header>

@@ -21,9 +21,10 @@ const { Content } = Layout
 
 export default function App() {
   const { theme } = useTheme()
-  const { runScan, loading, detectors, fetchLatestScan } = useStore()
+  const { runScan, loading, detectors, fetchLatestScan, fetchSettings } = useStore()
   const { i18n } = useTranslation()
   useEffect(() => { fetchLatestScan() }, [fetchLatestScan])
+  useEffect(() => { fetchSettings() }, [fetchSettings])
   const locale = i18n.language === 'en' ? enUS : zhCN
 
   // 布局:Sider 直接挂根 Layout → 全高;品牌落最左上角。
