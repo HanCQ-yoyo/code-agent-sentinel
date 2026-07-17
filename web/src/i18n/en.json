@@ -1,5 +1,56 @@
 {
   "nav": { "dashboard": "Dashboard", "assets": "Assets", "findings": "Findings", "history": "History", "settings": "Settings" },
   "topbar": { "rescan": "Rescan", "scanning": "Scanning…", "language": "Language", "theme": "Theme" },
-  "common": { "global": "Global" }
+  "common": {
+    "global": "Global",
+    "loadFailed": "Load failed",
+    "all": "All",
+    "enabled": "Enabled",
+    "cancel": "Cancel"
+  },
+  "dashboard": {
+    "detectorStatus": "Detector Status",
+    "tokenExpired": "Token expired, please revisit with #token=."
+  },
+  "assets": {
+    "viewList": "List",
+    "viewTree": "File Tree",
+    "searchPlaceholder": "Search name or path",
+    "collapseAll": "Collapse All",
+    "countList": "{{shown}} / {{total}} assets",
+    "countTree": "{{total}} assets",
+    "favoritesCount": "★ {{count}} pinned",
+    "treeEmptyHint": "Select an asset or file in the tree to view details",
+    "editTagTitle": "Edit Directory Tag",
+    "pathLabel": "Path",
+    "rootTag": "(root)",
+    "currentTagLabel": "Current tag",
+    "tagConfig": "Config",
+    "tagRuntime": "Runtime",
+    "noTagDefault": "None (default)",
+    "resetTag": "Reset to default",
+    "editTagHint": "Changes are written to the config file and persist across sessions. Subdirectories/files inherit this tag."
+  },
+  "findings": {
+    "notScannedHint": "Not scanned yet · go to dashboard and click 'Rescan'"
+  },
+  "history": {
+    "backToList": "Back to history list",
+    "colTime": "Time",
+    "colRiskScore": "Risk Score",
+    "colFindings": "Findings",
+    "colDetectors": "Detectors",
+    "colAction": "Action",
+    "confirmDelete": "Delete this scan record?",
+    "delete": "Delete",
+    "empty": "No scan history",
+    "totalCount": "Total {{count}} entries"
+  },
+  "settings": {
+    "binaryPath": "Binary path",
+    "defaultBinary": "default: {{name}}",
+    "saveConfig": "Save config",
+    "noRules": "No rules",
+    "rulesConfig": "Rules config"
+  }
 }

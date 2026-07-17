@@ -30,9 +30,9 @@ export function TopBar({ onScan, loading }: Props) {
   const loc = useLocation()
   const currentAgent = agents?.current
 
-  // 当前一级路由(用于面包屑首段)。
+  // 当前一级路由(用于面包屑首段)。navLabels 存 i18n key,需 t() 翻译。
   const root = loc.pathname === '/' ? '/dashboard' : `/${loc.pathname.split('/')[1]}`
-  const rootLabel = navLabels[root]
+  const rootLabel = navLabels[root] ? t(navLabels[root]) : undefined
   const leaf = leafLabel(loc.pathname)
 
   // agent 加载:移出 render body 防 render 中触发副作用。

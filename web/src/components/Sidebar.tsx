@@ -7,6 +7,7 @@ import {
   SettingOutlined,
 } from '@ant-design/icons'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
 import { navItems } from '../lib/nav'
 
 const { Sider } = Layout
@@ -19,11 +20,16 @@ const iconByPath: Record<string, React.ReactNode> = {
   '/settings': <SettingOutlined />,
 }
 
-const items = navItems.map((i) => ({ key: i.path, icon: iconByPath[i.path], label: i.label }))
+// navItems.label 存 i18n key,渲染时 t() 翻译。
+const useNavItems = () => {
+  const { t } = useTranslation()
+  return navItems.map((i) => ({ key: i.path, icon: iconByPath[i.path], label: t(i.label) }))
+}
 
 export function Sidebar() {
   const nav = useNavigate()
   const loc = useLocation()
+  const items = useNavItems()
   // '/' 等同 '/dashboard'
   const selected = loc.pathname === '/' ? '/dashboard' : loc.pathname
   return (

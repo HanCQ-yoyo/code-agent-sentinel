@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Row, Col, Alert, Typography, Card } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
 import { HealthScoreCard } from '../components/HealthScoreCard'
 import { SeverityChart } from '../components/SeverityChart'
@@ -9,6 +10,7 @@ import { TopRiskTypes } from '../components/TopRiskTypes'
 import { RiskTrendChart } from '../components/RiskTrendChart'
 
 export default function Dashboard() {
+  const { t } = useTranslation()
   const { dashboard, fetchDashboard, history, fetchHistory, error, authError } = useStore()
   const [selectedDetector, setSelectedDetector] = useState<string | undefined>(undefined)
   useEffect(() => {
@@ -22,12 +24,12 @@ export default function Dashboard() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {error ? <Alert type="error" message="加载失败" description={error} showIcon /> : null}
+      {error ? <Alert type="error" message={t('common.loadFailed')} description={error} showIcon /> : null}
       <Row gutter={16} align="stretch">
         <Col xs={24} lg={8} style={{ display: 'flex' }}><HealthScoreCard h={dashboard?.last_scan?.health_score} /></Col>
         <Col xs={24} lg={16} style={{ display: 'flex' }}><AssetStatTiles counts={counts} /></Col>
       </Row>
-      <Card title="检测器状态" size="small">
+      <Card title={t('dashboard.detectorStatus')} size="small">
         <DetectorPanel detectors={detectors} selectedId={selectedDetector} onSelect={setSelectedDetector} />
       </Card>
       <Row gutter={16}>
@@ -35,7 +37,7 @@ export default function Dashboard() {
         <Col xs={24} lg={12}><TopRiskTypes findings={findings} /></Col>
       </Row>
       <RiskTrendChart history={history} />
-      {authError ? <Typography.Text type="warning">token 失效,请重新带 #token= 访问。</Typography.Text> : null}
+      {authError ? <Typography.Text type="warning">{t('dashboard.tokenExpired')}</Typography.Text> : null}
     </div>
   )
 }

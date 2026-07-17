@@ -1,19 +1,21 @@
 import { useEffect, useState } from 'react'
 import { Alert, Empty } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
 import { FindingTable } from '../components/FindingTable'
 import { FindingDrawer } from '../components/FindingDrawer'
 import type { Finding } from '../types'
 
 export default function Findings() {
+  const { t } = useTranslation()
   const { scan, error, detectors, fetchDetectors } = useStore()
   const [selected, setSelected] = useState<Finding | null>(null)
   useEffect(() => { fetchDetectors() }, [fetchDetectors])
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {error ? <Alert type="error" message="加载失败" description={error} showIcon /> : null}
-      {!scan ? <Empty description="尚未扫描 · 去看板点击'重新扫描'" /> : (
+      {error ? <Alert type="error" message={t('common.loadFailed')} description={error} showIcon /> : null}
+      {!scan ? <Empty description={t('findings.notScannedHint')} /> : (
         <FindingTable
           findings={scan.findings}
           startedAt={scan.started_at}

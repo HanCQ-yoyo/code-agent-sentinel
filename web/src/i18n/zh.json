@@ -1,5 +1,56 @@
 {
   "nav": { "dashboard": "仪表盘", "assets": "资产发现", "findings": "风险管理", "history": "历史扫描", "settings": "系统设置" },
   "topbar": { "rescan": "重新扫描", "scanning": "扫描中…", "language": "语言", "theme": "主题" },
-  "common": { "global": "全局" }
+  "common": {
+    "global": "全局",
+    "loadFailed": "加载失败",
+    "all": "全部",
+    "enabled": "启用",
+    "cancel": "取消"
+  },
+  "dashboard": {
+    "detectorStatus": "检测器状态",
+    "tokenExpired": "token 失效,请重新带 #token= 访问。"
+  },
+  "assets": {
+    "viewList": "列表",
+    "viewTree": "文件树",
+    "searchPlaceholder": "搜索名称或路径",
+    "collapseAll": "全部收起",
+    "countList": "{{shown}} / {{total}} 资产",
+    "countTree": "{{total}} 资产",
+    "favoritesCount": "★ {{count}} 置顶",
+    "treeEmptyHint": "选择左侧文件树中的资产或文件查看详情",
+    "editTagTitle": "修改目录标签",
+    "pathLabel": "路径",
+    "rootTag": "(根)",
+    "currentTagLabel": "当前标签",
+    "tagConfig": "配置",
+    "tagRuntime": "运行时",
+    "noTagDefault": "无(默认)",
+    "resetTag": "恢复默认",
+    "editTagHint": "修改后回写配置文件,跨会话保留。子目录/文件继承此标签。"
+  },
+  "findings": {
+    "notScannedHint": "尚未扫描 · 去看板点击'重新扫描'"
+  },
+  "history": {
+    "backToList": "返回历史列表",
+    "colTime": "时间",
+    "colRiskScore": "风险指数",
+    "colFindings": "发现",
+    "colDetectors": "检测器",
+    "colAction": "操作",
+    "confirmDelete": "确认删除此扫描记录?",
+    "delete": "删除",
+    "empty": "暂无历史扫描",
+    "totalCount": "共 {{count}} 条"
+  },
+  "settings": {
+    "binaryPath": "二进制路径",
+    "defaultBinary": "默认 {{name}}",
+    "saveConfig": "保存配置",
+    "noRules": "暂无规则",
+    "rulesConfig": "规则配置"
+  }
 }

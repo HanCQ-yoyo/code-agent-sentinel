@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Card, Segmented, Input, Radio, Spin, Alert, Typography, Tabs, Splitter, Modal, Tag, Button } from 'antd'
+import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
 import type { Asset } from '../types'
 import { AssetTable } from '../components/AssetTable'
@@ -18,6 +19,7 @@ type View = 'list' | 'tree'
 const FAV_KEY = 'sentinel_favorites' // 仅作首次迁移:把旧 localStorage 收藏一次性并入后端
 
 export default function Assets() {
+  const { t } = useTranslation()
   const {
     assets, fetchAssets, scan, error, tree, projects, activeProjectTab,
     fetchProjects, fetchTree, setActiveProjectTab,
@@ -122,7 +124,7 @@ export default function Assets() {
   const selectedAsset: Asset | undefined = selected ? all.find((a) => a.id === selected) : undefined
 
   const tabItems = [
-    { key: 'global', label: '全局', children: null as React.ReactNode },
+    { key: 'global', label: t('common.global'), children: null as React.ReactNode },
     ...projects.map((p) => ({ key: `project:${p.path}`, label: p.name, children: null as React.ReactNode })),
   ]
   const activeTabKey = activeProjectTab.kind === 'global' ? 'global' : `project:${activeProjectTab.path}`
@@ -137,15 +139,15 @@ export default function Assets() {
   }
 
   const tagFilterItems = [
-    { label: '全部', value: 'all' as const },
-    { label: '配置', value: 'config' as const },
-    { label: '运行时', value: 'runtime' as const },
+    { label: t('common.all'), value: 'all' as const },
+    { label: t('assets.tagConfig'), value: 'config' as const },
+    { label: t('assets.tagRuntime'), value: 'runtime' as const },
   ]
   const tagFilterValue = selectedTagFilter ?? 'all'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      {error ? <Alert type="error" message="加载失败" description={error} showIcon /> : null}
+      {error ? <Alert type="error" message={t('common.loadFailed')} description={error} showIcon /> : null}
       <Tabs
         items={tabItems}
         activeKey={activeTabKey}
@@ -159,7 +161,7 @@ export default function Assets() {
           className="view-segmented"
           value={view}
           onChange={(v) => setView(v as View)}
-          options={[{ value: 'list', label: '列表' }, { value: 'tree', label: '文件树' }]}
+          options={[{ value: 'list', label: t('assets.viewList') }, { value: 'tree', label: t('assets.viewTree') }]}
         />
         {/* 2.3:标签筛选 Segmented(全部/配置/运行时),同时作用于列表与树。 */}
         <Segmented
@@ -171,21 +173,21 @@ export default function Assets() {
         {view === 'list' ? (
           <>
             <Radio.Group value={type} onChange={(e) => setType(e.target.value)} size="small">
-              <Radio.Button value="">全部</Radio.Button>
-              {types.map((t) => <Radio.Button key={t} value={t}>{t}</Radio.Button>)}
+              <Radio.Button value="">{t('common.all')}</Radio.Button>
+              {types.map((ty) => <Radio.Button key={ty} value={ty}>{ty}</Radio.Button>)}
             </Radio.Group>
-            <Input.Search value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索名称或路径" style={{ width: 240, marginLeft: 'auto' }} allowClear />
+            <Input.Search value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('assets.searchPlaceholder')} style={{ width: 240, marginLeft: 'auto' }} allowClear />
           </>
         ) : (
           // 树模式:全部收起按钮(默认已全收起,展开后可一键收回)。
-          <Button size="small" onClick={() => setExpandedKeys([])} disabled={expandedKeys.length === 0}>全部收起</Button>
+          <Button size="small" onClick={() => setExpandedKeys([])} disabled={expandedKeys.length === 0}>{t('assets.collapseAll')}</Button>
         )}
         <Typography.Text type="secondary" style={{ fontFamily: 'var(--font-mono)' }}>
-          {view === 'list' ? `${list.length} / ${tabFiltered.length} 资产` : `${tabFiltered.length} 资产`}
+          {view === 'list' ? t('assets.countList', { shown: list.length, total: tabFiltered.length }) : t('assets.countTree', { total: tabFiltered.length })}
         </Typography.Text>
         {/* 收藏计数提示 */}
         {favorites.length > 0 ? (
-          <Tag color="gold" style={{ marginInlineStart: 'auto' }}>★ {favorites.length} 置顶</Tag>
+          <Tag color="gold" style={{ marginInlineStart: 'auto' }}>{t('assets.favoritesCount', { count: favorites.length })}</Tag>
         ) : null}
       </div>
 
@@ -233,7 +235,7 @@ export default function Assets() {
               ) : rawPath ? (
                 <RawFilePanel path={rawPath} />
               ) : (
-                <Typography.Text type="secondary">选择左侧文件树中的资产或文件查看详情</Typography.Text>
+                <Typography.Text type="secondary">{t('assets.treeEmptyHint')}</Typography.Text>
               )}
             </Card>
           </Splitter.Panel>
@@ -241,7 +243,7 @@ export default function Assets() {
       )}
       {/* 标签编辑弹窗:点树节点标签徽标触发,选配置/运行时/恢复默认。 */}
       <Modal
-        title="修改目录标签"
+        title={t('assets.editTagTitle')}
         open={tagEdit !== null}
         onCancel={() => setTagEdit(null)}
         footer={null}
@@ -250,22 +252,22 @@ export default function Assets() {
         {tagEdit ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <Typography.Text type="secondary" style={{ fontFamily: 'var(--font-mono)', wordBreak: 'break-all' }}>
-              路径: {tagEdit.relPath || '(根)'}
+              {t('assets.pathLabel')}: {tagEdit.relPath || t('assets.rootTag')}
             </Typography.Text>
-            <Typography.Text type="secondary">当前标签: {tagEdit.current ? (tagEdit.current === 'config' ? '配置' : '运行时') : '无(默认)'}</Typography.Text>
+            <Typography.Text type="secondary">{t('assets.currentTagLabel')}: {tagEdit.current ? (tagEdit.current === 'config' ? t('assets.tagConfig') : t('assets.tagRuntime')) : t('assets.noTagDefault')}</Typography.Text>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
               <Card size="small" hoverable onClick={() => applyTagEdit(tagEdit.relPath, 'config')} style={{ cursor: 'pointer', borderColor: 'var(--accent)', flex: 1, minWidth: 90, textAlign: 'center' }}>
-                <span style={{ color: 'var(--accent)', fontWeight: 500 }}>配置</span>
+                <span style={{ color: 'var(--accent)', fontWeight: 500 }}>{t('assets.tagConfig')}</span>
               </Card>
               <Card size="small" hoverable onClick={() => applyTagEdit(tagEdit.relPath, 'runtime')} style={{ cursor: 'pointer', flex: 1, minWidth: 90, textAlign: 'center' }}>
-                <span style={{ color: 'var(--text-dim)', fontWeight: 500 }}>运行时</span>
+                <span style={{ color: 'var(--text-dim)', fontWeight: 500 }}>{t('assets.tagRuntime')}</span>
               </Card>
               <Card size="small" hoverable onClick={() => applyTagEdit(tagEdit.relPath, 'reset')} style={{ cursor: 'pointer', flex: 1, minWidth: 90, textAlign: 'center' }}>
-                <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>恢复默认</span>
+                <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{t('assets.resetTag')}</span>
               </Card>
             </div>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-              修改后回写配置文件,跨会话保留。子目录/文件继承此标签。
+              {t('assets.editTagHint')}
             </Typography.Text>
           </div>
         ) : null}
