@@ -216,3 +216,10 @@ body {
 .hit-line {
   background: rgba(250, 173, 20, 0.18) !important;
 }
+
+/* #9 风险信息 Descriptions 表格:antd Descriptions 在 column={1} 下渲染为 table,
+   但外层包了 div,inline style={{tableLayout:'fixed'}} 不一定穿透到 table 元素。
+   此规则作兜底,保证 label 列定宽、值列自适应高度,不被长 label 撑变形。 */
+.risk-desc table {
+  table-layout: fixed;
+}

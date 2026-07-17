@@ -128,7 +128,18 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
     >
       {finding ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <Descriptions title={t('findingDrawer.infoTitle')} size="small" column={1} bordered>
+          {/* #9:label 列定宽 120 + nowrap,值列 word-break,table-layout:fixed 防止标签长短不一导致值列错位。
+              className + index.css 的 .risk-desc table 规则为兜底(antd Descriptions 包 div,inline style 不一定生效)。 */}
+          <Descriptions
+            title={t('findingDrawer.infoTitle')}
+            size="small"
+            column={1}
+            bordered
+            labelStyle={{ width: 120, minWidth: 120, whiteSpace: 'nowrap' }}
+            contentStyle={{ wordBreak: 'break-all' }}
+            style={{ tableLayout: 'fixed' }}
+            className="risk-desc"
+          >
             <Descriptions.Item label={t('findingDrawer.name')}>{finding.message}</Descriptions.Item>
             <Descriptions.Item label={t('findingDrawer.severity')}>
               <SevBadge tone={`sev-${finding.severity}` as BadgeTone}>{SEVERITY_LABEL[finding.severity]}</SevBadge>
