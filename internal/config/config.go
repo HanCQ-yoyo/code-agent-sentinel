@@ -58,8 +58,8 @@ type DiscoveryCfg struct {
 
 // PinnedProject 是 Assets 页置顶的项目(右键置顶 + 颜色标识)。
 type PinnedProject struct {
-	Path  string `yaml:"path"`
-	Color string `yaml:"color"`
+	Path  string `yaml:"path" json:"path"`
+	Color string `yaml:"color" json:"color"`
 }
 
 func DefaultConfig() *Config {
