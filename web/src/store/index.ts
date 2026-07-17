@@ -203,9 +203,11 @@ export const useStore = create<State>((set, get) => ({
     const res = await wrap(() => apiGet<{ language: string; scan_interval: string; scan_enabled: boolean }>('/api/settings'), set)
     if (res) {
       set({ language: res.language })
-      // 若 localStorage 未设语言,用后端配置
-      if (!localStorage.getItem('sentinel.lang') && res.language) {
-        i18n.changeLanguage(res.language)
+      // 后端 config.language 层(落实 Task 11 brief 顺序 localStorage → 后端 → zh):
+      // localStorage 已有用户偏好时尊重之(最高优先);否则用后端配置,后端空串回退 zh。
+      // 后端 config.Language 默认空串,约定「空 = 回退 zh」(见 config.DefaultConfig)。
+      if (!localStorage.getItem('sentinel.lang')) {
+        await i18n.changeLanguage(res.language || 'zh')
       }
     }
   },

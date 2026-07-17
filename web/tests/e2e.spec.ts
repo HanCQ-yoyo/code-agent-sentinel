@@ -286,14 +286,21 @@ test('编辑 CLAUDE.md 保存后部分重扫反馈', async ({ page }) => {
 
 test('语言切换:中→英后侧栏与按钮变英文', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
-  // 切英文
-  await page.getByRole('combobox', { name: '语言' }).selectOption('en')
+  // antd Select 非原生 <select>:selectOption 不适用,option 元素 width=0 导致点击落在视口外。
+  // 改用键盘:点击展开 → ArrowDown(从中文移到 English)→ Enter。
+  // aria-label 随语言切换(中文时"语言"、英文时"Language"),故两种都匹配。
+  const langSelect = page.locator('.ant-select[aria-label="语言"], .ant-select[aria-label="Language"]')
+  await langSelect.click()
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Enter')
   // 侧栏导航变英文
   await expect(page.getByRole('menuitem', { name: 'Dashboard' })).toBeVisible()
   await expect(page.getByRole('menuitem', { name: 'Assets' })).toBeVisible()
   // 重新扫描按钮变英文
   await expect(page.getByRole('button', { name: 'Rescan' })).toBeVisible()
-  // 切回中文
-  await page.getByRole('combobox', { name: '语言' }).selectOption('zh')
+  // 切回中文(此时当前是 English,ArrowDown 循环回中文,或 ArrowUp)
+  await langSelect.click()
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Enter')
   await expect(page.getByRole('menuitem', { name: /仪表盘/ })).toBeVisible()
 })
