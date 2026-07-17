@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { apiGet, apiPost, apiPut, apiDelete, AuthError } from '../api/client'
-import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, TreeNode, Project, DirTagsResponse, RawFile, PreviewResult, EditResult, SuppressionItem, BaselineResult, DetectorsConfig, DashboardData } from '../types'
+import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, TreeNode, Project, PinnedProject, DirTagsResponse, RawFile, PreviewResult, EditResult, SuppressionItem, BaselineResult, DetectorsConfig, DashboardData } from '../types'
 import { type DirTag, type DirTagsMap } from '../lib/dirTags'
 import i18n from '../i18n'
 
@@ -50,6 +50,10 @@ interface State {
   favorites: string[]
   fetchFavorites: () => Promise<void>
   saveFavorites: (ids: string[]) => Promise<void>
+  // 项目前置(右键置顶 + 颜色 + 排序):持久化到后端 /api/pinned-projects。
+  pinnedProjects: PinnedProject[]
+  fetchPinnedProjects: () => Promise<void>
+  savePinnedProjects: (items: PinnedProject[]) => Promise<void>
   // 语言:持久化到后端 /api/settings(跨重启/跨端口),i18n 同步。
   language: string
   fetchSettings: () => Promise<void>
@@ -91,6 +95,7 @@ export const useStore = create<State>((set, get) => ({
   agents: null, tree: null, projects: [], activeProjectTab: { kind: 'global' },
   dirTagsDefaults: {}, dirTagsOverrides: {}, selectedTagFilter: null,
   favorites: [],
+  pinnedProjects: [],
   language: '',
   previewResult: null, editError: null,
   suppressions: [],
@@ -198,6 +203,14 @@ export const useStore = create<State>((set, get) => ({
   saveFavorites: async (ids) => {
     const res = await wrap(() => apiPut<{ favorites: string[] }>('/api/favorites', { favorites: ids }), set)
     if (res) set({ favorites: res.favorites ?? [] })
+  },
+  fetchPinnedProjects: async () => {
+    const res = await wrap(() => apiGet<{ pinned_projects: PinnedProject[] }>('/api/pinned-projects'), set)
+    if (res) set({ pinnedProjects: res.pinned_projects ?? [] })
+  },
+  savePinnedProjects: async (items) => {
+    const res = await wrap(() => apiPut<{ pinned_projects: PinnedProject[] }>('/api/pinned-projects', { pinned_projects: items }), set)
+    if (res) set({ pinnedProjects: res.pinned_projects ?? [] })
   },
   fetchSettings: async () => {
     const res = await wrap(() => apiGet<{ language: string; scan_interval: string; scan_enabled: boolean }>('/api/settings'), set)

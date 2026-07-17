@@ -36,7 +36,16 @@
     "tagRuntime": "Runtime",
     "noTagDefault": "None (default)",
     "resetTag": "Reset to default",
-    "editTagHint": "Changes are written to the config file and persist across sessions. Subdirectories/files inherit this tag."
+    "editTagHint": "Changes are written to the config file and persist across sessions. Subdirectories/files inherit this tag.",
+    "pin": "Pin",
+    "unpin": "Unpin",
+    "setColor": "Set Color",
+    "colorRed": "Red",
+    "colorOrange": "Orange",
+    "colorGold": "Gold",
+    "colorGreen": "Green",
+    "colorBlue": "Blue",
+    "colorPurple": "Purple"
   },
   "findings": {
     "notScannedHint": "Not scanned yet · go to dashboard and click 'Rescan'"

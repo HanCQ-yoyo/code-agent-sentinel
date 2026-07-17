@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Card, Segmented, Input, Radio, Spin, Alert, Typography, Tabs, Splitter, Modal, Tag, Button } from 'antd'
+import { Card, Segmented, Input, Radio, Spin, Alert, Typography, Tabs, Splitter, Modal, Tag, Button, Dropdown } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
-import type { Asset } from '../types'
+import type { Asset, PinnedProject, Project } from '../types'
 import { AssetTable } from '../components/AssetTable'
 import { AssetTree } from '../components/AssetTree'
 import { AssetDrawer } from '../components/AssetDrawer'
@@ -26,6 +26,7 @@ export default function Assets() {
     fetchAgents, agents, fetchDirTags, dirTagsDefaults, dirTagsOverrides,
     saveDirTags, selectedTagFilter, setSelectedTagFilter,
     favorites, fetchFavorites, saveFavorites,
+    pinnedProjects, savePinnedProjects,
   } = useStore()
   const [view, setView] = useState<View>('list')
   const [type, setType] = useState('')
@@ -123,9 +124,62 @@ export default function Assets() {
   })
   const selectedAsset: Asset | undefined = selected ? all.find((a) => a.id === selected) : undefined
 
+  // Task 17:项目前置。tab 顺序 = 全局 → 置顶(按配置顺序)→ 其余(按名)。
+  // 置顶/颜色通过右键菜单(Dropdown contextMenu)操作,全局 tab 不可置顶(无 Dropdown 包裹)。
+  const pinnedByPath = new Map(pinnedProjects.map((p) => [p.path, p.color]))
+  const pinnedPaths = pinnedProjects.map((p) => p.path)
+  // 置顶项目(按配置顺序,且仍被 projects 发现)
+  const pinned = projects.filter((p) => pinnedByPath.has(p.path)).sort(
+    (a, b) => pinnedPaths.indexOf(a.path) - pinnedPaths.indexOf(b.path)
+  )
+  const rest = projects.filter((p) => !pinnedByPath.has(p.path)).sort((a, b) => a.name.localeCompare(b.name))
+
+  const togglePin = (path: string, color?: string) => {
+    const exists = pinnedProjects.find((p) => p.path === path)
+    let next: PinnedProject[]
+    if (exists) {
+      next = pinnedProjects.filter((p) => p.path !== path)
+    } else {
+      next = [...pinnedProjects, { path, color: color ?? 'red' }]
+    }
+    savePinnedProjects(next)
+  }
+  const setColor = (path: string, color: string) => {
+    const next = pinnedProjects.some((p) => p.path === path)
+      ? pinnedProjects.map((p) => (p.path === path ? { ...p, color } : p))
+      : [...pinnedProjects, { path, color }]
+    savePinnedProjects(next)
+  }
+
+  const COLORS = [
+    { value: 'red', label: t('assets.colorRed') },
+    { value: 'orange', label: t('assets.colorOrange') },
+    { value: 'gold', label: t('assets.colorGold') },
+    { value: 'green', label: t('assets.colorGreen') },
+    { value: 'blue', label: t('assets.colorBlue') },
+    { value: 'purple', label: t('assets.colorPurple') },
+  ]
+  const colorHex: Record<string, string> = { red: '#f5222d', orange: '#fa8c16', gold: '#faad14', green: '#52c41a', blue: '#1677ff', purple: '#722ed1' }
+
+  const projectTabLabel = (p: Project) => {
+    const color = pinnedByPath.get(p.path)
+    const menuItems = [
+      { key: 'pin', label: color ? t('assets.unpin') : t('assets.pin'), onClick: () => togglePin(p.path) },
+      { key: 'color', label: t('assets.setColor'), children: COLORS.map((c) => ({ key: c.value, label: c.label, onClick: () => setColor(p.path, c.value) })) },
+    ]
+    return (
+      <Dropdown trigger={['contextMenu']} menu={{ items: menuItems }}>
+        <span style={{ fontWeight: color ? 700 : 400, borderLeft: color ? `3px solid ${colorHex[color]}` : undefined, paddingLeft: color ? 6 : 0 }}>
+          {color && <span style={{ color: colorHex[color] }}>●</span>} {p.name}
+        </span>
+      </Dropdown>
+    )
+  }
+
   const tabItems = [
     { key: 'global', label: t('common.global'), children: null as React.ReactNode },
-    ...projects.map((p) => ({ key: `project:${p.path}`, label: p.name, children: null as React.ReactNode })),
+    ...pinned.map((p) => ({ key: `project:${p.path}`, label: projectTabLabel(p), children: null as React.ReactNode })),
+    ...rest.map((p) => ({ key: `project:${p.path}`, label: projectTabLabel(p), children: null as React.ReactNode })),
   ]
   const activeTabKey = activeProjectTab.kind === 'global' ? 'global' : `project:${activeProjectTab.path}`
 

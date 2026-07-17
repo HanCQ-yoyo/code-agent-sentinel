@@ -6,6 +6,9 @@ export interface Asset {
   fields?: Record<string, unknown>; content?: string; hash: string; mtime?: string; parse_error?: string
 }
 export interface Project { path: string; name: string }
+// Task 17:项目前置(右键置顶 + 颜色 + 排序)。后端 PinnedProject = { path, color }。
+// color 为 COLORS 数组的 value(red/orange/gold/green/blue/purple),前端映射到 hex。
+export interface PinnedProject { path: string; color: string }
 export interface Inventory { assets: Asset[]; projects?: Project[]; duplicates?: unknown[] }
 export interface Finding {
   id?: string; detector_id: string; rule_id: string; severity: Severity

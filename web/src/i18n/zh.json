@@ -36,7 +36,16 @@
     "tagRuntime": "运行时",
     "noTagDefault": "无(默认)",
     "resetTag": "恢复默认",
-    "editTagHint": "修改后回写配置文件,跨会话保留。子目录/文件继承此标签。"
+    "editTagHint": "修改后回写配置文件,跨会话保留。子目录/文件继承此标签。",
+    "pin": "置顶",
+    "unpin": "取消置顶",
+    "setColor": "设置颜色",
+    "colorRed": "红",
+    "colorOrange": "橙",
+    "colorGold": "金",
+    "colorGreen": "绿",
+    "colorBlue": "蓝",
+    "colorPurple": "紫"
   },
   "findings": {
     "notScannedHint": "尚未扫描 · 去看板点击'重新扫描'"
