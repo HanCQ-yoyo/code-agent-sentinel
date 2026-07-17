@@ -426,3 +426,50 @@ func TestEvalNotRegexMatchNoLocations(t *testing.T) {
 		t.Errorf("not_regex_match 不应有 location,got %d", len(res.Locations))
 	}
 }
+
+// TestEvalOrFailedSiblingNoLocationPollution 回归:OR 的失败兄弟路径不得污染共享 locs。
+// 场景:or 的 child1 = {and: [content contains "rm"(命中→append loc), field "tag" eq "malicious"(失败)]}
+//   → AND 失败短路,但旧实现把 child1 的 "rm" location 留在 *locs 里未截断;
+// or 的 child2 = content contains "sudo"(命中→append loc)→ OR 成功。
+// 旧 bug:EvalResult.Locations 同时含 rm 行 + sudo 行(过度高亮错误行)。
+// 修复后:Locations 只含匹配分支(child2)的 sudo 位置,不含失败分支(child1)的 rm 位置。
+func TestEvalOrFailedSiblingNoLocationPollution(t *testing.T) {
+	// content 同时含 rm(行2)和 sudo(行3):rm 命中 child1 的 content 叶子(但 AND 整体失败),
+	// sudo 命中 child2 的 content 叶子(OR 成功)。
+	content := "title\nrm -rf /\nsudo -v\n"
+	r := mustRule(t, "skill", map[string]any{
+		"or": []any{
+			map[string]any{"and": []any{
+				map[string]any{"field": "content", "op": "contains", "value": "rm"},
+				map[string]any{"field": "tag", "op": "eq", "value": "malicious"},
+			}},
+			map[string]any{"field": "content", "op": "contains", "value": "sudo"},
+		},
+	})
+	a := configengine.Asset{Type: configengine.AssetSkill, Content: content}
+	res := Eval(r, a)
+
+	if !res.Matched {
+		t.Fatalf("OR 第二分支(content sudo)应命中,got matched=%v", res.Matched)
+	}
+
+	// 关键断言:Locations 只含 sudo(行3),不含 rm(行2)——失败兄弟路径不外泄。
+	if len(res.Locations) == 0 {
+		t.Fatal("OR 命中应至少有 1 个 location(sudo)")
+	}
+	for _, loc := range res.Locations {
+		if loc.Line == 2 {
+			t.Errorf("失败兄弟路径的 rm 命中(行2)不应外泄到 Locations,got %+v", res.Locations)
+		}
+	}
+	// 确认 sudo(行3)的命中确实在 Locations 里(否则可能误判"无 rm 但也无 sudo")。
+	hasSudo := false
+	for _, loc := range res.Locations {
+		if loc.Line == 3 {
+			hasSudo = true
+		}
+	}
+	if !hasSudo {
+		t.Errorf("匹配分支的 sudo 命中(行3)应在 Locations,got %+v", res.Locations)
+	}
+}

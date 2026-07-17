@@ -37,13 +37,20 @@ func evalMatch(node map[string]any, a configengine.Asset, rule *Rule, locs *[]Lo
 		}
 		var evs []string
 		for _, it := range items {
+			// 记录本 child 求值前的 locs 长度:child 若成功会向 *locs 追加合法位置;
+			// child 若失败,须截断它在失败前可能已追加的部分位置(content 叶子先命中、
+			// 后续兄弟叶子失败 → AND 短路,但这些虚假位置不能留给父级,否则 OR 成功分支
+			// 会带上失败兄弟路径的位置 → 过度高亮错误行)。
+			start := len(*locs)
 			child, ok := it.(map[string]any)
 			if !ok {
+				*locs = (*locs)[:start]
 				return false, ""
 			}
 			ok2, e := evalMatch(child, a, rule, locs)
 			if !ok2 {
-				return false, "" // 短路
+				*locs = (*locs)[:start] // 截断本 child 失败前已追加的虚假位置
+				return false, ""        // 短路
 			}
 			if e != "" {
 				evs = append(evs, e)
@@ -62,9 +69,14 @@ func evalMatch(node map[string]any, a configengine.Asset, rule *Rule, locs *[]Lo
 			if !ok {
 				continue
 			}
-			ok2, e := evalMatch(child, a, rule, locs)
+			// 每个 child 用独立局部缓冲:失败 child 的虚假位置天然隔离在 childLocs,
+			// 不会污染父级 *locs;仅成功 child 的位置合并进父级。彻底消除失败兄弟路径
+			// 污染(AND 截断已处理 AND 内部,此处处理 OR 层 sibling 隔离)。
+			var childLocs []Location
+			ok2, e := evalMatch(child, a, rule, &childLocs)
 			if ok2 {
-				return true, e // 短路:取命中者的 evidence
+				*locs = append(*locs, childLocs...)
+				return true, e // 短路:取命中者的 evidence + locations
 			}
 		}
 		return false, ""
