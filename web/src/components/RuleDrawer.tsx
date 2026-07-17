@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next'
 import type { DetectorMeta } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { sourceLabel, type FlatRule } from './RulesTable'
-import { SEVERITY_LABEL } from '../lib/severity'
+import { SEVERITY_LABEL_KEY } from '../lib/severity'
 
 interface RuleDrawerProps {
   rule: FlatRule | null
@@ -40,7 +40,7 @@ export function RuleDrawer({ rule, detectors, onClose }: RuleDrawerProps) {
             </Descriptions.Item>
             <Descriptions.Item label={t('ruleDrawer.ruleName')}>{rule.description}</Descriptions.Item>
             <Descriptions.Item label={t('ruleDrawer.severity')}>
-              <SevBadge tone={`sev-${rule.severity}` as BadgeTone}>{SEVERITY_LABEL[rule.severity]}</SevBadge>
+              <SevBadge tone={`sev-${rule.severity}` as BadgeTone}>{t(SEVERITY_LABEL_KEY[rule.severity])}</SevBadge>
             </Descriptions.Item>
             <Descriptions.Item label={t('ruleDrawer.detector')}>{rule.detector}</Descriptions.Item>
             <Descriptions.Item label={t('ruleDrawer.source')}>{rule.source ? t(sourceLabel[rule.source] ?? '') || rule.source : '--'}</Descriptions.Item>

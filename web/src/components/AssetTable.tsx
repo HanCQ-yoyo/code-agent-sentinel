@@ -7,7 +7,7 @@ import type { Asset, Finding, Severity } from '../types'
 import { Badge, type BadgeTone } from './Badge'
 import { relativeClaudePath } from '../lib/path'
 import { resolveDirTag, type DirTag, type DirTagsMap } from '../lib/dirTags'
-import { SEVERITY_LABEL } from '../lib/severity'
+import { SEVERITY_LABEL_KEY } from '../lib/severity'
 
 const rank: Record<Severity, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 0 }
 
@@ -105,7 +105,7 @@ export function AssetTable({ assets, findings = [], onSelect, favorites, onToggl
       render: (_: unknown, a: Asset) => {
         const sev = maxSev(findings, a.id)
         return sev ? (
-          <Badge tone={`sev-${sev}` as BadgeTone}>{SEVERITY_LABEL[sev]}</Badge>
+          <Badge tone={`sev-${sev}` as BadgeTone}>{t(SEVERITY_LABEL_KEY[sev])}</Badge>
         ) : (
           <Tag style={{ borderStyle: 'dashed', color: 'var(--text-dim)', background: 'transparent' }}>{t('assetTable.noRisk')}</Tag>
         )

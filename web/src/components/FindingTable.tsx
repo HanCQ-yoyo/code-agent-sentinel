@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next'
 import type { ColumnsType } from 'antd/es/table'
 import type { Finding, Severity, DetectorMeta } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
-import { SEVERITY_ORDER, SEVERITY_LABEL, SEVERITY_DOT } from '../lib/severity'
+import { SEVERITY_ORDER, SEVERITY_LABEL_KEY, SEVERITY_DOT } from '../lib/severity'
 import { formatDateTime } from '../lib/format'
 
 // 筛选标签内的色点颜色(复用 sev token);「全部」用 accent。
@@ -88,7 +88,7 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
         </Tooltip>
       ),
     },
-    { title: t('findingTable.colSeverity'), width: 80, render: (_: unknown, f: Finding) => <SevBadge tone={`sev-${f.severity}` as BadgeTone}>{SEVERITY_LABEL[f.severity]}</SevBadge> },
+    { title: t('findingTable.colSeverity'), width: 80, render: (_: unknown, f: Finding) => <SevBadge tone={`sev-${f.severity}` as BadgeTone}>{t(SEVERITY_LABEL_KEY[f.severity])}</SevBadge> },
     {
       title: t('findingTable.colDetector'), width: 120, render: (_: unknown, f: Finding) => (
         <Typography.Text style={{ fontSize: 12 }}>{detName(f.detector_id)}</Typography.Text>
@@ -118,7 +118,7 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
             { value: 'all', label: <SevSegLabel text={t('findingTable.all')} count={counts.all} />, className: 'sev-tab-all' },
             ...SEVERITY_ORDER.map((s) => ({
               value: s,
-              label: <SevSegLabel text={SEVERITY_LABEL[s]} count={counts[s]} sev={s} />,
+              label: <SevSegLabel text={t(SEVERITY_LABEL_KEY[s])} count={counts[s]} sev={s} />,
               className: `sev-tab-${s}`,
             })),
           ]}

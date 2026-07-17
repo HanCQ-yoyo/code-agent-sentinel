@@ -1,7 +1,7 @@
 import { Card } from 'antd'
 import { useTranslation } from 'react-i18next'
 import type { Finding, Severity } from '../types'
-import { SEVERITY_ORDER, SEVERITY_LABEL } from '../lib/severity'
+import { SEVERITY_ORDER, SEVERITY_LABEL_KEY } from '../lib/severity'
 
 export function SeverityChart({ findings }: { findings: Finding[] }) {
   const { t } = useTranslation()
@@ -13,7 +13,7 @@ export function SeverityChart({ findings }: { findings: Finding[] }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {SEVERITY_ORDER.map((s) => (
           <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ width: 32, color: 'var(--text-muted)' }}>{SEVERITY_LABEL[s]}</span>
+            <span style={{ width: 32, color: 'var(--text-muted)' }}>{t(SEVERITY_LABEL_KEY[s])}</span>
             <div style={{ flex: 1, background: 'var(--bg-border)', borderRadius: 4, height: 12, overflow: 'hidden' }}>
               <div
                 data-testid={`severity-${s}`}

@@ -252,6 +252,13 @@
   "health": {
     "title": "健康分"
   },
+  "severity": {
+    "critical": "严重",
+    "high": "高危",
+    "medium": "中危",
+    "low": "低危",
+    "info": "提示"
+  },
   "chart": {
     "riskTrendTitle": "风险指数趋势",
     "riskTrendAria": "风险指数趋势",

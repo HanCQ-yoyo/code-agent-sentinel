@@ -7,7 +7,7 @@ import { useStore } from '../store'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { AssetDetailPanel } from './AssetDetailPanel'
 import { formatDateTime } from '../lib/format'
-import { SEVERITY_LABEL } from '../lib/severity'
+import { SEVERITY_LABEL_KEY } from '../lib/severity'
 
 interface FindingDrawerProps {
   finding: Finding | null
@@ -142,7 +142,7 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
           >
             <Descriptions.Item label={t('findingDrawer.name')}>{finding.message}</Descriptions.Item>
             <Descriptions.Item label={t('findingDrawer.severity')}>
-              <SevBadge tone={`sev-${finding.severity}` as BadgeTone}>{SEVERITY_LABEL[finding.severity]}</SevBadge>
+              <SevBadge tone={`sev-${finding.severity}` as BadgeTone}>{t(SEVERITY_LABEL_KEY[finding.severity])}</SevBadge>
             </Descriptions.Item>
             <Descriptions.Item label={t('findingDrawer.detector')}>{detName(finding.detector_id)}</Descriptions.Item>
             <Descriptions.Item label={t('findingDrawer.ruleId')}>

@@ -252,6 +252,13 @@
   "health": {
     "title": "Health Score"
   },
+  "severity": {
+    "critical": "Critical",
+    "high": "High",
+    "medium": "Medium",
+    "low": "Low",
+    "info": "Info"
+  },
   "chart": {
     "riskTrendTitle": "Risk Score Trend",
     "riskTrendAria": "Risk score trend",

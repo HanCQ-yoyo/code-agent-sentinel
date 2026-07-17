@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next'
 import type { DetectorMeta, Severity } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { RuleDrawer } from './RuleDrawer'
-import { SEVERITY_ORDER, SEVERITY_LABEL, SEVERITY_DOT } from '../lib/severity'
+import { SEVERITY_ORDER, SEVERITY_LABEL_KEY, SEVERITY_DOT } from '../lib/severity'
 
 export type FlatRule = {
   id: string; severity: Severity; description: string; syntax?: string
@@ -116,7 +116,7 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
         </Tooltip>
       ),
     },
-    { title: t('ruleTable.colSeverity'), width: 80, render: (_: unknown, r: FlatRule) => <SevBadge tone={`sev-${r.severity}` as BadgeTone}>{SEVERITY_LABEL[r.severity]}</SevBadge> },
+    { title: t('ruleTable.colSeverity'), width: 80, render: (_: unknown, r: FlatRule) => <SevBadge tone={`sev-${r.severity}` as BadgeTone}>{t(SEVERITY_LABEL_KEY[r.severity])}</SevBadge> },
     {
       // 来源:按 rule_id 前缀推导(baseline./injection./skill./custom.),后端带 source 则优先。
       title: t('ruleTable.colSource'), width: 90, render: (_: unknown, r: FlatRule) => (
@@ -185,7 +185,7 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
           { value: 'all', label: <SevSegLabel text={t('ruleTable.all')} count={counts.all} />, className: 'sev-tab-all' },
           ...SEVERITY_ORDER.map((s) => ({
             value: s,
-            label: <SevSegLabel text={SEVERITY_LABEL[s]} count={counts[s] ?? 0} sev={s} />,
+            label: <SevSegLabel text={t(SEVERITY_LABEL_KEY[s])} count={counts[s] ?? 0} sev={s} />,
             className: `sev-tab-${s}`,
           })),
         ]}

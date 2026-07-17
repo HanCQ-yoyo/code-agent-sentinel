@@ -1,7 +1,7 @@
 import { Card, Empty } from 'antd'
 import { useTranslation } from 'react-i18next'
 import type { Finding, Severity } from '../types'
-import { SEVERITY_LABEL } from '../lib/severity'
+import { SEVERITY_LABEL_KEY } from '../lib/severity'
 
 const sevWeight: Record<Severity, number> = { critical: 5, high: 4, medium: 3, low: 2, info: 1 }
 
@@ -34,7 +34,7 @@ export function TopRiskTypes({ findings, topN = 10 }: { findings: Finding[]; top
               <div style={{ flex: 1, background: 'var(--bg-border)', borderRadius: 4, height: 12, overflow: 'hidden' }}>
                 <div data-testid={`toprisk-${r.id}`} style={{ width: `${(r.count / maxCount) * 100}%`, minWidth: 8, height: '100%', background: `var(--sev-${r.sev})` }} />
               </div>
-              <span style={{ width: 60, textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11, color: `var(--sev-${r.sev})` }}>{SEVERITY_LABEL[r.sev]} {r.count}</span>
+              <span style={{ width: 60, textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11, color: `var(--sev-${r.sev})` }}>{t(SEVERITY_LABEL_KEY[r.sev])} {r.count}</span>
             </div>
           ))}
         </div>
