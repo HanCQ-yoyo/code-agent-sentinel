@@ -30,6 +30,7 @@ type Server struct {
 	Editor          *editor.Editor
 	Runner          *scan.Runner         // HTTP/scheduler/CLI 共用的扫描路径
 	Scheduler       *scheduler.Scheduler // 进程内定时扫描调度器(main.go 注入)
+	ScheduleManager *scheduler.Manager   // 多任务调度管理器(Task 6:/api/schedules CRUD 用)
 }
 
 func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *config.Config, token string, hist *history.Store, agents []configengine.Agent, ed *editor.Editor) *Server {
@@ -131,6 +132,10 @@ func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	api.POST("/baseline", s.postBaseline)
 	api.GET("/scheduler", s.getScheduler)
 	api.PUT("/scheduler", s.putScheduler)
+	api.GET("/schedules", s.getSchedules)
+	api.POST("/schedules", s.postSchedule)
+	api.PUT("/schedules/:agent_id", s.putSchedule)
+	api.DELETE("/schedules/:agent_id", s.deleteSchedule)
 	api.GET("/settings", s.getSettings)
 	api.PUT("/settings", s.putSettings)
 	api.GET("/pinned-projects", s.getPinnedProjects)
