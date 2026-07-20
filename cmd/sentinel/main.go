@@ -63,6 +63,8 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newRulesCmd())
 	// Task 9:scan 子命令(一次性扫描写历史,不启动 HTTP server)
 	cmd.AddCommand(newScanCmd())
+	// Task 11:setup 子命令(huh TUI 交互式配置 code agent)
+	cmd.AddCommand(newSetupCmd())
 	// Task 22:uninstall 子命令(清理 ~/.claude-sentinel 数据目录)
 	cmd.AddCommand(newUninstallCmd())
 	return cmd
