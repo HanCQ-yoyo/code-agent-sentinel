@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { apiGet, apiPost, apiPut, apiDelete, AuthError } from '../api/client'
-import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, TreeNode, Project, PinnedProject, DirTagsResponse, RawFile, PreviewResult, EditResult, SuppressionItem, BaselineResult, DetectorsConfig, DashboardData } from '../types'
+import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, ScheduleStatus, TreeNode, Project, PinnedProject, DirTagsResponse, RawFile, PreviewResult, EditResult, SuppressionItem, BaselineResult, DetectorsConfig, DashboardData } from '../types'
 import { type DirTag, type DirTagsMap } from '../lib/dirTags'
 import i18n from '../i18n'
 
@@ -18,6 +18,11 @@ interface State {
   authError: boolean
   // agent
   agents: AgentsResponse | null
+  // 当前选中的 agent(纯视图状态,不持久化到后端;与后端 config.SelectedAgentID 是不同概念)。
+  // fetchAgents 在 selectedAgent 为空时回填首 agent 或 res.current。setSelectedAgent 只改本地。
+  selectedAgent: string
+  // 定时扫描任务列表(GET /api/schedules)
+  schedules: ScheduleStatus[]
   // 目录树
   tree: TreeNode | null
   // 项目列表(供 Tabs)
@@ -31,7 +36,7 @@ interface State {
   // 选 config/runtime 时隐藏非选中)。前端 Assets 用。
   selectedTagFilter: DirTag | null
   fetchAssets: () => Promise<void>
-  runScan: (detectors?: string) => Promise<void>
+  runScan: (agentID?: string, detectors?: string) => Promise<void>
   fetchDetectors: () => Promise<void>
   fetchDetectorConfig: () => Promise<void>
   saveDetectorConfig: (cfg: DetectorsConfig) => Promise<boolean>
@@ -41,6 +46,11 @@ interface State {
   fetchHistoryDetail: (id: string) => Promise<ScanRecord | undefined>
   deleteHistory: (id: string) => Promise<void>
   fetchAgents: () => Promise<void>
+  setSelectedAgent: (id: string) => void
+  fetchSchedules: () => Promise<void>
+  createSchedule: (agent_id: string, interval: string, enabled: boolean) => Promise<boolean>
+  updateSchedule: (agent_id: string, interval: string, enabled: boolean) => Promise<boolean>
+  deleteSchedule: (agent_id: string) => Promise<boolean>
   fetchProjects: () => Promise<void>
   fetchTree: (tab: ProjectTab) => Promise<void>
   setActiveProjectTab: (tab: ProjectTab) => void
@@ -92,7 +102,7 @@ const wrap = async <T>(fn: () => Promise<T>, set: (p: Partial<State>) => void): 
 
 export const useStore = create<State>((set, get) => ({
   assets: null, scan: null, dashboard: null, detectors: [], detectorConfig: null, history: [], loading: false, error: null, authError: false,
-  agents: null, tree: null, projects: [], activeProjectTab: { kind: 'global' },
+  agents: null, selectedAgent: '', schedules: [], tree: null, projects: [], activeProjectTab: { kind: 'global' },
   dirTagsDefaults: {}, dirTagsOverrides: {}, selectedTagFilter: null,
   favorites: [],
   pinnedProjects: [],
@@ -103,9 +113,16 @@ export const useStore = create<State>((set, get) => ({
     const inv = await wrap(() => apiGet<Inventory>('/api/assets'), set)
     if (inv) set({ assets: inv })
   },
-  runScan: async (d) => {
+  runScan: async (agentID, detectors) => {
     set({ loading: true, error: null })
-    const res = await wrap(() => apiPost<ScanResult>(d ? `/api/scan?detectors=${d}` : '/api/scan'), set)
+    // agentID 显式传入时优先;否则回退 selectedAgent(纯视图状态,可能为空)。
+    // 空 agent 时不带 query,后端回退首 agent(handlers_scan.go 与 RunScan 一致)。
+    const a = agentID ?? get().selectedAgent
+    const params = new URLSearchParams()
+    if (a) params.set('agent', a)
+    if (detectors) params.set('detectors', detectors)
+    const q = params.toString() ? `?${params.toString()}` : ''
+    const res = await wrap(() => apiPost<ScanResult>(`/api/scan${q}`), set)
     set({ scan: res ?? null, loading: false })
     // 扫描成功后刷新 Dashboard + History(新版 Dashboard 读 dashboard/history 而非 scan,
     // 不刷新则点"重新扫描"后看板无可见更新)。镜像 saveDetectorConfig 的不 await 模式。
@@ -170,7 +187,35 @@ export const useStore = create<State>((set, get) => ({
   },
   fetchAgents: async () => {
     const res = await wrap(() => apiGet<AgentsResponse>('/api/agents'), set)
-    if (res) set({ agents: res })
+    if (res) {
+      set({ agents: res })
+      // 仅在 selectedAgent 当前为空时回填:不覆盖用户已选(纯视图状态,setSelectedAgent 只改本地)。
+      // 优先级:res.current 非空 → 用后端当前 agent;否则回退首 agent。
+      if (!get().selectedAgent) {
+        if (res.current) set({ selectedAgent: res.current })
+        else if (res.agents.length > 0) set({ selectedAgent: res.agents[0].id })
+      }
+    }
+  },
+  setSelectedAgent: (id) => set({ selectedAgent: id }),
+  fetchSchedules: async () => {
+    const res = await wrap(() => apiGet<{ schedules: ScheduleStatus[] }>('/api/schedules'), set)
+    if (res) set({ schedules: res.schedules ?? [] })
+  },
+  createSchedule: async (agent_id, interval, enabled) => {
+    const res = await wrap(() => apiPost('/api/schedules', { agent_id, interval, enabled }), set)
+    if (res) await get().fetchSchedules()
+    return !!res
+  },
+  updateSchedule: async (agent_id, interval, enabled) => {
+    const res = await wrap(() => apiPut(`/api/schedules/${encodeURIComponent(agent_id)}`, { agent_id, interval, enabled }), set)
+    if (res) await get().fetchSchedules()
+    return !!res
+  },
+  deleteSchedule: async (agent_id) => {
+    const res = await wrap(() => apiDelete(`/api/schedules/${encodeURIComponent(agent_id)}`), set)
+    if (res) await get().fetchSchedules()
+    return !!res
   },
   fetchProjects: async () => {
     const res = await wrap(() => apiGet<{ projects: Project[] }>('/api/project'), set)

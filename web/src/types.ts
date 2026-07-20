@@ -90,6 +90,17 @@ export interface ScanSummary {
 }
 export interface AgentsResponse { agents: Agent[]; current: string }
 
+// GET /api/schedules 返回的单条调度任务状态。
+// interval 是 time.Duration.String() 形如 "1h0m0s"(Manager 分支返回原始串如 "1h"/"30m");
+// last_run/next_run 是 RFC3339 字符串,空串表示尚未运行/未调度。
+export interface ScheduleStatus {
+  agent_id: string
+  enabled: boolean
+  interval: string
+  last_run: string
+  next_run: string
+}
+
 // P2 写编辑:预览/提交结果
 export interface Danger {
   line: number
