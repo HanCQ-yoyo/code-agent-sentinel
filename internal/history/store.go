@@ -89,6 +89,7 @@ func (s *Store) List() ([]ScanSummary, error) {
 		// 只解析摘要字段,丢弃 findings/inventory(用局部结构避免全量反序列化开销)
 		var partial struct {
 			ID          string    `json:"id"`
+			AgentID     string    `json:"agent_id"`
 			StartedAt   time.Time `json:"started_at"`
 			HealthScore *struct {
 				Score int    `json:"score"`
@@ -110,6 +111,7 @@ func (s *Store) List() ([]ScanSummary, error) {
 		}
 		sum := ScanSummary{
 			ID:            partial.ID,
+			AgentID:       partial.AgentID,
 			StartedAt:     partial.StartedAt,
 			FindingCount:  len(partial.Findings),
 			DetectorAvail: avail,

@@ -155,6 +155,20 @@ func TestListSummaryFields(t *testing.T) {
 	}
 }
 
+func TestScanRecordHasAgentID(t *testing.T) {
+	rec := ScanRecord{ID: "x", AgentID: "claude-code"}
+	if rec.AgentID != "claude-code" {
+		t.Errorf("AgentID 字段应可读写: %q", rec.AgentID)
+	}
+}
+
+func TestScanSummaryHasAgentID(t *testing.T) {
+	s := ScanSummary{ID: "x", AgentID: "claude-code"}
+	if s.AgentID != "claude-code" {
+		t.Errorf("AgentID 字段应可读写: %q", s.AgentID)
+	}
+}
+
 // TestHistoryLegacyDetectorID 验证 P3 重构(基线+注入检测器合并为 rules 检测器)
 // 之前写入的旧记录仍可被读取,不崩溃,finding 字段完整保留,且 rule_id 前缀
 // 分组不变——前端 RulesTable(Task 17)按 rule_id 前缀分组,旧记录的

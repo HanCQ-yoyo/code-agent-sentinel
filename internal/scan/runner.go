@@ -36,12 +36,12 @@ func (r *Runner) RunScan(ctx context.Context, detectorIDs []string) (*security.S
 	if err != nil {
 		return nil, fmt.Errorf("扫描失败: %w", err)
 	}
-	r.saveHistory(res, &inv)
+	r.saveHistory("", res, &inv)
 	return res, nil
 }
 
 // saveHistory 把扫描结果落盘。ID = StartedAt 时间戳 + 8hex 随机后缀(防同秒冲突)。
-func (r *Runner) saveHistory(res *security.ScanResult, inv *configengine.Inventory) {
+func (r *Runner) saveHistory(agentID string, res *security.ScanResult, inv *configengine.Inventory) {
 	if r.History == nil {
 		return
 	}
@@ -49,6 +49,7 @@ func (r *Runner) saveHistory(res *security.ScanResult, inv *configengine.Invento
 	rand.Read(b)
 	rec := history.ScanRecord{
 		ID:          res.StartedAt.Format("2006-01-02-15-04-05") + "-" + hex.EncodeToString(b),
+		AgentID:     agentID,
 		StartedAt:   res.StartedAt,
 		Duration:    res.Duration,
 		Findings:    res.Findings,
