@@ -19,22 +19,44 @@ type schedulerResponse struct {
 }
 
 // schedulerStatusResponse 构造 scheduler 响应,nil-safe。
-// 优先用 s.Scheduler.Status()(实时调度状态);否则从 s.Config 退化构造:
-//   - Enabled 退化为 s.Config.ScanEnabled
-//   - Interval 退化为 s.Config.ScanInterval 字符串(空则 "0s",与 duration 零值一致)
-//   - LastRun/NextRun 退化空串(无运行记录)
 //
-// 这保证 s.Scheduler == nil 时(main.go 未注入、测试、或未启动调度)
-// GET / PUT /api/scheduler 仍返回 200 + 基于 config 的状态,不 panic。
+// Task 7 起 /api/scheduler 标记 deprecated:新前端用 /api/schedules,旧端点保留
+// 转发到 schedules。响应构造:
+//   - ScheduleManager 非 nil:取 Status() 中 AgentID==SelectedAgentID 的任务
+//     (无则取第一个,再无则返回零值),Interval 用 config.Schedules 的原始字符串
+//     (避免 time.Duration.String() 把 "30m" 漂移成 "30m0s")。
+//   - Manager 为 nil:退化用 config.ScanEnabled/ScanInterval(向后兼容)。
+//
+// 不再走 s.Scheduler 单任务路径(旧端点 deprecated);但 putScheduler 仍同步调用
+// s.Scheduler.Reconfigure(若非 nil),保留对老测试与未迁移代码的兼容。
 func (s *Server) schedulerStatusResponse() schedulerResponse {
-	if s.Scheduler != nil {
-		st := s.Scheduler.Status()
-		return schedulerResponse{
-			Enabled:  st.Enabled,
-			Interval: st.Interval.String(),
-			LastRun:  formatTime(st.LastRun),
-			NextRun:  formatTime(st.NextRun),
+	if s.ScheduleManager != nil {
+		st := s.ScheduleManager.Status()
+		agentID := s.SelectedAgentID
+		if agentID == "" {
+			agentID = "claude-code"
 		}
+		for _, x := range st {
+			if x.AgentID == agentID {
+				return schedulerResponse{
+					Enabled:  x.Enabled,
+					Interval: s.scheduleIntervalString(agentID),
+					LastRun:  formatTime(x.LastRun),
+					NextRun:  formatTime(x.NextRun),
+				}
+			}
+		}
+		if len(st) > 0 {
+			x := st[0]
+			return schedulerResponse{
+				Enabled:  x.Enabled,
+				Interval: s.scheduleIntervalString(x.AgentID),
+				LastRun:  formatTime(x.LastRun),
+				NextRun:  formatTime(x.NextRun),
+			}
+		}
+		// 无任务
+		return schedulerResponse{Enabled: false, Interval: "0s"}
 	}
 	// 退化:基于 config 构造。ScanInterval 空串时用 "0s"(duration 零值的 String())。
 	interval := s.Config.ScanInterval
@@ -47,6 +69,17 @@ func (s *Server) schedulerStatusResponse() schedulerResponse {
 		LastRun:  "",
 		NextRun:  "",
 	}
+}
+
+// scheduleIntervalString 返回 agentID 对应任务的原始 interval 字符串(与 degrade 分支一致,
+// 避免 "30m" 经 Duration.String() 漂移成 "30m0s")。找不到则回退 "0s"。
+func (s *Server) scheduleIntervalString(agentID string) string {
+	for _, sc := range s.Config.Schedules {
+		if sc.AgentID == agentID {
+			return sc.Interval
+		}
+	}
+	return "0s"
 }
 
 func (s *Server) getScheduler(c *gin.Context) {
@@ -75,18 +108,43 @@ func (s *Server) putScheduler(c *gin.Context) {
 	if interval <= 0 {
 		enabled = false
 	}
-	// 始终更新内存 config(与 putSettings 一致);仅当 ConfigPath 非空时落盘。
+	// 旧字段同步写(向后兼容读 ScanEnabled/ScanInterval 的代码)。
 	s.Config.ScanEnabled = enabled
 	s.Config.ScanInterval = body.Interval
+	// Task 7:旧端点 deprecated 转发到 schedules——更新 SelectedAgentID 对应任务,
+	// 不存在则追加。新前端应用 /api/schedules,这里仅为兼容旧调用方。
+	agentID := s.SelectedAgentID
+	if agentID == "" {
+		agentID = "claude-code"
+	}
+	found := false
+	for i := range s.Config.Schedules {
+		if s.Config.Schedules[i].AgentID == agentID {
+			s.Config.Schedules[i].Enabled = enabled
+			s.Config.Schedules[i].Interval = body.Interval
+			found = true
+			break
+		}
+	}
+	if !found {
+		s.Config.Schedules = append(s.Config.Schedules, config.ScheduleCfg{
+			AgentID: agentID, Enabled: enabled, Interval: body.Interval,
+		})
+	}
 	if s.ConfigPath != "" {
 		if err := config.Save(s.ConfigPath, s.Config); err != nil {
 			c.JSON(http.StatusInternalServerError, errorBody("save_failed", err.Error()))
 			return
 		}
 	}
+	// Correction 1:保留对 s.Scheduler 单任务调度器的同步(若非 nil)。
+	// TestPutSchedulerEnablesAndPersists 直接断言 s.Scheduler.Status().Enabled 翻转,
+	// 丢掉此调用会让该测试失败。
 	if s.Scheduler != nil {
 		s.Scheduler.Reconfigure(enabled, interval)
 	}
+	// Task 7:同步到多任务 ScheduleManager(若非 nil),与新 /api/schedules 一致。
+	s.applySchedules()
 	c.JSON(http.StatusOK, s.schedulerStatusResponse()) // 返回最新状态(nil-safe)
 }
 

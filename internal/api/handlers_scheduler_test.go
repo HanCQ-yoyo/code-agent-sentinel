@@ -149,3 +149,31 @@ func TestSchedulerNilSafeNoConfigPath(t *testing.T) {
 		t.Errorf("内存 config 应更新: enabled=%v interval=%q", s.Config.ScanEnabled, s.Config.ScanInterval)
 	}
 }
+
+func TestPutSchedulerDeprecatedWritesSchedules(t *testing.T) {
+	s := newSchedulesTestServer(t) // 带 ScheduleManager
+	// 旧端点 PUT 设 interval=1h enabled=true
+	w := reqScheduler(t, s, "PUT", "/api/scheduler", map[string]any{"enabled": true, "interval": "1h"})
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: %d %s", w.Code, w.Body.String())
+	}
+	cfg, _ := config.Load(s.ConfigPath)
+	if len(cfg.Schedules) != 1 || cfg.Schedules[0].Interval != "1h" {
+		t.Errorf("旧端点 PUT 应写 schedules: %+v", cfg.Schedules)
+	}
+}
+
+func TestGetSchedulerDeprecatedReadsSchedules(t *testing.T) {
+	s := newSchedulesTestServer(t)
+	s.Config.Schedules = []config.ScheduleCfg{{AgentID: "claude-code", Enabled: true, Interval: "30m"}}
+	s.applySchedules()
+	w := reqScheduler(t, s, "GET", "/api/scheduler", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: %d", w.Code)
+	}
+	var resp schedulerResponse
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	if !resp.Enabled || resp.Interval != "30m" {
+		t.Errorf("旧 GET 应读 schedules 首项: %+v", resp)
+	}
+}
