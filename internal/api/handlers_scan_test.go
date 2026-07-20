@@ -1,13 +1,65 @@
 package api
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
 
+	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/security"
 )
+
+// reqScan 是扫描路由测试辅助:发请求(可选 body),返回 recorder。
+// 路径含 query string(如 /api/scan?agent=foo),不带 body 时 body=nil。
+func reqScan(t *testing.T, s *Server, method, path string, body any) *httptest.ResponseRecorder {
+	t.Helper()
+	r := s.Router()
+	var req *http.Request
+	if body == nil {
+		req = httptest.NewRequest(method, path, nil)
+	} else {
+		b, _ := json.Marshal(body)
+		req = httptest.NewRequest(method, path, bytes.NewReader(b))
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	return w
+}
+
+// TestPostScanPassesAgentQuery 验证 postScan 读 ?agent= 并传给 RunScan。
+// 用 spyRunner 替换 s.Runner,断言收到的 agentID 与 query 一致。
+func TestPostScanPassesAgentQuery(t *testing.T) {
+	dir := t.TempDir()
+	s := newTestServer(t, dir)
+	spy := &spyRunner{}
+	s.Runner = spy
+	w := reqScan(t, s, "POST", "/api/scan?agent=claude-code", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: %d %s", w.Code, w.Body.String())
+	}
+	if spy.lastAgentID != "claude-code" {
+		t.Errorf("应传 agent=claude-code: got %q", spy.lastAgentID)
+	}
+}
+
+// spyRunner 记录 RunScan 收到的 agentID,满足 ScanRunner 接口。
+type spyRunner struct {
+	lastAgentID string
+}
+
+func (s *spyRunner) RunScan(ctx context.Context, agentID string, detectorIDs []string) (*security.ScanResult, error) {
+	s.lastAgentID = agentID
+	return &security.ScanResult{}, nil
+}
+
+func (s *spyRunner) EngineFor(agentID string) *configengine.Engine { return nil }
 
 func TestPostScan(t *testing.T) {
 	dir := t.TempDir()

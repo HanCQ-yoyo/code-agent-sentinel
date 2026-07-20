@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"mime"
 	"net/http"
@@ -28,9 +29,16 @@ type Server struct {
 	Agents          []configengine.Agent
 	SelectedAgentID string
 	Editor          *editor.Editor
-	Runner          *scan.Runner         // HTTP/scheduler/CLI 共用的扫描路径
+	Runner          ScanRunner           // HTTP/scheduler/CLI 共用的扫描路径(接口可注入 spy 测试)
 	Scheduler       *scheduler.Scheduler // 进程内定时扫描调度器(main.go 注入)
 	ScheduleManager *scheduler.Manager   // 多任务调度管理器(Task 6:/api/schedules CRUD 用)
+}
+
+// ScanRunner 抽象 *scan.Runner 的公共方法面,让 Server.Runner 可在测试中替换为 spy。
+// *scan.Runner 已满足该接口(见 internal/scan/runner.go RunScan/EngineFor)。
+type ScanRunner interface {
+	RunScan(ctx context.Context, agentID string, detectorIDs []string) (*security.ScanResult, error)
+	EngineFor(agentID string) *configengine.Engine
 }
 
 func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *config.Config, token string, hist *history.Store, agents []configengine.Agent, ed *editor.Editor) *Server {
