@@ -20,14 +20,14 @@ func TestRunnerRunScanWritesHistory(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(claude, "settings.json"), []byte(`{"permissions":{"allow":["Bash(*)"]}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	eng := configengine.NewEngine(dir, "")
+	agents := configengine.DefaultAgents(dir, "")
 	r := security.NewRegistry()
 	r.Register(security.NewRulesDetector(dir, nil))
 	orch := &security.Orchestrator{Registry: r}
 	hist := history.NewStore(filepath.Join(dir, "history"))
-	runner := NewRunner(eng, orch, hist)
+	runner := NewRunner(agents, orch, hist)
 
-	res, err := runner.RunScan(context.Background(), nil)
+	res, err := runner.RunScan(context.Background(), "", nil)
 	if err != nil {
 		t.Fatalf("RunScan: %v", err)
 	}
@@ -49,16 +49,62 @@ func TestRunnerRunScanWritesHistory(t *testing.T) {
 
 func TestRunnerNilHistoryNoPanic(t *testing.T) {
 	dir := t.TempDir()
-	eng := configengine.NewEngine(dir, "")
+	agents := configengine.DefaultAgents(dir, "")
 	r := security.NewRegistry()
 	r.Register(security.NewRulesDetector(dir, nil))
 	orch := &security.Orchestrator{Registry: r}
-	runner := NewRunner(eng, orch, nil) // History nil
-	res, err := runner.RunScan(context.Background(), nil)
+	runner := NewRunner(agents, orch, nil) // History nil
+	res, err := runner.RunScan(context.Background(), "", nil)
 	if err != nil {
 		t.Fatalf("RunScan: %v", err)
 	}
 	if res == nil {
 		t.Error("res 不应 nil")
+	}
+}
+
+func TestRunScanSelectsAgentByID(t *testing.T) {
+	// 构造两个 agent 指向不同 claudeDir,验证 RunScan(agentID) 扫对应目录。
+	home := t.TempDir()
+	dirA := filepath.Join(home, "agentA")
+	dirB := filepath.Join(home, "agentB")
+	os.MkdirAll(filepath.Join(dirA, ".claude"), 0o755)
+	os.MkdirAll(filepath.Join(dirB, ".claude"), 0o755)
+	// 各放一个不同 settings.json 以区分
+	os.WriteFile(filepath.Join(dirA, ".claude", "settings.json"), []byte(`{"model":"A"}`), 0o644)
+	os.WriteFile(filepath.Join(dirB, ".claude", "settings.json"), []byte(`{"model":"B"}`), 0o644)
+
+	agents := []configengine.Agent{
+		{ID: "a", Name: "A", RootDir: filepath.Join(dirA, ".claude"), ClaudeJSON: "", HomeDir: home},
+		{ID: "b", Name: "B", RootDir: filepath.Join(dirB, ".claude"), ClaudeJSON: "", HomeDir: home},
+	}
+	r := NewRunner(agents, &security.Orchestrator{}, nil)
+	eng := r.EngineFor("b")
+	if eng == nil || eng.ClaudeDir != filepath.Join(dirB, ".claude") {
+		t.Fatalf("EngineFor(b) 应返回 B 的 Engine: %+v", eng)
+	}
+}
+
+func TestRunScanFallsBackToFirstAgentWhenIDEmpty(t *testing.T) {
+	home := t.TempDir()
+	agents := []configengine.Agent{
+		{ID: "first", RootDir: filepath.Join(home, ".claude1"), HomeDir: home},
+		{ID: "second", RootDir: filepath.Join(home, ".claude2"), HomeDir: home},
+	}
+	r := NewRunner(agents, &security.Orchestrator{}, nil)
+	eng := r.EngineFor("")
+	if eng == nil || eng.ClaudeDir != filepath.Join(home, ".claude1") {
+		t.Fatalf("空 agentID 应回退首 agent: %+v", eng)
+	}
+}
+
+func TestEngineForCachesByAgentID(t *testing.T) {
+	home := t.TempDir()
+	agents := []configengine.Agent{{ID: "x", RootDir: filepath.Join(home, ".claude"), HomeDir: home}}
+	r := NewRunner(agents, &security.Orchestrator{}, nil)
+	e1 := r.EngineFor("x")
+	e2 := r.EngineFor("x")
+	if e1 != e2 {
+		t.Fatal("同 agentID 应返回缓存的同一 Engine 实例")
 	}
 }

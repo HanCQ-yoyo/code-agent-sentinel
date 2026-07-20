@@ -136,7 +136,8 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	// Stop 是 nil-safe 空操作,见 scheduler.go Stop 的 !s.running 分支)。
 	interval, schedEnabled := resolveSchedulerInterval(cfg)
 	sched := scheduler.New(interval, func(ctx context.Context) error {
-		_, err := srv.Runner.RunScan(ctx, nil)
+		// Task 4 临时:scheduler 回调先传空 agentID 回退首 agent。Task 9 接配置/请求选 agent。
+		_, err := srv.Runner.RunScan(ctx, "", nil)
 		return err
 	})
 	srv.Scheduler = sched

@@ -40,7 +40,9 @@ func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *confi
 	if len(agents) > 0 {
 		current = agents[0].ID
 	}
-	return &Server{Engine: eng, Orchestrator: orch, Config: cfg, Token: token, History: hist, Agents: agents, SelectedAgentID: current, Editor: ed, Runner: scan.NewRunner(eng, orch, hist)}
+	// Task 4 临时:server 还未持真实 agents 列表,用单 agent 包一层让 NewRunner 编译过。
+	// Task 8 会用真实 agents 列表替换(NewServer 已收 agents 参数,直接透传即可)。
+	return &Server{Engine: eng, Orchestrator: orch, Config: cfg, Token: token, History: hist, Agents: agents, SelectedAgentID: current, Editor: ed, Runner: scan.NewRunner([]configengine.Agent{{ID: "claude-code", RootDir: eng.ClaudeDir, ClaudeJSON: eng.ClaudeJSON, HomeDir: eng.HomeDir}}, orch, hist)}
 }
 
 func (s *Server) Router() *gin.Engine {

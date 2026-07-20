@@ -54,7 +54,8 @@ func runScanCmd(cmd *cobra.Command, cfgPath, detectorsFlag string) error {
 	r.Register(security.NewDependencyDetector(cfg.Detectors))
 	orch := &security.Orchestrator{Registry: r}
 	hist := history.NewStore(filepath.Join(home, ".claude-sentinel", "history"))
-	runner := scan.NewRunner(eng, orch, hist)
+	// Task 4 临时:scan_cmd 还未解析 --agent,先单 agent 包一层 + 空 agentID 回退首 agent。Task 10 接 --agent。
+	runner := scan.NewRunner([]configengine.Agent{{ID: "claude-code", RootDir: eng.ClaudeDir, ClaudeJSON: eng.ClaudeJSON, HomeDir: eng.HomeDir}}, orch, hist)
 
 	var ids []string
 	if detectorsFlag != "" {
@@ -62,7 +63,7 @@ func runScanCmd(cmd *cobra.Command, cfgPath, detectorsFlag string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	res, err := runner.RunScan(ctx, ids)
+	res, err := runner.RunScan(ctx, "", ids)
 	if err != nil {
 		return fmt.Errorf("扫描失败: %w", err)
 	}

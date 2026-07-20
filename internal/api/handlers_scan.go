@@ -18,7 +18,8 @@ func (s *Server) postScan(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
 	defer cancel()
-	res, err := s.Runner.RunScan(ctx, ids)
+	// Task 4 临时:postScan 还未从请求读 agentID,先传空回退首 agent。Task 9 接 /api/scan?agent=...
+	res, err := s.Runner.RunScan(ctx, "", ids)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errorBody("scan_failed", err.Error()))
 		return

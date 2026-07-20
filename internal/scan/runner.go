@@ -7,28 +7,58 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"sync"
 
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/history"
 	"code-agent-sentinel/internal/security"
 )
 
-// Runner 持有一次扫描所需的依赖(无状态,可被 HTTP/scheduler/CLI 共享)。
+// Runner 持有多 agent 的扫描依赖(Engine 按需懒构造并缓存)。
 type Runner struct {
-	Engine       *configengine.Engine
+	agents       []configengine.Agent
 	Orchestrator *security.Orchestrator
 	History      *history.Store
+	mu           sync.Mutex
+	engines      map[string]*configengine.Engine // agentID → Engine,懒构造
 }
 
-// NewRunner 构造一个共享的扫描 Runner。
-func NewRunner(eng *configengine.Engine, orch *security.Orchestrator, hist *history.Store) *Runner {
-	return &Runner{Engine: eng, Orchestrator: orch, History: hist}
+// NewRunner 构造一个共享的扫描 Runner,持多个 agent。
+func NewRunner(agents []configengine.Agent, orch *security.Orchestrator, hist *history.Store) *Runner {
+	return &Runner{agents: agents, Orchestrator: orch, History: hist, engines: map[string]*configengine.Engine{}}
 }
 
-// RunScan 执行发现→扫描→持久化历史。detectorIDs 空 = 全量检测器。
+// EngineFor 返回 agentID 对应的 Engine(懒构造并缓存)。空 agentID 回退首 agent。
+func (r *Runner) EngineFor(agentID string) *configengine.Engine {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if agentID == "" && len(r.agents) > 0 {
+		agentID = r.agents[0].ID
+	}
+	if eng, ok := r.engines[agentID]; ok {
+		return eng
+	}
+	// 找 agent 描述
+	var a configengine.Agent
+	for _, x := range r.agents {
+		if x.ID == agentID {
+			a = x
+			break
+		}
+	}
+	if a.ID == "" && len(r.agents) > 0 {
+		a = r.agents[0] // 兜底
+	}
+	eng := configengine.NewEngineFromAgent(a)
+	r.engines[agentID] = eng
+	return eng
+}
+
+// RunScan 执行发现→扫描→持久化历史。agentID 空=回退首 agent;detectorIDs 空=全量检测器。
 // 历史写入失败不阻断(降级体验,与原 postScan 一致)。
-func (r *Runner) RunScan(ctx context.Context, detectorIDs []string) (*security.ScanResult, error) {
-	inv, err := r.Engine.Discover()
+func (r *Runner) RunScan(ctx context.Context, agentID string, detectorIDs []string) (*security.ScanResult, error) {
+	eng := r.EngineFor(agentID)
+	inv, err := eng.Discover()
 	if err != nil {
 		return nil, fmt.Errorf("发现资产失败: %w", err)
 	}
@@ -36,7 +66,7 @@ func (r *Runner) RunScan(ctx context.Context, detectorIDs []string) (*security.S
 	if err != nil {
 		return nil, fmt.Errorf("扫描失败: %w", err)
 	}
-	r.saveHistory("", res, &inv)
+	r.saveHistory(agentID, res, &inv)
 	return res, nil
 }
 
