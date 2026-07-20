@@ -67,7 +67,13 @@
     "defaultBinary": "默认 {{name}}",
     "saveConfig": "保存配置",
     "noRules": "暂无规则",
-    "rulesConfig": "规则配置"
+    "rulesConfig": "规则配置",
+    "agentsTab": "Code Agents",
+    "agentsReadonlyHint": "已启用的 code agent",
+    "agentsReadonlyDesc": "修改请运行 `sentinel setup` 并重启 sentinel",
+    "agentName": "名称",
+    "rootDir": "配置根目录",
+    "claudeJson": "机器管理文件"
   },
   "findingDrawer": {
     "title": "风险详情",
