@@ -176,3 +176,72 @@ pinned_projects:
 		t.Errorf("PinnedProjects: %+v", cfg.PinnedProjects)
 	}
 }
+
+func TestResolveAgentsUsesAgentsWhenNonEmpty(t *testing.T) {
+	home := t.TempDir()
+	c := &Config{Agents: []AgentCfg{
+		{ID: "claude-code", Enabled: true, RootDir: "/custom/.claude"},
+	}}
+	got := c.ResolveAgents(home)
+	if len(got) != 1 || got[0].ID != "claude-code" || got[0].RootDir != "/custom/.claude" {
+		t.Fatalf("ResolveAgents 应直用 agents: %+v", got)
+	}
+}
+
+func TestResolveAgentsFillsDefaultPaths(t *testing.T) {
+	home := t.TempDir()
+	c := &Config{Agents: []AgentCfg{{ID: "claude-code", Enabled: true}}}
+	got := c.ResolveAgents(home)
+	if got[0].RootDir != filepath.Join(home, ".claude") {
+		t.Errorf("空 RootDir 应填默认: got %q", got[0].RootDir)
+	}
+	if got[0].ClaudeJSON != filepath.Join(home, ".claude.json") {
+		t.Errorf("空 ClaudeJSON 应填默认: got %q", got[0].ClaudeJSON)
+	}
+}
+
+func TestResolveAgentsFallsBackToClaudeDir(t *testing.T) {
+	home := t.TempDir()
+	c := &Config{ClaudeDir: "/old/.claude"} // Agents 空
+	got := c.ResolveAgents(home)
+	if len(got) != 1 || got[0].ID != "claude-code" || !got[0].Enabled {
+		t.Fatalf("Agents 空应回退 claude_dir 构造单 agent: %+v", got)
+	}
+	if got[0].RootDir != "/old/.claude" {
+		t.Errorf("回退 RootDir 应=claude_dir: got %q", got[0].RootDir)
+	}
+}
+
+func TestResolveAgentsFallsBackToDefaultWhenAllEmpty(t *testing.T) {
+	home := t.TempDir()
+	c := &Config{} // Agents 与 ClaudeDir 都空
+	got := c.ResolveAgents(home)
+	if len(got) != 1 || got[0].RootDir != filepath.Join(home, ".claude") {
+		t.Fatalf("全空应回退默认 home/.claude: %+v", got)
+	}
+}
+
+func TestResolveSchedulesUsesSchedulesWhenNonEmpty(t *testing.T) {
+	c := &Config{Schedules: []ScheduleCfg{{AgentID: "claude-code", Enabled: true, Interval: "30m"}}}
+	got := c.ResolveSchedules(nil)
+	if len(got) != 1 || got[0].AgentID != "claude-code" || got[0].Interval != "30m" {
+		t.Fatalf("ResolveSchedules 应直用 schedules: %+v", got)
+	}
+}
+
+func TestResolveSchedulesFallsBackToScanEnabled(t *testing.T) {
+	c := &Config{ScanEnabled: true, ScanInterval: "1h"}
+	agents := []AgentCfg{{ID: "claude-code", Enabled: true}}
+	got := c.ResolveSchedules(agents)
+	if len(got) != 1 || got[0].AgentID != "claude-code" || got[0].Interval != "1h" || !got[0].Enabled {
+		t.Fatalf("Schedules 空应回退 scan_* 造首 agent 任务: %+v", got)
+	}
+}
+
+func TestResolveSchedulesEmptyWhenScanDisabled(t *testing.T) {
+	c := &Config{ScanEnabled: false, ScanInterval: ""}
+	got := c.ResolveSchedules([]AgentCfg{{ID: "claude-code", Enabled: true}})
+	if len(got) != 0 {
+		t.Fatalf("scan 关闭且回退时应返回空: %+v", got)
+	}
+}

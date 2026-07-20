@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"path/filepath"
+	"time"
 
 	"gopkg.in/yaml.v3"
 )
@@ -48,6 +49,10 @@ type Config struct {
 	Language string `yaml:"language"`
 	// #4:置顶项目列表
 	PinnedProjects []PinnedProject `yaml:"pinned_projects"`
+	// 多 agent 配置(setup 写入)。空 → ResolveAgents 回退到 ClaudeDir。
+	Agents []AgentCfg `yaml:"agents" json:"agents"`
+	// 多任务调度:每个 agent 一个定时扫描任务。空 → ResolveSchedules 回退到 ScanEnabled/ScanInterval。
+	Schedules []ScheduleCfg `yaml:"schedules" json:"schedules"`
 }
 
 // DiscoveryCfg 控制资产发现范围(按资产类型开关)。configengine 不导入本包,
@@ -60,6 +65,21 @@ type DiscoveryCfg struct {
 type PinnedProject struct {
 	Path  string `yaml:"path" json:"path"`
 	Color string `yaml:"color" json:"color"`
+}
+
+// AgentCfg 是单个 code agent 的用户配置(setup 写入)。
+type AgentCfg struct {
+	ID         string `yaml:"id"          json:"id"`          // "claude-code"
+	Enabled    bool   `yaml:"enabled"     json:"enabled"`     // setup 勾选结果
+	RootDir    string `yaml:"root_dir"    json:"root_dir"`    // 配置根:~/.claude;空=默认
+	ClaudeJSON string `yaml:"claude_json" json:"claude_json"` // 机器管理文件:~/.claude.json;空=默认
+}
+
+// ScheduleCfg 是单个 agent 的定时扫描任务配置。
+type ScheduleCfg struct {
+	AgentID  string `yaml:"agent_id" json:"agent_id"` // "claude-code"
+	Enabled  bool   `yaml:"enabled"  json:"enabled"`
+	Interval string `yaml:"interval" json:"interval"` // "30m"/"1h";空/0/无效=关
 }
 
 func DefaultConfig() *Config {
@@ -122,6 +142,55 @@ func (c *Config) ResolveClaudeDir(home string) string {
 		return c.ClaudeDir
 	}
 	return filepath.Join(home, ".claude")
+}
+
+// ResolveAgents 解析启用的 agent 列表。
+// Agents 非空 → 直用(逐项空字段填默认);为空 → 用旧 ClaudeDir 回退构造单项 claude-code。
+// 保证旧配置(claude_dir)零破坏。
+func (c *Config) ResolveAgents(home string) []AgentCfg {
+	if len(c.Agents) > 0 {
+		out := make([]AgentCfg, len(c.Agents))
+		for i, a := range c.Agents {
+			a.RootDir = resolveDefault(a.RootDir, filepath.Join(home, ".claude"))
+			a.ClaudeJSON = resolveDefault(a.ClaudeJSON, filepath.Join(home, ".claude.json"))
+			out[i] = a
+		}
+		return out
+	}
+	// 回退:用 ClaudeDir(可能空 → 默认 home/.claude)构造单项。
+	return []AgentCfg{{
+		ID:         "claude-code",
+		Enabled:    true,
+		RootDir:    c.ResolveClaudeDir(home),
+		ClaudeJSON: filepath.Join(home, ".claude.json"),
+	}}
+}
+
+// ResolveSchedules 解析定时任务列表。
+// Schedules 非空 → 直用;为空且旧 ScanEnabled+ScanInterval 有效 → 回退造首 agent 单任务。
+func (c *Config) ResolveSchedules(agents []AgentCfg) []ScheduleCfg {
+	if len(c.Schedules) > 0 {
+		return c.Schedules
+	}
+	if !c.ScanEnabled || c.ScanInterval == "" {
+		return nil
+	}
+	if d, err := time.ParseDuration(c.ScanInterval); err != nil || d <= 0 {
+		return nil
+	}
+	firstAgent := "claude-code"
+	if len(agents) > 0 {
+		firstAgent = agents[0].ID
+	}
+	return []ScheduleCfg{{AgentID: firstAgent, Enabled: true, Interval: c.ScanInterval}}
+}
+
+// resolveDefault 空串返回 def,否则返回 v。供 ResolveAgents 填默认路径用。
+func resolveDefault(v, def string) string {
+	if v == "" {
+		return def
+	}
+	return v
 }
 
 // ResolveSuppressPath 返回 suppressions 文件路径。空=默认 <home>/.claude-sentinel/suppressions.yaml。
