@@ -86,7 +86,7 @@ export interface RawFile {
 
 export interface ScanSummary {
   id: string; started_at: string; health_score: number; band: string
-  finding_count: number; detector_avail: number; detector_total: number
+  finding_count: number; detector_avail: number; detector_total: number; agent_id: string
 }
 export interface AgentsResponse { agents: Agent[]; current: string }
 

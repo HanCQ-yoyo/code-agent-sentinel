@@ -54,6 +54,7 @@
   "history": {
     "backToList": "Back to history list",
     "colTime": "Time",
+    "agent": "Agent",
     "colRiskScore": "Risk Score",
     "colFindings": "Findings",
     "colDetectors": "Detectors",

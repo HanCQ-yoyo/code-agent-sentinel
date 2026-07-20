@@ -25,7 +25,7 @@ function riskColor(score: number): string {
 export default function History() {
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
-  const { history, fetchHistory, fetchHistoryDetail, deleteHistory } = useStore()
+  const { history, agents, fetchHistory, fetchHistoryDetail, deleteHistory } = useStore()
   const [detail, setDetail] = useState<ScanRecord | null>(null)
   const [err, setErr] = useState('')
 
@@ -55,6 +55,7 @@ export default function History() {
 
   const columns: ColumnsType<ScanSummary> = [
     { title: t('history.colTime'), dataIndex: 'started_at', width: 150, render: (time: string, h: ScanSummary) => <Link to={`/history/${h.id}`}><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{formatDateTimeShort(time)}</span></Link> },
+    { title: t('history.agent'), dataIndex: 'agent_id', width: 120, render: (id: string) => agents?.agents?.find(a => a.id === id)?.name ?? id ?? '-' },
     { title: t('history.colRiskScore'), width: 90, render: (_: unknown, h: ScanSummary) => (
       <span title={h.band} style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: riskColor(h.health_score) }}>{h.health_score}</span>
     ) },

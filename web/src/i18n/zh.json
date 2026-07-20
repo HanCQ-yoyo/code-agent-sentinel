@@ -54,6 +54,7 @@
   "history": {
     "backToList": "返回历史列表",
     "colTime": "时间",
+    "agent": "Agent",
     "colRiskScore": "风险指数",
     "colFindings": "发现",
     "colDetectors": "检测器",
