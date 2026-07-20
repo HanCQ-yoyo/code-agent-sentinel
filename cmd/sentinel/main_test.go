@@ -75,30 +75,32 @@ func TestClaudeDirFlagRegistered(t *testing.T) {
 	}
 }
 
-// TestResolveSchedulerInterval 验证 Task 10:定时扫描配置解析。
-// run() 启动真实 HTTP server 难以单测,故抽 resolveSchedulerInterval 纯函数单测。
-// 总开关关 / 间隔空 / 无效 → (0, false);否则 (interval, true)。
-func TestResolveSchedulerInterval(t *testing.T) {
-	cases := []struct {
-		enabled  bool
-		interval string
-		wantDur  string
-		wantEn   bool
-	}{
-		{false, "30m", "0s", false},  // 总开关关 → 不启用
-		{true, "", "0s", false},      // 间隔空 → 不启用
-		{true, "bad", "0s", false},   // 无效 → 不启用
-		{true, "30m", "30m0s", true}, // 正常
-		{true, "1h", "1h0m0s", true},
+// TestShouldPromptSetupWhenUnconfigured 验证 Task 8:Agents 空 + ClaudeDir 空 +
+// 默认 ~/.claude 不存在时,run() 应打印 setup 提示。抽 shouldPromptSetup 纯函数单测
+// (run() 启动真实 HTTP server 阻塞,无法直接测)。
+func TestShouldPromptSetupWhenUnconfigured(t *testing.T) {
+	cfg := &config.Config{} // Agents 与 ClaudeDir 都空
+	if !shouldPromptSetup(cfg, "/nonexistent/.claude") {
+		t.Error("Agents 空 + .claude 不存在应提示 setup")
 	}
-	for _, c := range cases {
-		cfg := &config.Config{ScanEnabled: c.enabled, ScanInterval: c.interval}
-		dur, en := resolveSchedulerInterval(cfg)
-		if en != c.wantEn {
-			t.Errorf("enabled=%v interval=%q: want en=%v got %v", c.enabled, c.interval, c.wantEn, en)
-		}
-		if c.wantEn && dur.String() != c.wantDur {
-			t.Errorf("interval=%q: want dur=%q got %q", c.interval, c.wantDur, dur)
-		}
+}
+
+// TestShouldNotPromptWhenClaudeDirSet 验证:用户显式配置 claude_dir(回退路径)
+// 不应提示——属正常默认。
+func TestShouldNotPromptWhenClaudeDirSet(t *testing.T) {
+	cfg := &config.Config{ClaudeDir: "/some/.claude"}
+	if shouldPromptSetup(cfg, "/some/.claude") {
+		t.Error("ClaudeDir 非空(回退路径)不应提示")
+	}
+}
+
+// TestShouldNotPromptWhenClaudeDirExists 验证:默认 ~/.claude 已存在(回退路径)
+// 不应提示——属正常默认。
+func TestShouldNotPromptWhenClaudeDirExists(t *testing.T) {
+	home := t.TempDir()
+	os.MkdirAll(filepath.Join(home, ".claude"), 0o755)
+	cfg := &config.Config{}
+	if shouldPromptSetup(cfg, filepath.Join(home, ".claude")) {
+		t.Error("默认 .claude 存在不应提示")
 	}
 }

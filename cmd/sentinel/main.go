@@ -12,7 +12,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
-	"time"
 
 	"github.com/spf13/cobra"
 
@@ -101,15 +100,32 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 		}
 		home = h
 	}
-	// #2:.claude 目录解析:--claude-dir > cfg.ClaudeDir > home/.claude
-	claudeDir := cfg.ResolveClaudeDir(home)
+	// #2:.claude 目录解析:--claude-dir > cfg.ClaudeDir > home/.claude。
+	// Task 8:--claude-dir 写回 cfg.ClaudeDir,使 ResolveAgents 的回退路径
+	// (Agents 空 → 用 ClaudeDir 构造单项 claude-code)与 shouldPromptSetup 都能 honor flag。
+	// ResolveAgents/shouldPromptSetup 直接读 cfg.ClaudeDir,无需保留本地 claudeDir 变量。
 	if claudeDirFlag != "" {
-		claudeDir = claudeDirFlag
+		cfg.ClaudeDir = claudeDirFlag
 	}
 
 	cfg.EnsureDetectors() // 确保 Detectors 非 nil,检测器持其指针,API 写原地生效
-	eng := configengine.NewEngine(home, claudeDir)
-	// #2:发现范围桥接(config 不导入 configengine,在此转 []AssetType)
+
+	// 多 agent:从 config 解析 enabled agents,桥接为 configengine.Agent。
+	agentCfgs := cfg.ResolveAgents(home)
+	agentItems := make([]configengine.AgentItem, 0, len(agentCfgs))
+	for _, a := range agentCfgs {
+		if a.Enabled {
+			agentItems = append(agentItems, configengine.AgentItem{ID: a.ID, Enabled: a.Enabled, RootDir: a.RootDir, ClaudeJSON: a.ClaudeJSON})
+		}
+	}
+	engAgents := configengine.AgentsFromSpecs(home, agentItems)
+	if len(engAgents) == 0 {
+		return fmt.Errorf("无启用的 code agent,运行 sentinel setup 配置")
+	}
+	// 本轮 Engine 仍取首个(Runner 内部按 agentID 池化,扫描时选)
+	eng := configengine.NewEngineFromAgent(engAgents[0])
+	// #2:发现范围桥接(config 不导入 configengine,在此转 []AssetType)。
+	// NewEngineFromAgent 返回的 Engine 的 DisabledAssetTypes 为空,这里从 config 回填。
 	if cfg.Discovery != nil {
 		for _, s := range cfg.Discovery.DisabledAssetTypes {
 			eng.DisabledAssetTypes = append(eng.DisabledAssetTypes, configengine.AssetType(s))
@@ -129,22 +145,19 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	histPath := filepath.Join(home, ".claude-sentinel", "history")
 	hist := history.NewStore(histPath)
 	ed := editor.New(eng, cfg.BackupDir, cfg.MaxBackups)
-	srv := api.NewServer(eng, orch, cfg, token, hist, configengine.DefaultAgents(home, claudeDir), ed)
+	srv := api.NewServer(eng, orch, cfg, token, hist, engAgents, ed)
 	srv.ConfigPath = cfgPath
-	// #1:进程内定时扫描。构造 scheduler 并注入 srv,使 /api/scheduler 端点可读/重配;
-	// 仅在总开关开且间隔有效时 Start()。defer Stop 无条件注册(未 Start 的 scheduler
-	// Stop 是 nil-safe 空操作,见 scheduler.go Stop 的 !s.running 分支)。
-	interval, schedEnabled := resolveSchedulerInterval(cfg)
-	sched := scheduler.New(interval, func(ctx context.Context) error {
-		// Task 4 临时:scheduler 回调先传空 agentID 回退首 agent。Task 9 接配置/请求选 agent。
-		_, err := srv.Runner.RunScan(ctx, "", nil)
-		return err
+	// 多任务调度:每 agent 一个 Scheduler,Manager 增量同步。
+	// makeRun 按 agentID 闭包 srv.Runner.RunScan(内部 EngineFor 按 agentID 池化选 Engine)。
+	mgr := scheduler.NewManager(func(agentID string) func(context.Context) error {
+		return func(ctx context.Context) error {
+			_, err := srv.Runner.RunScan(ctx, agentID, nil)
+			return err
+		}
 	})
-	srv.Scheduler = sched
-	if schedEnabled {
-		sched.Start()
-	}
-	defer sched.Stop()
+	srv.ScheduleManager = mgr
+	mgr.Apply(cfg.ResolveSchedules(agentCfgs))
+	defer mgr.Stop()
 	httpSrv := &http.Server{Handler: srv.Router()}
 
 	ln, err := net.Listen("tcp", api.ResolveListenAddr(cfg))
@@ -180,20 +193,28 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 			fmt.Printf("非 loopback 绑定未自动打开浏览器;请手动复制访问: %s#token=%s\n", am.URL, token)
 		}
 	}
+	// Task 8:首次无配置提示。Agents 空 且 ClaudeDir 空 且 默认 ~/.claude 不存在时,
+	// 提示用户运行 setup(ResolveAgents 会回退到默认 home/.claude,服务仍可启动)。
+	if shouldPromptSetup(cfg, filepath.Join(home, ".claude")) {
+		fmt.Println("提示:尚未配置 code agent。运行 `sentinel setup` 进行交互式配置。")
+	}
 	httpSrv.Serve(ln)
 	return nil
 }
 
-// resolveSchedulerInterval 解析定时扫描配置:总开关关 / 间隔空 / 无效 → (0, false);否则 (interval, true)。
-func resolveSchedulerInterval(cfg *config.Config) (time.Duration, bool) {
-	if !cfg.ScanEnabled || cfg.ScanInterval == "" {
-		return 0, false
+// shouldPromptSetup 判断是否提示运行 setup:Agents 空 且 ClaudeDir 空 且 默认 ~/.claude 不存在。
+// 回退路径(claude_dir 非空或 ~/.claude 存在)属正常默认,不打扰。
+func shouldPromptSetup(cfg *config.Config, defaultClaudeDir string) bool {
+	if len(cfg.Agents) > 0 {
+		return false
 	}
-	d, err := time.ParseDuration(cfg.ScanInterval)
-	if err != nil || d <= 0 {
-		return 0, false
+	if cfg.ClaudeDir != "" {
+		return false
 	}
-	return d, true
+	if _, err := os.Stat(defaultClaudeDir); err == nil {
+		return false // 默认 .claude 存在,用回退即可
+	}
+	return true
 }
 
 type accessMethod struct {

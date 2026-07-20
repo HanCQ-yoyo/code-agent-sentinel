@@ -41,9 +41,9 @@ func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *confi
 	if len(agents) > 0 {
 		current = agents[0].ID
 	}
-	// Task 4 临时:server 还未持真实 agents 列表,用单 agent 包一层让 NewRunner 编译过。
-	// Task 8 会用真实 agents 列表替换(NewServer 已收 agents 参数,直接透传即可)。
-	return &Server{Engine: eng, Orchestrator: orch, Config: cfg, Token: token, History: hist, Agents: agents, SelectedAgentID: current, Editor: ed, Runner: scan.NewRunner([]configengine.Agent{{ID: "claude-code", RootDir: eng.ClaudeDir, ClaudeJSON: eng.ClaudeJSON, HomeDir: eng.HomeDir}}, orch, hist)}
+	// Task 8:Runner 持真实 agents 列表(由 main.go 从 config 解析传入),
+	// 内部按 agentID 池化 Engine,扫描时按请求/调度选 agent。
+	return &Server{Engine: eng, Orchestrator: orch, Config: cfg, Token: token, History: hist, Agents: agents, SelectedAgentID: current, Editor: ed, Runner: scan.NewRunner(agents, orch, hist)}
 }
 
 func (s *Server) Router() *gin.Engine {
