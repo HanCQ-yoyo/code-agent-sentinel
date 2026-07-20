@@ -13,7 +13,8 @@
     "no": "No",
     "noneWord": "None",
     "config": "Config",
-    "runtime": "Runtime"
+    "runtime": "Runtime",
+    "delete": "Delete"
   },
   "dashboard": {
     "detectorStatus": "Detector Status",
@@ -73,7 +74,15 @@
     "agentsReadonlyDesc": "To change, run `sentinel setup` and restart sentinel",
     "agentName": "Name",
     "rootDir": "Config root dir",
-    "claudeJson": "Machine management file"
+    "claudeJson": "Machine management file",
+    "schedulesTab": "Scheduled scans",
+    "addSchedule": "Add schedule",
+    "noSchedules": "No scheduled scans",
+    "confirmDeleteSchedule": "Delete this scheduled scan?",
+    "interval": "Interval",
+    "enabled": "Enabled",
+    "lastRun": "Last run",
+    "nextRun": "Next run"
   },
   "findingDrawer": {
     "title": "Finding Details",

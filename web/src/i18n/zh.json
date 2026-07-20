@@ -13,7 +13,8 @@
     "no": "否",
     "noneWord": "无",
     "config": "配置",
-    "runtime": "运行时"
+    "runtime": "运行时",
+    "delete": "删除"
   },
   "dashboard": {
     "detectorStatus": "检测器状态",
@@ -73,7 +74,15 @@
     "agentsReadonlyDesc": "修改请运行 `sentinel setup` 并重启 sentinel",
     "agentName": "名称",
     "rootDir": "配置根目录",
-    "claudeJson": "机器管理文件"
+    "claudeJson": "机器管理文件",
+    "schedulesTab": "定时扫描",
+    "addSchedule": "添加定时任务",
+    "noSchedules": "暂无定时任务",
+    "confirmDeleteSchedule": "确认删除此定时任务?",
+    "interval": "间隔",
+    "enabled": "启用",
+    "lastRun": "上次运行",
+    "nextRun": "下次运行"
   },
   "findingDrawer": {
     "title": "风险详情",

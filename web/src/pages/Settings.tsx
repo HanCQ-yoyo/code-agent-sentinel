@@ -6,6 +6,7 @@ import type { DetectorMeta, DetectorsConfig } from '../types'
 import { RulesTable } from '../components/RulesTable'
 import { DetectorPanel } from '../components/DetectorPanel'
 import { SettingsAgents } from './SettingsAgents'
+import { SettingsSchedules } from './SettingsSchedules'
 
 // 检测器配置控件:启用开关 + 二进制路径(rules 仅开关;secret 单二进制;dep 每引擎一行)。
 function DetectorConfigControls({ d, draft, setDraft }: { d: DetectorMeta; draft: DetectorsConfig | null; setDraft: (c: DetectorsConfig) => void }) {
@@ -92,6 +93,7 @@ export default function Settings() {
 
   const items = [
     { key: 'agents', label: t('settings.agentsTab'), children: <SettingsAgents /> },
+    { key: 'schedules', label: t('settings.schedulesTab'), children: <SettingsSchedules /> },
     { key: 'detectors-rules', label: t('settings.rulesConfig'), children: detectorsAndRules },
   ]
 
