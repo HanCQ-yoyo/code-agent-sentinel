@@ -1,0 +1,89 @@
+package scheduler
+
+import (
+	"context"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"code-agent-sentinel/internal/config"
+)
+
+func TestManagerApplyStartsTasksPerAgent(t *testing.T) {
+	var n int32
+	mk := func(agentID string) func(context.Context) error {
+		return func(context.Context) error { atomic.AddInt32(&n, 1); return nil }
+	}
+	m := NewManager(mk)
+	m.Apply([]config.ScheduleCfg{
+		{AgentID: "a", Enabled: true, Interval: "50ms"},
+		{AgentID: "b", Enabled: true, Interval: "50ms"},
+	})
+	time.Sleep(200 * time.Millisecond)
+	m.Stop()
+	got := atomic.LoadInt32(&n)
+	if got < 2 {
+		t.Fatalf("两个任务都应触发,各至少 1 次: got %d", got)
+	}
+}
+
+func TestManagerApplyStopsRemovedTask(t *testing.T) {
+	var n int32
+	mk := func(agentID string) func(context.Context) error {
+		return func(context.Context) error { atomic.AddInt32(&n, 1); return nil }
+	}
+	m := NewManager(mk)
+	m.Apply([]config.ScheduleCfg{{AgentID: "a", Enabled: true, Interval: "50ms"}})
+	time.Sleep(150 * time.Millisecond)
+	before := atomic.LoadInt32(&n)
+	m.Apply(nil) // 移除全部
+	time.Sleep(150 * time.Millisecond)
+	after := atomic.LoadInt32(&n)
+	if after > before {
+		t.Errorf("移除后不应再触发: before=%d after=%d", before, after)
+	}
+	m.Stop()
+}
+
+func TestManagerApplyReconfiguresChangedInterval(t *testing.T) {
+	var n int32
+	mk := func(agentID string) func(context.Context) error {
+		return func(context.Context) error { atomic.AddInt32(&n, 1); return nil }
+	}
+	m := NewManager(mk)
+	m.Apply([]config.ScheduleCfg{{AgentID: "a", Enabled: true, Interval: "50ms"}})
+	m.Apply([]config.ScheduleCfg{{AgentID: "a", Enabled: true, Interval: "200ms"}}) // 改间隔
+	st := m.Status()
+	if len(st) != 1 || st[0].Interval != 200*time.Millisecond {
+		t.Fatalf("应 Reconfigure 到新间隔: %+v", st)
+	}
+	m.Stop()
+}
+
+func TestManagerStatusAggregatesAll(t *testing.T) {
+	m := NewManager(func(string) func(context.Context) error {
+		return func(context.Context) error { return nil }
+	})
+	m.Apply([]config.ScheduleCfg{
+		{AgentID: "a", Enabled: true, Interval: "1m"},
+		{AgentID: "b", Enabled: false, Interval: "1m"},
+	})
+	st := m.Status()
+	if len(st) != 2 {
+		t.Fatalf("Status 应返回全部任务: got %d", len(st))
+	}
+	m.Stop()
+}
+
+func TestManagerApplyDisabledDoesNotStart(t *testing.T) {
+	var n int32
+	m := NewManager(func(string) func(context.Context) error {
+		return func(context.Context) error { atomic.AddInt32(&n, 1); return nil }
+	})
+	m.Apply([]config.ScheduleCfg{{AgentID: "a", Enabled: false, Interval: "50ms"}})
+	time.Sleep(150 * time.Millisecond)
+	if atomic.LoadInt32(&n) != 0 {
+		t.Errorf("disabled 任务不应触发: got %d", n)
+	}
+	m.Stop()
+}
