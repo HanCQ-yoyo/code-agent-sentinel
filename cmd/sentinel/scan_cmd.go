@@ -20,29 +20,44 @@ import (
 func newScanCmd() *cobra.Command {
 	var cfgPath string
 	var detectorsFlag string
+	var agentFlag string
 	cmd := &cobra.Command{
 		Use:   "scan",
 		Short: "执行一次性扫描并写入历史(不启动 HTTP server)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return runScanCmd(cmd, cfgPath, detectorsFlag)
+			return runScanCmd(cmd, cfgPath, detectorsFlag, agentFlag)
 		},
 	}
 	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.claude-sentinel/config.yaml)")
 	cmd.Flags().StringVar(&detectorsFlag, "detectors", "", "只跑指定检测器(逗号分隔 ID;空=全量)")
+	cmd.Flags().StringVar(&agentFlag, "agent", "", "指定扫描的 code agent ID(空=回退首 agent)")
 	return cmd
 }
 
 // runScanCmd 执行一次性扫描。复用 scan.Runner(discover→scan→saveHistory),
 // 检测器注册镜像 main.go run() / baseline_cmd runFullScan()。
-func runScanCmd(cmd *cobra.Command, cfgPath, detectorsFlag string) error {
+// 多 agent 解析镜像 main.go:ResolveAgents → 过滤 Enabled → AgentsFromSpecs → NewEngineFromAgent + NewRunner。
+func runScanCmd(cmd *cobra.Command, cfgPath, detectorsFlag, agentFlag string) error {
 	cfg, home, err := loadCfgAndHome(cfgPath)
 	if err != nil {
 		return err
 	}
 	cfg.EnsureDetectors() // 与 main.go 一致:检测器持 cfg.Detectors 指针
-	claudeDir := cfg.ResolveClaudeDir(home)
-	eng := configengine.NewEngine(home, claudeDir)
-	// 发现范围桥接(config 不导入 configengine,在此转 []AssetType)
+	// 多 agent:从 config 解析 enabled agents,桥接为 configengine.Agent(镜像 main.go run())。
+	agentCfgs := cfg.ResolveAgents(home)
+	agentItems := make([]configengine.AgentItem, 0, len(agentCfgs))
+	for _, a := range agentCfgs {
+		if a.Enabled {
+			agentItems = append(agentItems, configengine.AgentItem{ID: a.ID, Enabled: a.Enabled, RootDir: a.RootDir, ClaudeJSON: a.ClaudeJSON})
+		}
+	}
+	engAgents := configengine.AgentsFromSpecs(home, agentItems)
+	if len(engAgents) == 0 {
+		return fmt.Errorf("无启用的 code agent,运行 sentinel setup 配置")
+	}
+	// 本轮 Engine 仍取首个(Runner 内部按 agentID 池化,扫描时选)。
+	eng := configengine.NewEngineFromAgent(engAgents[0])
+	// 发现范围桥接(与 main.go 一致;NewEngineFromAgent 返回空 DisabledAssetTypes)。
 	if cfg.Discovery != nil {
 		for _, s := range cfg.Discovery.DisabledAssetTypes {
 			eng.DisabledAssetTypes = append(eng.DisabledAssetTypes, configengine.AssetType(s))
@@ -54,8 +69,7 @@ func runScanCmd(cmd *cobra.Command, cfgPath, detectorsFlag string) error {
 	r.Register(security.NewDependencyDetector(cfg.Detectors))
 	orch := &security.Orchestrator{Registry: r}
 	hist := history.NewStore(filepath.Join(home, ".claude-sentinel", "history"))
-	// Task 4 临时:scan_cmd 还未解析 --agent,先单 agent 包一层 + 空 agentID 回退首 agent。Task 10 接 --agent。
-	runner := scan.NewRunner([]configengine.Agent{{ID: "claude-code", RootDir: eng.ClaudeDir, ClaudeJSON: eng.ClaudeJSON, HomeDir: eng.HomeDir}}, orch, hist)
+	runner := scan.NewRunner(engAgents, orch, hist)
 
 	var ids []string
 	if detectorsFlag != "" {
@@ -63,7 +77,7 @@ func runScanCmd(cmd *cobra.Command, cfgPath, detectorsFlag string) error {
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	res, err := runner.RunScan(ctx, "", ids)
+	res, err := runner.RunScan(ctx, agentFlag, ids)
 	if err != nil {
 		return fmt.Errorf("扫描失败: %w", err)
 	}
