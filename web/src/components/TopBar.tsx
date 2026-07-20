@@ -26,9 +26,8 @@ function leafLabel(pathname: string, t: (k: string) => string): string | null {
 export function TopBar({ onScan, loading }: Props) {
   const { theme, toggle } = useTheme()
   const { t, i18n } = useTranslation()
-  const { agents, fetchAgents, language, saveLanguage } = useStore()
+  const { agents, selectedAgent, setSelectedAgent, fetchAgents, language, saveLanguage } = useStore()
   const loc = useLocation()
-  const currentAgent = agents?.current
 
   // 当前一级路由(用于面包屑首段)。navLabels 存 i18n key,需 t() 翻译。
   const root = loc.pathname === '/' ? '/dashboard' : `/${loc.pathname.split('/')[1]}`
@@ -66,10 +65,10 @@ export function TopBar({ onScan, loading }: Props) {
         <Select
           size="small"
           style={{ width: 150 }}
-          value={currentAgent ?? (agents?.agents?.[0]?.id ?? undefined)}
+          value={selectedAgent || agents?.agents?.[0]?.id || undefined}
           disabled={(agents?.agents?.length ?? 0) <= 1}
           options={(agents?.agents ?? []).map((a: Agent) => ({ value: a.id, label: `${agentMeta(a).icon} ${agentMeta(a).label}` }))}
-          onChange={() => { /* 单 agent 本轮无实际切换;未来多 agent 在此 dispatch */ }}
+          onChange={setSelectedAgent}
         />
       </Space>
       <Space size="middle">
