@@ -7,12 +7,20 @@ test.beforeAll(async () => {
   // playwright.config.ts 的 webServer.command 传了 --config /tmp/sentinel-e2e-home/.claude-sentinel/config.yaml,
   // 故 sentinel 实际读写该沙箱路径(不再碰开发者真实 ~/.claude-sentinel/config.yaml)。
   // unlinkSync 够得到该路径:每次 e2e 运行前清空上次残留;config.Load 对缺失文件返回默认空配置,
-  // sentinel 启动不受影响。再叠加下面的 API PUT 清空 pinned_projects 作双保险。
+  // sentinel 启动不受影响。再叠加下面的 API PUT 清空 pinned_projects + favorites 作双保险。
+  // API 清空是必需的:reuseExistingServer=true 时 sentinel 进程复用,unlink 磁盘配置不会让运行中
+  // 进程重读,favorites/pinned_projects 残留在内存里跨测试污染(如收藏置顶测试首行已是被收藏项
+  // → 点星标变取消收藏 → 计数 Tag 消失 → flaky)。故每次运行前 PUT 清空运行中进程的两者。
   try {
     await fetch('http://127.0.0.1:41999/api/pinned-projects', {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json', Authorization: 'Bearer e2e-test-token-123' },
       body: JSON.stringify({ pinned_projects: [] }),
+    })
+    await fetch('http://127.0.0.1:41999/api/favorites', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json', Authorization: 'Bearer e2e-test-token-123' },
+      body: JSON.stringify({ favorites: [] }),
     })
   } catch { /* server 未就绪(webServer 尚未启动)*/ }
   try { unlinkSync('/tmp/sentinel-e2e-home/.claude-sentinel/config.yaml') } catch { /* 首次运行无文件 */ }
@@ -35,6 +43,21 @@ test.beforeAll(async () => {
   writeFileSync('/tmp/sentinel-e2e-home/.claude.json', JSON.stringify({ projects: { '/tmp/sentinel-e2e-home/myproj': {} } }))
   mkdirSync('/tmp/sentinel-e2e-home/myproj/.claude', { recursive: true })
   writeFileSync('/tmp/sentinel-e2e-home/myproj/.claude/settings.json', '{"model":"opus"}')
+})
+
+// 多语种:前端默认英文(见 i18n/index.ts 的 fallbackLng:'en'),但本套 e2e 的断言大量用中文
+// 定位器(/资产/i、'风险信息' 等)。为避免逐条改断言,用 beforeEach 在每个测试(除默认英文相关
+// 测试外)的每次导航前注入 localStorage sentinel.lang=zh,使 UI 以中文渲染,现有中文断言继续有效。
+// 默认英文相关测试标题以「[默认英文]」前缀标记,beforeEach 见此标记则跳过注入,验证 fallbackLng=en。
+// 不用 base.extend + export test:导出 test 对象会让 Playwright 把测试文件当模块加载,
+// 模块顶层执行 base.extend 会破坏 currentSuite 上下文,使 test.beforeAll 抛
+// "did not expect test.beforeAll() to be called here"(见 git 历史)。
+const EN_MARKER = '[默认英文]'
+test.beforeEach(async ({ page }, testInfo) => {
+  if (testInfo.title.includes(EN_MARKER)) return
+  await page.addInitScript(() => {
+    window.localStorage.setItem('sentinel.lang', 'zh')
+  })
 })
 
 test('dashboard 带 token 认证后扫描并返回数据依赖结果', async ({ page }) => {
@@ -195,12 +218,17 @@ test('结构化资产详情渲染', async ({ page }) => {
 test('设置页合并视图渲染检测器与规则', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
   await page.getByRole('menuitem', { name: /设置/i }).click()
-  // 合并后默认 Tab「规则配置」直接渲染:检测器胶囊行 + 规则列表。
+  // Settings 的 Tabs 顺序为 agents → schedules → detectors-rules(规则配置),默认激活首个 agents。
+  // 本测试针对「规则配置」tab,需显式点击切过去(detector-chips 只在该 tab 渲染)。
+  await page.getByRole('tab', { name: /规则配置|Rules config/ }).click()
+  // 合并后「规则配置」Tab 直接渲染:检测器胶囊行 + 规则列表。
   // detector-chips=胶囊行容器;规则表渲染出 ant-table-row 即证明规则已加载。
   // (SevSegLabel 的「全部」文案与计数分属两个 span,textContent 为「全部63」无空格,
   //  故不按 /全部 \d+/ 断言,改以规则行可见为准。)
   await expect(page.getByTestId('detector-chips')).toBeVisible({ timeout: 10000 })
-  await expect(page.locator('.ant-table-row').first()).toBeVisible({ timeout: 10000 })
+  // 规则表行:SettingsAgents(Code Agents)也有 .ant-table-row,但它在非激活 tab 内(hidden)。
+  // 先 filter({ visible: true }) 再 .first(),只取「规则配置」tab 内可见的规则行(证明规则已加载)。
+  await expect(page.locator('.ant-table-row').filter({ visible: true }).first()).toBeVisible({ timeout: 10000 })
   // 点一个检测器胶囊 → 该检测器规则数胶囊可见(快捷筛选)
   await page.getByTestId('detector-chip').first().click()
   await expect(page.getByTestId('detector-chip').first()).toHaveAttribute('aria-pressed', 'true')
@@ -396,3 +424,76 @@ test('风险信息表格 label 列定宽', async ({ page }) => {
     throw new Error(`label 列宽不一致: ${w1.width} vs ${w2.width}`)
   }
 })
+
+// 多语种默认英文回归:用普通 test,标题带 [默认英文] 标记 → beforeEach 跳过中文注入,
+// 验证无 localStorage 时前端 fallbackLng='en' 生效——首屏侧栏为英文。此前 i18n.init 显式传
+// lng:'zh' 会让首屏劫持成中文(且 localStorage 偏好在刷新后被忽略,即「切换语种刷新后恢复默认」bug)。
+// 修复后:无 localStorage → detection 落 fallbackLng='en' → 英文首屏。
+test('[默认英文] 无 localStorage 时 fallbackLng=en', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  await expect(page.getByTestId('brand')).toBeVisible()
+  // 侧栏导航为英文(Dashboard / Assets),证明默认英文生效(而非旧的中文默认)。
+  await expect(page.getByRole('menuitem', { name: 'Dashboard' })).toBeVisible()
+  await expect(page.getByRole('menuitem', { name: 'Assets' })).toBeVisible()
+  // 重新扫描按钮为英文 Rescan
+  await expect(page.getByRole('button', { name: 'Rescan' })).toBeVisible()
+})
+
+// 语言切换后刷新保留(问题:切换语种后刷新恢复默认):标题带 [默认英文] 标记 → beforeEach
+// 不注入中文,首屏为默认英文。先切到中文(写 localStorage),刷新后应仍为中文(证明 localStorage
+// 持久化生效,detection 读取之,不回退默认)。
+test('[默认英文] 切换语种后刷新保留(localStorage 持久化)', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  await expect(page.getByTestId('brand')).toBeVisible()
+  // 首屏英文(默认)。切到中文:Select 展开 → ArrowDown(English→中文)→ Enter。
+  const langSelect = page.locator('.ant-select[aria-label="Language"]')
+  await langSelect.click()
+  await page.keyboard.press('ArrowDown')
+  await page.keyboard.press('Enter')
+  // 切到中文:侧栏出现「仪表盘」
+  await expect(page.getByRole('menuitem', { name: /仪表盘/ })).toBeVisible()
+  // 刷新:localStorage 已写 sentinel.lang=zh,detection 读取 → 仍为中文(不回退英文)。
+  await page.reload()
+  await expect(page.getByRole('menuitem', { name: /仪表盘/ })).toBeVisible()
+})
+
+// 分页每页条数可改(问题:页大小选择器改不动、一直显示 20):用中文 fixture,在资产页
+// 改页大小为 50,断言每页条数选择器显示 50 且不再被重置回 20(原 bug:pageSize 受控 prop
+// 每次渲染覆盖内部 state)。
+test('分页每页条数可改且不被重置', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  await page.getByRole('menuitem', { name: /资产/i }).click()
+  await expect(page.locator('[data-testid="asset-row"]').first()).toBeVisible({ timeout: 10000 })
+  // antd Pagination 页大小选择器:.ant-pagination-options-size-changer 是原生 <select>(antd v5)。
+  const sizeChanger = page.locator('.ant-pagination-options .ant-select-selector')
+  await expect(sizeChanger.first()).toBeVisible()
+  // 初始应为「20 条/页」(默认 defaultPageSize=20)。antd v5 size-changer 文案含「20 条/页」。
+  await expect(sizeChanger.first()).toContainText('20')
+  // 改为 50:点开下拉(antd Select 非原生 select,用点击 + 选项文本)。
+  await sizeChanger.first().click()
+  await page.locator('.ant-select-item').filter({ hasText: '50' }).click()
+  // 断言选择器现在显示 50(不被受控 pageSize 重置回 20)。
+  await expect(sizeChanger.first()).toContainText('50')
+})
+
+// 资产风险列改为风险数量 + 详情抽屉风险列表(4 列):风险列显示数字徽标;点行开抽屉后,
+// 基础信息下方出现 asset-risk-list,含 风险名称/级别/检测器/规则 4 列表头。
+test('资产风险列显示数量且详情抽屉含风险列表', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  await page.getByRole('button', { name: /重新扫描|扫描/ }).click()
+  await page.getByRole('menuitem', { name: /资产/i }).click()
+  await expect(page.locator('[data-testid="asset-row"]').first()).toBeVisible({ timeout: 15000 })
+  // 全局 settings.json 含 Bash(*) baseline finding → 该资产行风险列显示数字徽标(>0)。
+  // 风险列是第 6 列(colFav/name/type/scope/tag/risk),用 hasText 匹配含数字的 Badge。
+  const settingsRow = page.locator('[data-testid="asset-row"]').filter({ hasText: /settings/i }).first()
+  await settingsRow.click()
+  // 抽屉打开 + 风险列表区出现。
+  await expect(page.locator('.asset-drawer')).toBeVisible({ timeout: 10000 })
+  await expect(page.getByTestId('asset-risk-list')).toBeVisible({ timeout: 10000 })
+  // 4 列表头:风险名称 / 级别 / 检测器 / 规则(中文 fixture)。
+  await expect(page.getByTestId('asset-risk-list').getByText('风险名称', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('asset-risk-list').getByText('级别', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('asset-risk-list').getByText('检测器', { exact: true })).toBeVisible()
+  await expect(page.getByTestId('asset-risk-list').getByText('规则', { exact: true })).toBeVisible()
+})
+
