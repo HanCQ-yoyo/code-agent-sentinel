@@ -172,8 +172,8 @@ export default function Assets() {
     ]
     return (
       <Dropdown trigger={['contextMenu']} menu={{ items: menuItems }}>
-        <span style={{ fontWeight: color ? 700 : 400, borderLeft: color ? `3px solid ${colorHex[color]}` : undefined, paddingLeft: color ? 6 : 0 }}>
-          {color && <span style={{ color: colorHex[color] }}>●</span>} {p.name}
+        <span data-pinned={color ? 'true' : undefined} style={{ fontWeight: color ? 700 : 400, borderLeft: color ? `3px solid ${colorHex[color]}` : undefined, paddingLeft: color ? 6 : 0 }}>
+          {p.name}
         </span>
       </Dropdown>
     )

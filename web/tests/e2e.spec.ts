@@ -380,11 +380,11 @@ test('项目 tab 右键置顶 + 颜色 + 刷新保留', async ({ page }) => {
   const pinItem = page.locator('.ant-dropdown-menu').getByText('置顶', { exact: true })
   await expect(pinItem).toBeVisible({ timeout: 5000 })
   await pinItem.click()
-  // 置顶后该 tab 应移到全局之后(最左项目位)+ 颜色点 ●(Task 17:projectTabLabel 渲染 <span>●</span>)。
-  await expect(page.locator('.ant-tabs-tab').nth(1).getByText('●')).toBeVisible({ timeout: 10000 })
+  // 置顶后该 tab 应移到全局之后(最左项目位)+ 置顶标记(Task 17:projectTabLabel 给置顶 span 打 data-pinned)。
+  await expect(page.locator('.ant-tabs-tab').nth(1).locator('[data-pinned="true"]')).toBeVisible({ timeout: 10000 })
   // 刷新后保留(后端持久化到 ~/.claude-sentinel/config.yaml)。
   await page.reload()
-  await expect(page.locator('.ant-tabs-tab').nth(1).getByText('●')).toBeVisible({ timeout: 10000 })
+  await expect(page.locator('.ant-tabs-tab').nth(1).locator('[data-pinned="true"]')).toBeVisible({ timeout: 10000 })
 })
 
 test('finding 命中位置高亮(源码视图自动激活)', async ({ page }) => {
