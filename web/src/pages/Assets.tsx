@@ -27,6 +27,7 @@ export default function Assets() {
     saveDirTags, selectedTagFilter, setSelectedTagFilter,
     favorites, fetchFavorites, saveFavorites,
     pinnedProjects, savePinnedProjects,
+    detectors, fetchDetectors,
   } = useStore()
   const [view, setView] = useState<View>('list')
   const [type, setType] = useState('')
@@ -46,7 +47,9 @@ export default function Assets() {
     fetchAgents()
     fetchDirTags()
     fetchFavorites()
-  }, [fetchAssets, fetchProjects, fetchAgents, fetchDirTags, fetchFavorites])
+    // 拉检测器元数据,供资产详情抽屉风险列表的检测器列双语名(与 Findings 页同模式)。
+    fetchDetectors()
+  }, [fetchAssets, fetchProjects, fetchAgents, fetchDirTags, fetchFavorites, fetchDetectors])
 
   // 切换上方标签页 → 重新拉对应项目的文件树。与上面一次性 effect 分离:
   // 原先 activeProjectTab 进了同一 effect deps,导致每次点标签页都重跑 fetchProjects,
@@ -256,7 +259,7 @@ export default function Assets() {
             dirTagsDefaults={dirTagsDefaults}
             dirTagsOverrides={dirTagsOverrides}
           />
-          <AssetDrawer asset={selectedAsset ?? null} onClose={() => setSelected(null)} />
+          <AssetDrawer asset={selectedAsset ?? null} findings={scan?.findings} detectors={detectors} onClose={() => setSelected(null)} />
         </Card>
       ) : (
         <Splitter style={{ height: 'calc(100vh - 240px)', minHeight: 360 }}>
@@ -285,7 +288,7 @@ export default function Assets() {
           <Splitter.Panel>
             <Card style={{ height: '100%', overflow: 'auto' }}>
               {selectedAsset ? (
-                <AssetDetailPanel asset={selectedAsset} />
+                <AssetDetailPanel asset={selectedAsset} findings={scan?.findings} detectors={detectors} />
               ) : rawPath ? (
                 <RawFilePanel path={rawPath} />
               ) : (

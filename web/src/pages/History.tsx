@@ -75,7 +75,9 @@ export default function History() {
           rowKey="id"
           columns={columns}
           dataSource={history}
-          pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: ['10', '20', '50', '100'], showTotal: (total) => t('history.totalCount', { count: total }), size: 'small' }}
+          // defaultPageSize(非受控)而非 pageSize(受控):避免页大小选择器改动被受控 pageSize
+          // 重置回 20(详见 AssetTable 注释)。
+          pagination={{ defaultPageSize: 20, showSizeChanger: true, pageSizeOptions: ['10', '20', '50', '100'], showTotal: (total) => t('history.totalCount', { count: total }), size: 'small' }}
           size="middle"
         />
       )}

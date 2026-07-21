@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Button, Space, message, Modal } from 'antd'
+import { Button, message, Modal } from 'antd'
 import { EditOutlined, FullscreenOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { ContentArea, editableText } from './ContentArea'
@@ -102,22 +102,42 @@ export function AssetEditor({ asset, highlights }: { asset: Asset, highlights?: 
     }
   }
 
-  if (!editing) {
-    return (
-      <>
-        <Space style={{ marginBottom: 8 }}>
+  // 内容框标题区操作按钮(只读态:编辑 + 全屏;编辑态:取消 + 预览变更)。
+  // 由 ContentArea 的 headerActions 渲染在 Card extra(预览/源码 Segmented 左侧)——把编辑/全屏
+  // 收进内容框,而非浮在内容框上方独立一行(用户需求:编辑/全屏置于预览/源码左侧)。
+  const headerActions = (
+    <>
+      {!editing ? (
+        <>
           <Button icon={<EditOutlined />} onClick={enterEdit} loading={saving} size="small">
             {t('assetEditor.edit')}
           </Button>
           <Button icon={<FullscreenOutlined />} onClick={() => setFsOpen(true)} size="small">
             {t('assetEditor.fullscreen')}
           </Button>
-        </Space>
-        <ContentArea key="view" asset={asset} theme={theme} highlights={highlights} />
+        </>
+      ) : (
+        <>
+          <Button onClick={() => setEditing(false)} disabled={saving} size="small">
+            {t('assetEditor.cancel')}
+          </Button>
+          <Button type="primary" onClick={doPreview} loading={saving} size="small" data-testid="preview-edit">
+            {t('assetEditor.previewChange')}
+          </Button>
+        </>
+      )}
+    </>
+  )
+
+  if (!editing) {
+    return (
+      <>
+        <ContentArea key="view" asset={asset} theme={theme} highlights={highlights} headerActions={headerActions} />
         {/* 全屏 Modal:近全屏(宽 96vw / 高 92vh),内部只读 ContentArea 撑满。
             key={asset.id}:切资产时重挂载,使 ContentArea 的 Segmented view 回默认(预览),
             避免上一资产的全屏视图态泄漏。body 无 padding,ContentArea 自带 Card 内边距。
-            destroyOnClose:关闭后卸载内嵌 Monaco,释放编辑器实例。 */}
+            destroyOnClose:关闭后卸载内嵌 Monaco,释放编辑器实例。
+            全屏内复用 ContentArea 不再传 headerActions(全屏内无需编辑/全屏按钮)。 */}
         <Modal
           title={t('assetEditor.title', { name: asset.name })}
           open={fsOpen}
@@ -137,14 +157,6 @@ export function AssetEditor({ asset, highlights }: { asset: Asset, highlights?: 
 
   return (
     <>
-      <Space style={{ marginBottom: 8 }}>
-        <Button onClick={() => setEditing(false)} disabled={saving}>
-          {t('assetEditor.cancel')}
-        </Button>
-        <Button type="primary" onClick={doPreview} loading={saving} data-testid="preview-edit">
-          {t('assetEditor.previewChange')}
-        </Button>
-      </Space>
       <ContentArea
         key="edit"
         asset={{ ...asset, content: draft }}
@@ -152,6 +164,7 @@ export function AssetEditor({ asset, highlights }: { asset: Asset, highlights?: 
         readOnly={false}
         onChange={setDraft}
         highlights={highlights}
+        headerActions={headerActions}
       />
       <DiffPreview
         open={previewOpen}

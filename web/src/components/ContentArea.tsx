@@ -1,5 +1,5 @@
-import { lazy, Suspense, useState } from 'react'
-import { Card, Segmented, Spin, Empty } from 'antd'
+import { lazy, Suspense, useState, type ReactNode } from 'react'
+import { Card, Segmented, Spin, Empty, Space } from 'antd'
 import { useTranslation } from 'react-i18next'
 import type { Asset } from '../types'
 import { MarkdownPreview } from './MarkdownPreview'
@@ -48,6 +48,7 @@ export function ContentArea({
   onChange,
   highlights,
   fill,
+  headerActions,
 }: {
   asset: Asset
   theme: 'light' | 'dark'
@@ -60,6 +61,10 @@ export function ContentArea({
   // 与预览视图在 fullscreen Modal 里对齐(否则源码视图停留在默认 min(60vh,560px),被截断)。
   // 仅 AssetEditor 全屏 Modal 传 fill=true;内联只读态 / 编辑态不传 → 行为不变。
   fill?: boolean
+  // 内容框标题区操作按钮(编辑/全屏 等),由调用方 AssetEditor 注入。渲染在 Card extra 最左侧,
+  // markdown 视图里排在「预览/源码」Segmented 左侧;script/structured 等无 Segmented 的视图里
+  // 独占 extra。调用方不传则不渲染(如全屏 Modal 内复用时不需要再嵌编辑/全屏按钮)。
+  headerActions?: ReactNode
 }) {
   const { t } = useTranslation()
   // 编辑态默认源码视图(让用户进入编辑即可直接修改,无需手动切「源码」)。
@@ -70,6 +75,23 @@ export function ContentArea({
   const isScript = asset.type === 'script'
   const isStructured = STRUCTURED_TYPES.has(asset.type)
 
+  // 卡片标题区 extra 组合:headerActions(编辑/全屏,左侧)+ 预览/源码 Segmented(markdown 视图,右侧)。
+  // 两块用 antd Space 隔开;无 Segmented 的视图(script/structured/兜底)只放 headerActions。
+  const previewSourceSeg = (
+    <Segmented
+      size="small"
+      value={view}
+      onChange={(v) => setView(v as 'preview' | 'source')}
+      options={[{ value: 'preview', label: t('content.preview') }, { value: 'source', label: t('content.source') }]}
+    />
+  )
+  const cardExtra = headerActions ? (
+    <Space size="small" align="center">
+      {headerActions}
+      {isMarkdown ? previewSourceSeg : null}
+    </Space>
+  ) : isMarkdown ? previewSourceSeg : undefined
+
   // markdown:有 content 才渲染预览/源码;编辑态(content 可为空)也进入此分支
   if (isMarkdown && (onChange || asset.content)) {
     return (
@@ -78,14 +100,7 @@ export function ContentArea({
         title={t('content.title')}
         style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }}
         styles={{ body: { flex: 1, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' } }}
-        extra={
-          <Segmented
-            size="small"
-            value={view}
-            onChange={(v) => setView(v as 'preview' | 'source')}
-            options={[{ value: 'preview', label: t('content.preview') }, { value: 'source', label: t('content.source') }]}
-          />
-        }
+        extra={cardExtra}
       >
         {view === 'preview' ? (
           <div style={{ padding: 12, flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
@@ -108,6 +123,7 @@ export function ContentArea({
       <Card
         size="small"
         title={t('content.title')}
+        extra={cardExtra}
         style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }}
         styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
       >
@@ -133,12 +149,13 @@ export function ContentArea({
       : JSON.stringify(asset.fields ?? {}, null, 2)
     const value = onChange ? (asset.content ?? '') : readOnlyValue
     if (!onChange && (value === '{}' || value === '')) {
-      return <Card size="small" title={t('content.title')}><Empty description={t('content.emptyNoFields')} /></Card>
+      return <Card size="small" title={t('content.title')} extra={cardExtra}><Empty description={t('content.emptyNoFields')} /></Card>
     }
     return (
       <Card
         size="small"
         title={t('content.title')}
+        extra={cardExtra}
         style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }}
         styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
       >
@@ -151,7 +168,7 @@ export function ContentArea({
 
   // 空 content + 空 fields(或 type 不在已知集合)
   if (!asset.content && (!asset.fields || Object.keys(asset.fields).length === 0)) {
-    return <Card size="small" title={t('content.title')}><Empty description={t('content.emptyNoContent')} /></Card>
+    return <Card size="small" title={t('content.title')} extra={cardExtra}><Empty description={t('content.emptyNoContent')} /></Card>
   }
 
   // 兜底:有 content 但 type 非 markdown/script(罕见),按 plaintext Monaco
@@ -160,6 +177,7 @@ export function ContentArea({
       <Card
         size="small"
         title={t('content.title')}
+        extra={cardExtra}
         style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }}
         styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
       >
@@ -176,6 +194,7 @@ export function ContentArea({
     <Card
       size="small"
       title={t('content.title')}
+      extra={cardExtra}
       style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }}
       styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
     >

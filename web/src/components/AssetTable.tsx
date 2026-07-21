@@ -7,10 +7,17 @@ import type { Asset, Finding, Severity } from '../types'
 import { Badge, type BadgeTone } from './Badge'
 import { relativeClaudePath } from '../lib/path'
 import { resolveDirTag, type DirTag, type DirTagsMap } from '../lib/dirTags'
-import { SEVERITY_LABEL_KEY } from '../lib/severity'
 
 const rank: Record<Severity, number> = { critical: 4, high: 3, medium: 2, low: 1, info: 0 }
 
+// 统计某资产的全部 finding 数(一个资产可能存在多个风险)。
+function findingCount(findings: Finding[], assetId: string): number {
+  let n = 0
+  for (const f of findings) if (f.asset_id === assetId) n++
+  return n
+}
+
+// 取该资产最高级别(用于风险数量徽标的配色:按最高级别着色,无风险则中性灰)。
 function maxSev(findings: Finding[], assetId: string): Severity | undefined {
   let best: Severity | undefined
   let bestRank = 0
@@ -100,12 +107,14 @@ export function AssetTable({ assets, findings = [], onSelect, favorites, onToggl
       },
     },
     {
+      // 风险数量:一个资产可能存在多个风险,故列改为数量(按最高级别着色),不再只显示最高级别文案。
+      // 无风险 → 中性灰「无」标签;有风险 → 带级别色的数字徽标。点击行打开抽屉查看风险列表。
       title: t('assetTable.colRisk'),
       width: 84,
       render: (_: unknown, a: Asset) => {
-        const sev = maxSev(findings, a.id)
-        return sev ? (
-          <Badge tone={`sev-${sev}` as BadgeTone}>{t(SEVERITY_LABEL_KEY[sev])}</Badge>
+        const count = findingCount(findings, a.id)
+        return count > 0 ? (
+          <Badge tone={`sev-${maxSev(findings, a.id)}` as BadgeTone}>{count}</Badge>
         ) : (
           <Tag style={{ borderStyle: 'dashed', color: 'var(--text-dim)', background: 'transparent' }}>{t('assetTable.noRisk')}</Tag>
         )
@@ -127,8 +136,12 @@ export function AssetTable({ assets, findings = [], onSelect, favorites, onToggl
       rowKey="id"
       columns={columns}
       dataSource={assets}
-      // 分页:默认每页 20,显示总数 + 可跳页。资产多时(项目树 align 后可能有几十条)避免长列表。
-      pagination={{ pageSize: 20, showSizeChanger: true, pageSizeOptions: ['10', '20', '50', '100'], showTotal: (total) => t('assetTable.total', { count: total }), size: 'small' }}
+      // 分页:默认每页 20,显示总数 + 可跳页 + 每页条数选择器。资产多时(项目树 align 后可能有几十条)避免长列表。
+      // 用 defaultPageSize(非受控)而非 pageSize(受控):pageSize 作为受控 prop 会在每次渲染覆盖
+      // antd usePagination 的内部 innerPagination.pageSize,导致用户用页大小选择器改成 50/100 后
+      // 下一次渲染被强制重置回 20(即「每页条数改不动、一直显示 20」bug)。defaultPageSize 仅作初始值,
+      // 之后页大小完全交给 antd 内部 state 管理,选择器改动得以保留。
+      pagination={{ defaultPageSize: 20, showSizeChanger: true, pageSizeOptions: ['10', '20', '50', '100'], showTotal: (total) => t('assetTable.total', { count: total }), size: 'small' }}
       size="middle"
       locale={{ emptyText: t('assetTable.empty') }}
       // 保留 asset-row testid 供 e2e;cast 与 FindingTable onRow 一致(antd Table onRow 无 data-* 索引签名)。
