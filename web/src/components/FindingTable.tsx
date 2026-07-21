@@ -6,6 +6,7 @@ import type { Finding, Severity, DetectorMeta } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { SEVERITY_ORDER, SEVERITY_LABEL_KEY, SEVERITY_DOT } from '../lib/severity'
 import { formatDateTime } from '../lib/format'
+import { detectorNameById, ruleNameById } from '../lib/i18n-names'
 
 // 筛选标签内的色点颜色(复用 sev token);「全部」用 accent。
 // 级别筛选标签:左侧色点 + 文本 + 计数。色点颜色对应级别,选中时整块填该级别色(见 .sev-seg CSS),
@@ -54,31 +55,32 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
   else if (supprFilter === 'suppressed') shown = shown.filter((f) => f.suppressed)
   const sorted = [...shown].sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity))
 
-  // detector_id → 中文名(供检测器列显示;无匹配则回退 id)。
-  const detName = (id: string): string => {
-    const d = detectors?.find((x) => x.id === id)
-    return d?.name ?? id
-  }
+  // detector_id → 双语名(先查 i18n detectors.<id>,回退 detector.name,再回退 id)。
+  const detName = (id: string): string => detectorNameById(detectors ?? [], id)
 
   const columns: ColumnsType<Finding> = [
     {
       // 风险名称:不设固定宽度,作为弹性主列占据剩余空间并省略;资产列加宽(280)后这里相应收窄,
       // 把空间预留给资产列(用户反馈:风险名称过宽、资产偏挤)。
       // 已抑制 finding:名称后附「已抑制」标签(Tooltip 展示抑制来源 + reason),行整体降透明度。
-      title: t('findingTable.colName'), ellipsis: true, render: (_: unknown, f: Finding) => (
-        <Tooltip title={f.message}>
-          <span>
-            {f.message}
-            {f.suppressed ? (
-              <Tooltip title={t('findingTable.supprTooltip', { source: f.suppression ?? '--', reason: f.reason ? t('findingTable.reasonPart', { reason: f.reason }) : '' })}>
-                <Tag style={{ marginInlineEnd: 0, marginLeft: 6, fontSize: 10, lineHeight: '16px', padding: '0 5px', borderColor: 'var(--bg-border)', color: 'var(--text-muted)', background: 'var(--surface-2)' }}>
-                  {t('findingTable.suppressedTag')}
-                </Tag>
-              </Tooltip>
-            ) : null}
-          </span>
-        </Tooltip>
-      ),
+      // 名称取规则双语名(ruleNameById:先 i18n rules.<rule_id>,回退 f.message 后端原文)。
+      title: t('findingTable.colName'), ellipsis: true, render: (_: unknown, f: Finding) => {
+        const name = ruleNameById(f.rule_id, f.message)
+        return (
+          <Tooltip title={name}>
+            <span>
+              {name}
+              {f.suppressed ? (
+                <Tooltip title={t('findingTable.supprTooltip', { source: f.suppression ?? '--', reason: f.reason ? t('findingTable.reasonPart', { reason: f.reason }) : '' })}>
+                  <Tag style={{ marginInlineEnd: 0, marginLeft: 6, fontSize: 10, lineHeight: '16px', padding: '0 5px', borderColor: 'var(--bg-border)', color: 'var(--text-muted)', background: 'var(--surface-2)' }}>
+                    {t('findingTable.suppressedTag')}
+                  </Tag>
+                </Tooltip>
+              ) : null}
+            </span>
+          </Tooltip>
+        )
+      },
     },
     {
       // 资产:文件名 + 类型两词,加宽到 280(预留给资产列);长名省略,Tooltip 兜底。

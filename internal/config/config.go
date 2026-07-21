@@ -45,7 +45,7 @@ type Config struct {
 	ScanInterval string `yaml:"scan_interval"`
 	// #1:定时扫描总开关
 	ScanEnabled bool `yaml:"scan_enabled"`
-	// #5:"zh"/"en";空 = 浏览器探测后回退 zh
+	// #5:"zh"/"en";空 = 前端默认英文(用户可用 localStorage 覆盖,或在此显式配置)
 	Language string `yaml:"language"`
 	// #4:置顶项目列表
 	PinnedProjects []PinnedProject `yaml:"pinned_projects"`

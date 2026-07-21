@@ -6,6 +6,7 @@ import type { DetectorMeta, Severity } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { RuleDrawer } from './RuleDrawer'
 import { SEVERITY_ORDER, SEVERITY_LABEL_KEY, SEVERITY_DOT } from '../lib/severity'
+import { detectorName, ruleName } from '../lib/i18n-names'
 
 export type FlatRule = {
   id: string; severity: Severity; description: string; syntax?: string
@@ -58,7 +59,9 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
 
   const allRules = useMemo<FlatRule[]>(
     () => detectors.flatMap((d) => (d.rules ?? []).map((r) => {
-      const fr: FlatRule = { ...r, detector: d.name, detector_id: d.id }
+      // detector 字段用双语名(先 i18n detectors.<id>,回退 d.name);description 原样保留,
+      // 展示时再经 ruleName() 取双语名(先 i18n rules.<id>,回退 description)。
+      const fr: FlatRule = { ...r, detector: detectorName(d), detector_id: d.id }
       // 后端 RuleInfo 未带 source:前端按 rule_id 前缀推导并写入 FlatRule.source,
       // 使列表列、来源筛选与 RuleDrawer 来源展示共用同一推导结果(单一推导点)。
       fr.source = fr.source ?? ruleSource(fr)
@@ -110,11 +113,15 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
   const columns: ColumnsType<FlatRule> = [
     { title: t('ruleTable.colRuleId'), width: 260, dataIndex: 'id', render: (id: string) => <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{id}</Typography.Text> },
     {
-      title: t('ruleTable.colRuleName'), ellipsis: true, render: (_: unknown, r: FlatRule) => (
-        <Tooltip title={r.description}>
-          <span>{r.description}</span>
-        </Tooltip>
-      ),
+      title: t('ruleTable.colRuleName'), ellipsis: true, render: (_: unknown, r: FlatRule) => {
+        // 规则名称取双语名(ruleName:先 i18n rules.<id>,回退 r.description 后端原文)。
+        const name = ruleName(r)
+        return (
+          <Tooltip title={name}>
+            <span>{name}</span>
+          </Tooltip>
+        )
+      },
     },
     { title: t('ruleTable.colSeverity'), width: 80, render: (_: unknown, r: FlatRule) => <SevBadge tone={`sev-${r.severity}` as BadgeTone}>{t(SEVERITY_LABEL_KEY[r.severity])}</SevBadge> },
     {
@@ -194,7 +201,9 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
         rowKey={(r) => `${r.detector_id}:${r.id}`}
         columns={columns}
         dataSource={filtered}
-        pagination={{ pageSize: 20, size: 'default' }}
+        // 分页:defaultPageSize(非受控)而非 pageSize(受控)——同 AssetTable,避免页大小选择器
+        // 改动被受控 pageSize 重置回 20(详见 AssetTable 注释)。规则较多时(63 条)分页避免长列表。
+        pagination={{ defaultPageSize: 20, showSizeChanger: true, pageSizeOptions: ['10', '20', '50', '100'], size: 'default' }}
         size="middle"
         onRow={(r) => ({
           onClick: () => setSelected(r),

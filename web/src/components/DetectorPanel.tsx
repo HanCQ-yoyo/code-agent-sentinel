@@ -2,6 +2,7 @@ import { Typography, Badge as AntBadge, Card } from 'antd'
 import { useTranslation } from 'react-i18next'
 import type { DetectorMeta } from '../types'
 import { Badge } from './Badge'
+import { detectorName } from '../lib/i18n-names'
 
 function ruleCountLabel(d: DetectorMeta, t: (k: string) => string): string {
   const n = (d.rules ?? []).length
@@ -32,7 +33,7 @@ export function DetectorPanel({ detectors, selectedId, onSelect }: { detectors: 
           <button key={d.id} type="button" onClick={() => onSelect?.(selectedId === d.id ? undefined : d.id)} aria-pressed={selectedId === d.id} data-testid="detector-chip"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 16, cursor: 'pointer', fontSize: 13, background: selectedId === d.id ? 'var(--brand-soft)' : 'var(--bg-card)', border: `1px solid ${selectedId === d.id ? 'var(--accent)' : 'var(--bg-border)'}`, color: 'var(--text)' }}>
             <AntBadge status={statusBadge(d)} />
-            <span>{d.name}</span>
+            <span>{detectorName(d)}</span>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{ruleCountLabel(d, t)}</span>
           </button>
         ))}

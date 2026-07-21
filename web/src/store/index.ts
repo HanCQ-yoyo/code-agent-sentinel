@@ -261,17 +261,20 @@ export const useStore = create<State>((set, get) => ({
     const res = await wrap(() => apiGet<{ language: string; scan_interval: string; scan_enabled: boolean }>('/api/settings'), set)
     if (res) {
       set({ language: res.language })
-      // 后端 config.language 层(落实 Task 11 brief 顺序 localStorage → 后端 → zh):
-      // localStorage 已有用户偏好时尊重之(最高优先);否则用后端配置,后端空串回退 zh。
-      // 后端 config.Language 默认空串,约定「空 = 回退 zh」(见 config.DefaultConfig)。
-      if (!localStorage.getItem('sentinel.lang')) {
-        await i18n.changeLanguage(res.language || 'zh')
+      // 语言优先级:localStorage(用户主动切换,最高)> 后端 config.language > 默认 en。
+      // localStorage 由 i18n detection 在 init 时读取(见 i18n/index.ts),此处不再重复应用。
+      // 后端层仅在 localStorage 无偏好时生效:后端空串 → 保持默认 en(不 changeLanguage),
+      // 后端非空(如 'zh')→ changeLanguage 到该值(不写 localStorage,避免覆盖用户偏好)。
+      if (!localStorage.getItem('sentinel.lang') && res.language) {
+        await i18n.changeLanguage(res.language)
       }
     }
   },
   saveLanguage: async (lang) => {
     const res = await wrap(() => apiPut<{ language: string }>('/api/settings', { language: lang }), set)
     if (res) set({ language: res.language })
+    // 持久化双写:localStorage(i18n detection 读取,刷新生效)+ 后端(跨重启/跨端口生效)。
+    // TopBar 切换处已 localStorage.setItem + i18n.changeLanguage,这里仅完成后端落盘。
   },
   setSelectedTagFilter: (tag) => set({ selectedTagFilter: tag }),
   fetchRaw: async (path) => wrap(() => apiGet<RawFile>(`/api/raw?path=${encodeURIComponent(path)}`), set),

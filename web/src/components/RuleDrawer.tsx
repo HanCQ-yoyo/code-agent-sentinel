@@ -4,6 +4,7 @@ import type { DetectorMeta } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { sourceLabel, type FlatRule } from './RulesTable'
 import { SEVERITY_LABEL_KEY } from '../lib/severity'
+import { ruleName } from '../lib/i18n-names'
 
 interface RuleDrawerProps {
   rule: FlatRule | null
@@ -38,7 +39,7 @@ export function RuleDrawer({ rule, detectors, onClose }: RuleDrawerProps) {
             <Descriptions.Item label={t('ruleDrawer.ruleId')}>
               <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 14 }}>{rule.id}</Typography.Text>
             </Descriptions.Item>
-            <Descriptions.Item label={t('ruleDrawer.ruleName')}>{rule.description}</Descriptions.Item>
+            <Descriptions.Item label={t('ruleDrawer.ruleName')}>{rule ? ruleName(rule) : '--'}</Descriptions.Item>
             <Descriptions.Item label={t('ruleDrawer.severity')}>
               <SevBadge tone={`sev-${rule.severity}` as BadgeTone}>{t(SEVERITY_LABEL_KEY[rule.severity])}</SevBadge>
             </Descriptions.Item>

@@ -8,6 +8,7 @@ import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { AssetDetailPanel } from './AssetDetailPanel'
 import { formatDateTime } from '../lib/format'
 import { SEVERITY_LABEL_KEY } from '../lib/severity'
+import { detectorNameById, ruleNameById } from '../lib/i18n-names'
 
 interface FindingDrawerProps {
   finding: Finding | null
@@ -71,7 +72,7 @@ function AssetSection({ assetId, locations }: { assetId: string, locations?: { l
 
 export function FindingDrawer({ finding, detectors, startedAt, onClose }: FindingDrawerProps) {
   const { t } = useTranslation()
-  const detName = (id: string): string => detectors.find((x) => x.id === id)?.name ?? id
+  const detName = (id: string): string => detectorNameById(detectors, id)
   const { addSuppression, generateBaseline } = useStore()
   const [supprModalOpen, setSupprModalOpen] = useState(false)
   const [supprReason, setSupprReason] = useState('')
@@ -140,7 +141,7 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
             style={{ tableLayout: 'fixed' }}
             className="risk-desc"
           >
-            <Descriptions.Item label={t('findingDrawer.name')}>{finding.message}</Descriptions.Item>
+            <Descriptions.Item label={t('findingDrawer.name')}>{ruleNameById(finding.rule_id, finding.message)}</Descriptions.Item>
             <Descriptions.Item label={t('findingDrawer.severity')}>
               <SevBadge tone={`sev-${finding.severity}` as BadgeTone}>{t(SEVERITY_LABEL_KEY[finding.severity])}</SevBadge>
             </Descriptions.Item>

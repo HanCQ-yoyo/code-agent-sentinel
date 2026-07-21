@@ -113,7 +113,7 @@ func TestConfigNewFieldsDefaults(t *testing.T) {
 		t.Error("ScanEnabled 默认应 false")
 	}
 	if cfg.Language != "" {
-		t.Errorf("Language 默认应空(回退 zh),got %q", cfg.Language)
+		t.Errorf("Language 默认应空(前端回退 en),got %q", cfg.Language)
 	}
 	if cfg.PinnedProjects != nil {
 		t.Error("PinnedProjects 默认应 nil")

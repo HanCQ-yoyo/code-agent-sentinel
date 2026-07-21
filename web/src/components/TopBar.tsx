@@ -73,8 +73,11 @@ export function TopBar({ onScan, loading }: Props) {
       </Space>
       <Space size="middle">
         <Select
-          value={i18n.language?.startsWith('en') ? 'en' : 'zh'}
+          value={i18n.language === 'zh' ? 'zh' : 'en'}
           onChange={(v) => {
+            // 持久化双写:localStorage(i18n detection init 读取,刷新生效)+ 后端(跨重启/跨端口)。
+            // i18n.changeLanguage 在 detection caches:['localStorage'] 下也会写 localStorage,
+            // 但显式 setItem 与 saveLanguage 双保险,确保刷新与跨端口重启都不丢语言。
             localStorage.setItem('sentinel.lang', v)
             i18n.changeLanguage(v)
             saveLanguage(v)
