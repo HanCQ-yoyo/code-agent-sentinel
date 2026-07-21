@@ -2,6 +2,8 @@
 
 > A local single-binary security console for Claude Code configuration assets — discover, scan, edit, and monitor the `~/.claude/` surface with an explainable health score.
 
+English | [中文](README.zh-CN.md)
+
 ## Features
 
 - **Asset discovery & parsing**: reads `~/.claude/` and project `.claude/` — settings, permissions, hooks, MCP servers, skills, commands, agents, plugins, CLAUDE.md/memory, keybindings, scripts.
@@ -121,53 +123,3 @@ make build-cross-fast GOOS=linux GOARCH=arm64 # skip frontend rebuild
 Frontend e2e: `cd web && npm run test:e2e` (Playwright).
 
 Tech stack: **Go 1.25** (Gin + cobra + embed) + **React 18 / Vite / TypeScript / antd v5 / zustand / monaco-editor / react-i18next**. Single binary distribution — the React build is embedded into the Go binary.
-
-## Chinese (中文)
-
-> code-agent-sentinel(二进制名 `sentinel`)是把 Claude Code 的配置资产(settings、hooks、MCP servers、skills、commands、agents、plugins、CLAUDE.md/memory、keybindings、scripts)当作安全管控面来发现、解析、检测、编辑与监控的**本地单二进制安全看板**。
-
-### 核心能力
-
-- **资产发现与解析**:扫描 `~/.claude/` 与项目 `.claude/`,覆盖 11 类资产。
-- **安全检测**:统一规则引擎(63 条内置规则)+ 提示注入扫描(含反混淆)+ 密钥扫描(gitleaks)+ 依赖漏洞(govulncheck / npm-audit)。子进程缺失时优雅降级。
-- **抑制与 baseline**:`suppressions.yaml` 静默已知 finding;`baseline.json` 快照已接受指纹(CLI 或 API create / prune)。
-- **健康分**:`Score = 100 × (1 − Σ(R(asset)·w(asset)) / (Rmax · Σ w(asset)))`,Rmax=10,0–100 五档,可解释 / 单调 / 可还原。
-- **配置编辑**:原子写入 + 自动备份与迁移(`internal/editor`);configengine 保持只读。
-- **定时扫描**:进程内 scheduler(`scan_interval` / `scan_enabled`)持续刷新历史;`sentinel scan` 一次性扫描不启 server。
-- **自定义 `.claude` 目录**:`claude_dir` + `discovery.disabled_asset_types` 指向自定义配置根、跳过不关心的资产类型。
-- **双语 UI**:界面 `zh` / `en` 切换(react-i18next,`language` 配置默认值);后端文案保持中文。
-- **命中位置高亮**:规则 finding 携带 `Location{Line,StartCol,EndCol}`,在 Monaco 查看器中高亮。
-- **项目前置**:`pinned_projects` 把常用项目置顶 Assets 页并配色。
-- **Dashboard**:健康分卡、风险摘要、检测器状态、资产盘点、历史趋势。
-
-### 配置文件
-
-`~/.claude-sentinel/config.yaml`(在 `~/.claude/` 之外,避免自扫)。关键字段:
-
-| 字段 | 说明 |
-| --- | --- |
-| `bind` / `port` / `allowed_cidrs` | 绑定地址 / 端口(0=随机)/ 非 loopback 必填的 IP 白名单。 |
-| `claude_dir` | `.claude` 目录绝对路径;空 = `<home>/.claude`。 |
-| `discovery.disabled_asset_types` | 发现时跳过的资产类型。 |
-| `scan_interval` / `scan_enabled` | 定时扫描间隔(如 `30m`)与总开关。 |
-| `language` | `zh` / `en`;空 = 浏览器探测后回退 `zh`。 |
-| `pinned_projects` | `{path, color}` 列表,Assets 页置顶。 |
-| `basic_auth` | `user` + bcrypt `password_hash`;认证以 token 为准。 |
-| `backup_dir` / `max_backups` | 备份目录与上限(默认 20)。 |
-| `sentinel_rules_dir` / `suppress_path` / `baseline_path` | 自定义规则目录 / 抑制文件 / baseline 文件。 |
-| `suppression_discount` | 抑制 finding 残值扣分因子;默认 0.3。 |
-| `detectors` | 检测器运行期配置(启用开关 + 二进制路径)。 |
-
-### 命令行
-
-| 命令 | 用途 |
-| --- | --- |
-| `sentinel` | 启动本地 SOC 看板(默认)。Flags: `--config` / `--bind` / `--port` / `--no-browser` / `--i-know-its-risky` / `--home` / `--token` / `--claude-dir`。 |
-| `sentinel scan` | 一次性扫描(发现→扫描→写历史),不启 server;`--detectors` 限定检测器。 |
-| `sentinel uninstall` | 清理 `~/.claude-sentinel/`(不删 `~/.claude` 与二进制);`--yes` 跳过确认,`--keep-config` 保留 `config.yaml`。 |
-| `sentinel baseline` | `--create` 合并指纹到 baseline;`--prune` 清理不复现指纹。 |
-| `sentinel rules` | `list` 列规则;`validate [file]` 校验规则文件。 |
-
-**安全模型**:默认仅绑 `127.0.0.1`;非 loopback 必须配 `allowed_cidrs`(或 `--i-know-its-risky`)。token 经 URL fragment 传递(不进 server log / Referer),每个 API 请求校验;严格 CORS + Host 头校验防 DNS rebinding。扫描器缺失时优雅降级。`sentinel uninstall` 仅删 `~/.claude-sentinel/`,不动 `~/.claude` 与二进制。
-
-**开发**:`make build` / `make test` / `make run` / `make web` / `make release`。技术栈:Go 1.25(Gin + cobra + embed)+ React 18 / Vite / TypeScript / antd v5 / zustand / monaco-editor / react-i18next,单二进制分发(前端 embed 进二进制)。
