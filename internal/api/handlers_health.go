@@ -9,7 +9,7 @@ import (
 )
 
 func (s *Server) getFindings(c *gin.Context) {
-	latest := s.latestScan()
+	latest := s.latestScan("")
 	if latest == nil {
 		c.JSON(http.StatusOK, []security.Finding{})
 		return
@@ -26,7 +26,7 @@ func (s *Server) getFindings(c *gin.Context) {
 }
 
 func (s *Server) getHealth(c *gin.Context) {
-	latest := s.latestScan()
+	latest := s.latestScan("")
 	if latest == nil || latest.HealthScore == nil {
 		inv, _ := s.Engine.Discover()
 		c.JSON(http.StatusOK, security.ComputeHealth(inv.Assets, nil))

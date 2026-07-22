@@ -231,3 +231,32 @@ func TestHistoryLegacyDetectorID(t *testing.T) {
 		t.Errorf("legacy finding 不应有 Suppressed=true")
 	}
 }
+
+func TestLatestForAgent(t *testing.T) {
+	s := NewStore(t.TempDir())
+	// 两条不同 agent 的记录(同 StartedAt 不易构造,用不同时间)
+	recA := ScanRecord{ID: "a-1", AgentID: "a", StartedAt: time.Now().Add(-2 * time.Hour)}
+	recB := ScanRecord{ID: "b-1", AgentID: "b", StartedAt: time.Now().Add(-1 * time.Hour)}
+	recA2 := ScanRecord{ID: "a-2", AgentID: "a", StartedAt: time.Now()}
+	s.Save(recA)
+	s.Save(recB)
+	s.Save(recA2)
+	// LatestForAgent("a") 应返回 a-2(最新)
+	got, err := s.LatestForAgent("a")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got == nil || got.ID != "a-2" {
+		t.Fatalf("LatestForAgent(a) 应返回 a-2: got %+v", got)
+	}
+	// LatestForAgent("b") 应返回 b-1
+	gotB, _ := s.LatestForAgent("b")
+	if gotB == nil || gotB.ID != "b-1" {
+		t.Fatalf("LatestForAgent(b) 应返回 b-1: got %+v", gotB)
+	}
+	// 空 agentID 退化为 Latest()(全局最新 = a-2)
+	gotAll, _ := s.LatestForAgent("")
+	if gotAll == nil || gotAll.ID != "a-2" {
+		t.Fatalf("LatestForAgent(空) 应退化为全局最新: got %+v", gotAll)
+	}
+}

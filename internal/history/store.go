@@ -139,6 +139,24 @@ func (s *Store) Latest() (*ScanRecord, error) {
 	return s.Get(list[0].ID)
 }
 
+// LatestForAgent 返回指定 agent 最近一条完整记录;空 agentID 退化为 Latest()(全局最新)。
+// 无该 agent 历史返回 (nil, nil)。
+func (s *Store) LatestForAgent(agentID string) (*ScanRecord, error) {
+	if agentID == "" {
+		return s.Latest()
+	}
+	list, err := s.List()
+	if err != nil {
+		return nil, err
+	}
+	for _, sum := range list { // List 已按 StartedAt 倒序
+		if sum.AgentID == agentID {
+			return s.Get(sum.ID)
+		}
+	}
+	return nil, nil
+}
+
 // Delete 删除单条记录。不存在返回 ErrNotFound。
 func (s *Store) Delete(id string) error {
 	err := os.Remove(s.path(id))

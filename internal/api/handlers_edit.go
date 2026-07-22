@@ -151,7 +151,7 @@ func (s *Server) partialRescan(updated configengine.Asset) (fresh []security.Fin
 // 共享一个物理文件,重扫覆盖全部 sibling,但 rules findings 的 AssetID
 // 是被扫 sibling 的 ID(如 permissions.ID),故须用全部 sibling AssetID 过滤 prior。
 func (s *Server) priorFindingsForSourcePath(sourcePath string, detectorIDs []string) []security.Finding {
-	latest := s.latestScan()
+	latest := s.latestScan("")
 	if latest == nil {
 		return nil
 	}

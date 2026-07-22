@@ -229,7 +229,7 @@ func TestPartialRescanDedup(t *testing.T) {
 	if scanW.Code != 200 {
 		t.Fatalf("POST /api/scan: got %d: %s", scanW.Code, scanW.Body)
 	}
-	latest := s.latestScan()
+	latest := s.latestScan("")
 	if latest == nil {
 		t.Fatal("latestScan() nil after POST /api/scan")
 	}
@@ -301,7 +301,7 @@ func TestPartialRescanDedupSettingsEdit(t *testing.T) {
 	if scanW.Code != 200 {
 		t.Fatalf("POST /api/scan: got %d: %s", scanW.Code, scanW.Body)
 	}
-	latest := s.latestScan()
+	latest := s.latestScan("")
 	if latest == nil || len(latest.Findings) == 0 {
 		t.Fatal("expected baseline findings in latest scan")
 	}

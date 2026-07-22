@@ -34,7 +34,8 @@ func (s *Server) postScan(c *gin.Context) {
 }
 
 func (s *Server) getScanResult(c *gin.Context) {
-	latest := s.latestScan()
+	agentID := c.Query("agent")
+	latest := s.latestScan(agentID)
 	if latest == nil {
 		c.JSON(http.StatusOK, struct{}{})
 		return
@@ -42,12 +43,13 @@ func (s *Server) getScanResult(c *gin.Context) {
 	c.JSON(http.StatusOK, latest)
 }
 
-// latestScan 返回最近一次扫描的完整记录;无历史或 History 未配置返回 nil。
-func (s *Server) latestScan() *history.ScanRecord {
+// latestScan 返回指定 agent 最近一次扫描的完整记录;空 agentID 退化为全局最新。
+// 无历史或 History 未配置返回 nil。
+func (s *Server) latestScan(agentID string) *history.ScanRecord {
 	if s.History == nil {
 		return nil
 	}
-	latest, err := s.History.Latest()
+	latest, err := s.History.LatestForAgent(agentID)
 	if err != nil || latest == nil {
 		return nil
 	}
