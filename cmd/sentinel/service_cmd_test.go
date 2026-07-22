@@ -46,3 +46,24 @@ func TestServiceInstallDryRun(t *testing.T) {
 		t.Error("config 应含 token 字段")
 	}
 }
+
+// TestScBinPathArg 验证 sc.exe 的 binPath= 值引用逻辑:含空格的路径加双引号,
+// 否则原样返回。Windows 上 Program Files 等路径不加引号会致 sc.exe "syntax incorrect"。
+func TestScBinPathArg(t *testing.T) {
+	cases := []struct {
+		in   string
+		want string
+	}{
+		{`C:\sentinel.exe`, `C:\sentinel.exe`},
+		{`C:\Program Files\sentinel.exe`, `"C:\Program Files\sentinel.exe"`},
+		{`/usr/local/bin/sentinel`, `/usr/local/bin/sentinel`},
+		{`C:\Users\John Doe\sentinel.exe`, `"C:\Users\John Doe\sentinel.exe"`},
+		{`path with	tab`, `"path with	tab"`},
+	}
+	for _, c := range cases {
+		got := scBinPathArg(c.in)
+		if got != c.want {
+			t.Errorf("scBinPathArg(%q) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}

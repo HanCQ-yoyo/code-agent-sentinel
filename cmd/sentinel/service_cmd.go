@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 
 	"github.com/spf13/cobra"
 
@@ -124,8 +125,10 @@ func runServiceInstall(opts serviceInstallOpts) (string, error) {
 	case "darwin":
 		exec.Command("launchctl", "load", unitPath).Run()
 	case "windows":
-		// content 是 sc 命令脚本;简化:直接逐行 exec
-		exec.Command("sc.exe", "create", "sentinel", "binPath=", opts.ExePath, "start=", "auto").Run()
+		// sc.exe 的 binPath= 值须紧跟等号后(空格分隔);含空格的路径(如 Program Files)须加引号,
+		// 否则 sc.exe 按空格重切 argv 致 "syntax incorrect" 静默失败(与 service.go 生成器一致)。
+		exe := scBinPathArg(opts.ExePath)
+		exec.Command("sc.exe", "create", "sentinel", "binPath=", exe, "start=", "auto").Run()
 		exec.Command("sc.exe", "start", "sentinel").Run()
 	}
 	return tok, nil
@@ -146,6 +149,18 @@ func enableNowArgs(userMode bool) []string {
 		return []string{"--user", "enable", "--now"}
 	}
 	return []string{"enable", "--now"}
+}
+
+// scBinPathArg 构造 sc.exe create 的 binPath= 值。sc.exe 要求值紧跟 `binPath= ` 之后
+// (空格分隔),含空格的路径(如 `C:\Program Files\sentinel.exe`)须加双引号,否则
+// sc.exe 按空格重切 argv 致 "The syntax of the command is incorrect." 静默失败
+// (Go 的 exec 把 argv 用空格拼成命令行,裸传含空格路径等同未引用)。
+// 与 internal/service/service.go generateWindows 的 `binPath= "%s"` 行为一致。
+func scBinPathArg(exePath string) string {
+	if strings.ContainsAny(exePath, " \t") {
+		return `"` + exePath + `"`
+	}
+	return exePath
 }
 
 // runServiceUninstall 停止并移除 sentinel 系统服务。best-effort,错误忽略。
