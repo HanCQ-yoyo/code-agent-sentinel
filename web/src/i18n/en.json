@@ -83,7 +83,10 @@
     "interval": "Interval",
     "enabled": "Enabled",
     "lastRun": "Last run",
-    "nextRun": "Next run"
+    "nextRun": "Next run",
+    "scanMasterToggle": "Allow scheduled scans",
+    "scanDefaultInterval": "Default interval (fallback when no tasks)",
+    "scanToggleHint": "When off, all agents' scheduled tasks pause; {{running}} agent(s) currently running. Per-agent enable/interval in the table below."
   },
   "findingDrawer": {
     "title": "Finding Details",

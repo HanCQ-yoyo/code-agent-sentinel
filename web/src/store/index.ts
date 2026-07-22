@@ -66,8 +66,14 @@ interface State {
   savePinnedProjects: (items: PinnedProject[]) => Promise<void>
   // 语言:持久化到后端 /api/settings(跨重启/跨端口),i18n 同步。
   language: string
+  // 扫描总开关 + 默认间隔(无 per-agent schedule 时的回退):持久化到后端 /api/settings。
+  // scanEnabled=false → ScheduleManager.Paused=true(后端 Task 2),所有定时任务暂停。
+  // scanInterval 仅作回退默认,不覆盖已有 schedule.interval(后者以 /api/schedules 为准)。
+  scanEnabled: boolean
+  scanInterval: string
   fetchSettings: () => Promise<void>
   saveLanguage: (lang: string) => Promise<void>
+  saveScanToggle: (enabled: boolean, interval: string) => Promise<boolean>
   setSelectedTagFilter: (tag: DirTag | null) => void
   fetchRaw: (path: string) => Promise<RawFile | undefined>
   // 拉单资产(含 content),供发现页详情抽屉按 finding.asset_id 展示资产文件内容。
@@ -107,6 +113,8 @@ export const useStore = create<State>((set, get) => ({
   favorites: [],
   pinnedProjects: [],
   language: '',
+  scanEnabled: true,
+  scanInterval: '',
   previewResult: null, editError: null,
   suppressions: [],
   fetchAssets: async () => {
@@ -260,7 +268,7 @@ export const useStore = create<State>((set, get) => ({
   fetchSettings: async () => {
     const res = await wrap(() => apiGet<{ language: string; scan_interval: string; scan_enabled: boolean }>('/api/settings'), set)
     if (res) {
-      set({ language: res.language })
+      set({ language: res.language, scanEnabled: res.scan_enabled, scanInterval: res.scan_interval })
       // 语言优先级:localStorage(用户主动切换,最高)> 后端 config.language > 默认 en。
       // localStorage 由 i18n detection 在 init 时读取(见 i18n/index.ts),此处不再重复应用。
       // 后端层仅在 localStorage 无偏好时生效:后端空串 → 保持默认 en(不 changeLanguage),
@@ -275,6 +283,13 @@ export const useStore = create<State>((set, get) => ({
     if (res) set({ language: res.language })
     // 持久化双写:localStorage(i18n detection 读取,刷新生效)+ 后端(跨重启/跨端口生效)。
     // TopBar 切换处已 localStorage.setItem + i18n.changeLanguage,这里仅完成后端落盘。
+  },
+  // saveScanToggle:写后端 scan_enabled/scan_interval(后端 Task 2 传播到 ScheduleManager.Paused)。
+  // scan_interval 仅作无 per-agent schedule 时的回退默认;已有任务的 interval 由 /api/schedules 改。
+  saveScanToggle: async (enabled, interval) => {
+    const res = await wrap(() => apiPut<{ scan_enabled: boolean; scan_interval: string }>('/api/settings', { scan_enabled: enabled, scan_interval: interval }), set)
+    if (res) set({ scanEnabled: res.scan_enabled, scanInterval: res.scan_interval })
+    return !!res
   },
   setSelectedTagFilter: (tag) => set({ selectedTagFilter: tag }),
   fetchRaw: async (path) => wrap(() => apiGet<RawFile>(`/api/raw?path=${encodeURIComponent(path)}`), set),

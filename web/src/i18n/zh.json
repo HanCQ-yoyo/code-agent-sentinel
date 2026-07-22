@@ -83,7 +83,10 @@
     "interval": "间隔",
     "enabled": "启用",
     "lastRun": "上次运行",
-    "nextRun": "下次运行"
+    "nextRun": "下次运行",
+    "scanMasterToggle": "允许定时扫描",
+    "scanDefaultInterval": "默认间隔(无任务时回退)",
+    "scanToggleHint": "关闭后所有 agent 的定时任务暂停;当前 {{running}} 个 agent 在跑。单个 agent 启停/间隔见下表。"
   },
   "findingDrawer": {
     "title": "风险详情",
