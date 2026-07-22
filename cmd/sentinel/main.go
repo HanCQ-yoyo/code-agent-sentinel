@@ -20,6 +20,7 @@ import (
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/editor"
 	"code-agent-sentinel/internal/history"
+	"code-agent-sentinel/internal/scan"
 	"code-agent-sentinel/internal/scheduler"
 	"code-agent-sentinel/internal/security"
 )
@@ -153,7 +154,8 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	// makeRun 按 agentID 闭包 srv.Runner.RunScan(内部 EngineFor 按 agentID 池化选 Engine)。
 	mgr := scheduler.NewManager(func(agentID string) func(context.Context) error {
 		return func(ctx context.Context) error {
-			_, err := srv.Runner.RunScan(ctx, agentID, nil)
+			// 调度器始终跑 global scope 扫描(Task 14+ 可能按 schedule 配置细化)。
+			_, err := srv.Runner.RunScan(ctx, agentID, scan.ScanScope{Type: "global"}, nil)
 			return err
 		}
 	})

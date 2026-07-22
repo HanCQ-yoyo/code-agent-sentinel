@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"code-agent-sentinel/internal/configengine"
+	"code-agent-sentinel/internal/scan"
 	"code-agent-sentinel/internal/security"
 )
 
@@ -49,13 +50,15 @@ func TestPostScanPassesAgentQuery(t *testing.T) {
 	}
 }
 
-// spyRunner 记录 RunScan 收到的 agentID,满足 ScanRunner 接口。
+// spyRunner 记录 RunScan 收到的 agentID/scope,满足 ScanRunner 接口。
 type spyRunner struct {
 	lastAgentID string
+	lastScope   scan.ScanScope
 }
 
-func (s *spyRunner) RunScan(ctx context.Context, agentID string, detectorIDs []string) (*security.ScanResult, error) {
+func (s *spyRunner) RunScan(ctx context.Context, agentID string, scope scan.ScanScope, detectorIDs []string) (*security.ScanResult, error) {
 	s.lastAgentID = agentID
+	s.lastScope = scope
 	return &security.ScanResult{}, nil
 }
 

@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"code-agent-sentinel/internal/history"
+	"code-agent-sentinel/internal/scan"
 )
 
 func (s *Server) postScan(c *gin.Context) {
@@ -25,7 +26,8 @@ func (s *Server) postScan(c *gin.Context) {
 	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
 	defer cancel()
-	res, err := s.Runner.RunScan(ctx, agentID, ids)
+	// Task 11:scope 占位传 global(Task 14 将从 ?scope=/?path= 构造真实 scope)。
+	res, err := s.Runner.RunScan(ctx, agentID, scan.ScanScope{Type: "global"}, ids)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errorBody("scan_failed", err.Error()))
 		return

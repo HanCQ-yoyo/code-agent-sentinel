@@ -99,6 +99,7 @@ func (s *Store) List() ([]ScanSummary, error) {
 			Detectors []struct {
 				Available bool `json:"available"`
 			} `json:"detectors"`
+			Scope string `json:"scope"`
 		}
 		if err := json.Unmarshal(data, &partial); err != nil {
 			continue
@@ -116,6 +117,7 @@ func (s *Store) List() ([]ScanSummary, error) {
 			FindingCount:  len(partial.Findings),
 			DetectorAvail: avail,
 			DetectorTotal: total,
+			Scope:         partial.Scope,
 		}
 		if partial.HealthScore != nil {
 			sum.HealthScore = partial.HealthScore.Score

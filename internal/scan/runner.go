@@ -7,12 +7,49 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/history"
 	"code-agent-sentinel/internal/security"
 )
+
+// ScanScope 描述一次扫描的范围。
+type ScanScope struct {
+	Type string // "global" | "project" | "asset"
+	Path string // project: 项目路径;asset: 资产 source_path;global: 空
+}
+
+// scopeAssets 按 scope 过滤 inv.Assets。
+// global/空 → 全量;project → ScopeProject 且 source_path 前缀匹配(与 getTree 一致);
+// asset → source_path == scope.Path(扫同物理文件的所有 sibling);
+// 未知 type 退化为全量。
+func scopeAssets(inv configengine.Inventory, scope ScanScope) []configengine.Asset {
+	switch scope.Type {
+	case "", "global":
+		return inv.Assets
+	case "project":
+		prefix := scope.Path + string(filepath.Separator)
+		out := make([]configengine.Asset, 0)
+		for _, a := range inv.Assets {
+			if a.Scope == configengine.ScopeProject && strings.HasPrefix(a.SourcePath, prefix) {
+				out = append(out, a)
+			}
+		}
+		return out
+	case "asset":
+		out := make([]configengine.Asset, 0)
+		for _, a := range inv.Assets {
+			if a.SourcePath == scope.Path {
+				out = append(out, a)
+			}
+		}
+		return out
+	}
+	return inv.Assets // 未知 type 退化为全量
+}
 
 // Runner 持有多 agent 的扫描依赖(Engine 按需懒构造并缓存)。
 type Runner struct {
@@ -55,28 +92,34 @@ func (r *Runner) EngineFor(agentID string) *configengine.Engine {
 }
 
 // RunScan 执行发现→扫描→持久化历史。agentID 空=回退首 agent;detectorIDs 空=全量检测器。
-// 历史写入失败不阻断(降级体验,与原 postScan 一致)。
-func (r *Runner) RunScan(ctx context.Context, agentID string, detectorIDs []string) (*security.ScanResult, error) {
+// scope 控制扫描范围(global/project/asset);历史写入失败不阻断(降级体验,与原 postScan 一致)。
+func (r *Runner) RunScan(ctx context.Context, agentID string, scope ScanScope, detectorIDs []string) (*security.ScanResult, error) {
 	eng := r.EngineFor(agentID)
 	inv, err := eng.Discover()
 	if err != nil {
 		return nil, fmt.Errorf("发现资产失败: %w", err)
 	}
-	res, err := r.Orchestrator.Scan(ctx, inv.Assets, detectorIDs)
+	assets := scopeAssets(inv, scope)
+	res, err := r.Orchestrator.Scan(ctx, assets, detectorIDs)
 	if err != nil {
 		return nil, fmt.Errorf("扫描失败: %w", err)
 	}
-	r.saveHistory(agentID, res, &inv)
+	r.saveHistory(agentID, scope, res, &inv)
 	return res, nil
 }
 
 // saveHistory 把扫描结果落盘。ID = StartedAt 时间戳 + 8hex 随机后缀(防同秒冲突)。
-func (r *Runner) saveHistory(agentID string, res *security.ScanResult, inv *configengine.Inventory) {
+// scope 写入记录;空 scope.Type 归一化为 "global"。
+func (r *Runner) saveHistory(agentID string, scope ScanScope, res *security.ScanResult, inv *configengine.Inventory) {
 	if r.History == nil {
 		return
 	}
 	b := make([]byte, 4)
 	rand.Read(b)
+	scopeType := scope.Type
+	if scopeType == "" {
+		scopeType = "global"
+	}
 	rec := history.ScanRecord{
 		ID:          res.StartedAt.Format("2006-01-02-15-04-05") + "-" + hex.EncodeToString(b),
 		AgentID:     agentID,
@@ -87,6 +130,8 @@ func (r *Runner) saveHistory(agentID string, res *security.ScanResult, inv *conf
 		HealthScore: res.HealthScore,
 		Inventory:   inv,
 		Projects:    inv.Projects,
+		Scope:       scopeType,
+		ScopePath:   scope.Path,
 	}
 	_ = r.History.Save(rec) // 持久化失败不阻断
 }

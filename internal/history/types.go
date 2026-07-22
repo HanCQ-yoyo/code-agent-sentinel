@@ -19,6 +19,8 @@ type ScanRecord struct {
 	HealthScore *security.HealthScore     `json:"health_score,omitempty"`
 	Inventory   *configengine.Inventory   `json:"inventory"`
 	Projects    []configengine.Project    `json:"projects,omitempty"`
+	Scope       string                    `json:"scope,omitempty"`       // "global"|"project"|"asset"(空归一化为 global)
+	ScopePath   string                    `json:"scope_path,omitempty"`  // project: 项目路径;asset: 资产 source_path
 }
 
 // ScanSummary 是列表用的轻量摘要,不含 findings/assets。
@@ -31,4 +33,5 @@ type ScanSummary struct {
 	FindingCount  int       `json:"finding_count"`
 	DetectorAvail int       `json:"detector_avail"`
 	DetectorTotal int       `json:"detector_total"`
+	Scope         string    `json:"scope,omitempty"`
 }

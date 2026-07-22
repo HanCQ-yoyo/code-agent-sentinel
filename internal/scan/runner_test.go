@@ -11,6 +11,28 @@ import (
 	"code-agent-sentinel/internal/security"
 )
 
+// writeScanFile 是扫描测试辅助:写文件(自动建父目录)。
+func writeScanFile(t *testing.T, p, c string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(p, []byte(c), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// newTestRunner 构造单 agent Runner(root 指向 fixture)。
+func newTestRunner(t *testing.T, home string) *Runner {
+	t.Helper()
+	agents := configengine.DefaultAgents(home, "")
+	r := security.NewRegistry()
+	r.Register(security.NewRulesDetector(home, nil))
+	orch := &security.Orchestrator{Registry: r}
+	hist := history.NewStore(filepath.Join(home, "..", "history"))
+	return NewRunner(agents, orch, hist)
+}
+
 func TestRunnerRunScanWritesHistory(t *testing.T) {
 	dir := t.TempDir()
 	claude := filepath.Join(dir, ".claude")
@@ -27,7 +49,7 @@ func TestRunnerRunScanWritesHistory(t *testing.T) {
 	hist := history.NewStore(filepath.Join(dir, "history"))
 	runner := NewRunner(agents, orch, hist)
 
-	res, err := runner.RunScan(context.Background(), "", nil)
+	res, err := runner.RunScan(context.Background(), "", ScanScope{Type: "global"}, nil)
 	if err != nil {
 		t.Fatalf("RunScan: %v", err)
 	}
@@ -54,7 +76,7 @@ func TestRunnerNilHistoryNoPanic(t *testing.T) {
 	r.Register(security.NewRulesDetector(dir, nil))
 	orch := &security.Orchestrator{Registry: r}
 	runner := NewRunner(agents, orch, nil) // History nil
-	res, err := runner.RunScan(context.Background(), "", nil)
+	res, err := runner.RunScan(context.Background(), "", ScanScope{Type: "global"}, nil)
 	if err != nil {
 		t.Fatalf("RunScan: %v", err)
 	}
@@ -107,4 +129,159 @@ func TestEngineForCachesByAgentID(t *testing.T) {
 	if e1 != e2 {
 		t.Fatal("同 agentID 应返回缓存的同一 Engine 实例")
 	}
+}
+
+func TestRunScanProjectScopeFiltersAssets(t *testing.T) {
+	dir := t.TempDir()
+	// 全局 settings 含 Bash(*) 通配(会触发 baseline.wildcard-bash finding);
+	// 项目 myproj 的 settings 只有 model(不触发该规则)。
+	// 若 scopeAssets 退化为 no-op(返回全量),project scope 会包含全局 settings,
+	// 下面所有断言都会失败。
+	writeScanFile(t, filepath.Join(dir, ".claude", "settings.json"), `{"permissions":{"allow":["Bash(*)"]}}`)
+	proj := filepath.Join(dir, "myproj")
+	writeScanFile(t, filepath.Join(dir, ".claude.json"), `{"projects":{"`+proj+`":{}}}`)
+	writeScanFile(t, filepath.Join(proj, ".claude", "settings.json"), `{"model":"opus"}`)
+	r := newTestRunner(t, dir)
+
+	// global scope:全量(含全局 + 项目资产)
+	resGlobal, err := r.RunScan(context.Background(), "claude-code", ScanScope{Type: "global"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// project scope:仅 myproj 下资产
+	resProj, err := r.RunScan(context.Background(), "claude-code", ScanScope{Type: "project", Path: proj}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// 1) project scope 的 finding 数应严格小于 global:
+	//    global 有 Bash(*) finding,project scope 排除了全局 settings 故应更少。
+	//    no-op 过滤器(project=全量)会让两者相等 → 此断言失败。
+	if len(resProj.Findings) >= len(resGlobal.Findings) {
+		t.Errorf("project scope findings 应严格少于 global: proj=%d global=%d",
+			len(resProj.Findings), len(resGlobal.Findings))
+	}
+
+	// 2) 最关键的意图断言:全局 Bash(*) finding 的 key 必须出现在 global 但不出现在 project。
+	//    这是「project scope 排除了全局 only 资产」的直接证明。
+	//    findingKey = DetectorID \x00 RuleID \x00 AssetID \x00 Evidence(与 handlers_edit.go 一致)。
+	globalKeys := make(map[string]bool, len(resGlobal.Findings))
+	for _, f := range resGlobal.Findings {
+		globalKeys[findingKeyTest(f)] = true
+	}
+	projKeys := make(map[string]bool, len(resProj.Findings))
+	for _, f := range resProj.Findings {
+		projKeys[findingKeyTest(f)] = true
+	}
+	// 找到全局的 Bash(*) 通配 finding(key 含 wildcard-bash 规则)。
+	var bashKey string
+	bashFound := false
+	for _, f := range resGlobal.Findings {
+		if f.RuleID == "baseline.wildcard-bash" {
+			bashKey = findingKeyTest(f)
+			bashFound = true
+			break
+		}
+	}
+	if !bashFound {
+		t.Fatalf("全局扫描应检出 baseline.wildcard-bash,实际 findings=%+v", resGlobal.Findings)
+	}
+	if !globalKeys[bashKey] {
+		t.Errorf("Bash(*) finding 应在 global scope 中(自检失败,key=%q)", bashKey)
+	}
+	if projKeys[bashKey] {
+		t.Errorf("Bash(*) finding 不应出现在 project scope(说明 project 未排除全局 settings),key=%q", bashKey)
+	}
+}
+
+func TestRunScanAssetScopeScansSiblings(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, ".claude", "settings.json")
+	writeScanFile(t, src, `{"permissions":{"allow":["Bash(*)"]}}`)
+	// 第二个资产:项目级 settings,不同 source_path,也含 Bash(*) 通配。
+	// 若 scopeAssets 退化为 no-op(返回全量),asset scope 会错误地扫到这个项目资产,
+	// 其 finding(不同 AssetID)会出现在 res.Findings 中 → 下面的排除断言失败。
+	proj := filepath.Join(dir, "otherproj")
+	writeScanFile(t, filepath.Join(dir, ".claude.json"), `{"projects":{"`+proj+`":{}}}`)
+	writeScanFile(t, filepath.Join(proj, ".claude", "settings.json"), `{"permissions":{"allow":["Bash(*)"]}}`)
+	r := newTestRunner(t, dir)
+
+	// global scope:应检出两个 Bash(*) finding(全局 + 项目,AssetID 不同)
+	resGlobal, err := r.RunScan(context.Background(), "claude-code", ScanScope{Type: "global"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// asset scope:只扫 source_path == src(全局 settings)
+	res, err := r.RunScan(context.Background(), "claude-code", ScanScope{Type: "asset", Path: src}, []string{"rules"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res == nil {
+		t.Fatal("res 不应为 nil")
+	}
+	// 1) 必须检出 finding:Bash(*) 通配应触发 baseline.wildcard-bash。
+	//    若 scopeAssets 退化为返回零资产(asset 过滤失效),res.Findings 为空 → 此断言失败。
+	if len(res.Findings) == 0 {
+		t.Fatal("asset scope 应检出 Bash(*) 通配,实际 findings 为空(scopeAssets 可能返回零资产)")
+	}
+	// 2) asset scope 的 findings 应是 global scope findings 的子集:
+	//    asset scope 只扫同 source_path 的 sibling,其结果必然包含于全量扫描。
+	globalKeys := make(map[string]bool, len(resGlobal.Findings))
+	for _, f := range resGlobal.Findings {
+		globalKeys[findingKeyTest(f)] = true
+	}
+	for _, f := range res.Findings {
+		k := findingKeyTest(f)
+		if !globalKeys[k] {
+			t.Errorf("asset scope finding 不在 global findings 中(应为其子集): key=%q", k)
+		}
+	}
+	// 3) 排除非目标资产:asset scope 只应扫到 src 对应的资产,不应包含项目级 settings 的 finding。
+	//    no-op 过滤器(返回全量)会让项目级 finding 出现 → 此断言失败。
+	//    通过比较 AssetID:asset scope 的所有 finding 的 AssetID 必须都在 src 对应资产上。
+	//    由于 global 有两个不同 AssetID 的 Bash(*) finding,asset scope 应只含其中一个。
+	if len(resGlobal.Findings) < 2 {
+		t.Fatalf("global scope 应至少检出 2 个 Bash(*) finding(全局+项目),实际 %d", len(resGlobal.Findings))
+	}
+	// 收集 asset scope 的 AssetID 集合。
+	assetScopeAssetIDs := make(map[string]bool, len(res.Findings))
+	for _, f := range res.Findings {
+		assetScopeAssetIDs[f.AssetID] = true
+	}
+	// asset scope 只扫一个物理文件,所有 finding 应共享同一 AssetID。
+	if len(assetScopeAssetIDs) != 1 {
+		t.Errorf("asset scope 应只含 1 个 AssetID(目标文件),实际 %d: %v",
+			len(assetScopeAssetIDs), assetScopeAssetIDs)
+	}
+	// 该 AssetID 必须是 src 对应的(global 中也存在),且不是项目级 settings 的。
+	// 收集 global 中两个 Bash(*) finding 的 AssetID,断言 asset scope 的 AssetID 恰为其中之一,
+	// 且 global 中至少有另一个 AssetID 不在 asset scope 中(证明过滤生效)。
+	globalBashAssetIDs := make(map[string]bool)
+	for _, f := range resGlobal.Findings {
+		if f.RuleID == "baseline.wildcard-bash" {
+			globalBashAssetIDs[f.AssetID] = true
+		}
+	}
+	for _, f := range res.Findings {
+		if !globalBashAssetIDs[f.AssetID] {
+			t.Errorf("asset scope finding 的 AssetID 不在 global Bash(*) 集合中: %q", f.AssetID)
+		}
+	}
+	// 关键排除断言:global 中至少有一个 Bash(*) AssetID 不在 asset scope 中。
+	excluded := false
+	for id := range globalBashAssetIDs {
+		if !assetScopeAssetIDs[id] {
+			excluded = true
+		}
+	}
+	if !excluded {
+		t.Errorf("asset scope 应排除至少一个非目标资产的 Bash(*) finding(实际包含了全部 %d 个)",
+			len(globalBashAssetIDs))
+	}
+}
+
+// findingKeyTest 生成 finding 去重键,与 handlers_edit.go 的 findingKey 一致:
+// (DetectorID, RuleID, AssetID, Evidence)。供测试比较 scope 过滤结果用。
+func findingKeyTest(f security.Finding) string {
+	return f.DetectorID + "\x00" + f.RuleID + "\x00" + f.AssetID + "\x00" + f.Evidence
 }
