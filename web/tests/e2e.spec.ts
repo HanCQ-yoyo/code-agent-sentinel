@@ -54,6 +54,14 @@ test.beforeAll(async () => {
 // "did not expect test.beforeAll() to be called here"(见 git 历史)。
 const EN_MARKER = '[默认英文]'
 test.beforeEach(async ({ page }, testInfo) => {
+  // 离线环境字体拦截:web/index.html 经 <link> 加载 Google Fonts(fonts.googleapis.com /
+  // fonts.gstatic.com),无外网时请求挂起 → page.goto 默认 waitUntil:'load' 等所有资源 → 30s 超时
+  // (报 page.goto: Test timeout ... waiting until "load")。memory e2e-no-internet-fonts-block 记录
+  // 此根因。这里用 page.route 拦截字体相关请求并 abort,使 page.goto 不等 CDN 即完成 load 事件。
+  // 对所有测试生效(含 [默认英文]),因 [默认英文] 测试也需 page.goto 不挂起。
+  await page.route('**/*.woff2', (r) => r.abort())
+  await page.route('**/fonts.googleapis.com/**', (r) => r.abort())
+  await page.route('**/fonts.gstatic.com/**', (r) => r.abort())
   if (testInfo.title.includes(EN_MARKER)) return
   await page.addInitScript(() => {
     window.localStorage.setItem('sentinel.lang', 'zh')
@@ -181,7 +189,9 @@ test('资产详情页显示字段与 hash', async ({ page }) => {
 
 test('发现页扫描后展示 finding 行', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
+  // Task 15:TopBar「重新扫描」打开 RescanModal(非直接扫描),需在 modal 内点「开始扫描」触发。
   await page.getByRole('button', { name: /重新扫描|扫描/ }).click()
+  await page.locator('.ant-modal').filter({ hasText: '重扫描' }).getByRole('button', { name: '开始扫描' }).click()
   await page.getByRole('menuitem', { name: /风险管理/ }).click()
   // fixture 含 Bash(*) → 至少一条 finding
   await expect(page.locator('[data-testid="finding-row"]').first()).toBeVisible({ timeout: 15000 })
@@ -389,7 +399,9 @@ test('项目 tab 右键置顶 + 颜色 + 刷新保留', async ({ page }) => {
 
 test('finding 命中位置高亮(源码视图自动激活)', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
+  // Task 15:TopBar「重新扫描」打开 RescanModal,需在 modal 内点「开始扫描」触发扫描。
   await page.getByRole('button', { name: /Rescan|重新扫描/ }).click()
+  await page.locator('.ant-modal').filter({ hasText: /重扫描|Rescan/ }).getByRole('button', { name: /开始扫描|Start scan/ }).click()
   // finding 行只在风险管理页渲染,需导航过去(参考既有「发现页扫描后展示 finding 行」用例)。
   await page.getByRole('menuitem', { name: /风险管理/ }).click()
   // 等待 finding 行渲染(fixture 含 Bash(*) baseline + injection.hidden-instruction.memory)。
@@ -408,7 +420,9 @@ test('finding 命中位置高亮(源码视图自动激活)', async ({ page }) =>
 
 test('风险信息表格 label 列定宽', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
+  // Task 15:TopBar「重新扫描」打开 RescanModal,需在 modal 内点「开始扫描」触发扫描。
   await page.getByRole('button', { name: /Rescan|重新扫描/ }).click()
+  await page.locator('.ant-modal').filter({ hasText: /重扫描|Rescan/ }).getByRole('button', { name: /开始扫描|Start scan/ }).click()
   // finding 行只在风险管理页渲染,需导航过去。
   await page.getByRole('menuitem', { name: /风险管理/ }).click()
   await expect(page.locator('[data-testid="finding-row"]').first()).toBeVisible({ timeout: 15000 })
@@ -480,7 +494,9 @@ test('分页每页条数可改且不被重置', async ({ page }) => {
 // 基础信息下方出现 asset-risk-list,含 风险名称/级别/检测器/规则 4 列表头。
 test('资产风险列显示数量且详情抽屉含风险列表', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
+  // Task 15:TopBar「重新扫描」打开 RescanModal,需在 modal 内点「开始扫描」触发扫描。
   await page.getByRole('button', { name: /重新扫描|扫描/ }).click()
+  await page.locator('.ant-modal').filter({ hasText: '重扫描' }).getByRole('button', { name: '开始扫描' }).click()
   await page.getByRole('menuitem', { name: /资产/i }).click()
   await expect(page.locator('[data-testid="asset-row"]').first()).toBeVisible({ timeout: 15000 })
   // 全局 settings.json 含 Bash(*) baseline finding → 该资产行风险列显示数字徽标(>0)。
@@ -495,5 +511,67 @@ test('资产风险列显示数量且详情抽屉含风险列表', async ({ page 
   await expect(page.getByTestId('asset-risk-list').getByText('级别', { exact: true })).toBeVisible()
   await expect(page.getByTestId('asset-risk-list').getByText('检测器', { exact: true })).toBeVisible()
   await expect(page.getByTestId('asset-risk-list').getByText('规则', { exact: true })).toBeVisible()
+})
+
+// Task 21(Pillar 4 收尾):四支柱关键路径 e2e 回归。
+// service install/daemon 不进 e2e(CI 无 systemd,见 Task 20 单测 + 手动验证);
+// 切 agent 测试因 e2e fixture 仅单 agent(claude-code)而 test.skip(见下)。
+
+// Pillar 1(agent 化):e2e fixture 的 /api/agents 仅返回 claude-code 一个 agent
+// (DefaultAgents 只注册 claude-code,见 internal/configengine/agent.go)。
+// TopBar 的 agent Select 在 agents.length <= 1 时 disabled(Task 10),无法切换,
+// 故「切 agent 后 Dashboard 数据变化」在单 agent fixture 下不可测。
+// 不伪造多 agent fixture(超出 Task 21 范围,且需改后端 DefaultAgents/配置)。
+// service/daemon 同理跳过(CI 无 systemd)。用 test.skip 记录此限制。
+test.skip('切 agent 后 Dashboard 数据变化(单 agent fixture 跳过)', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  // TopBar agent Select disabled(单 agent)→ 无法选不同 agent。
+  const agentSelect = page.locator('.ant-select').filter({ hasText: /Claude Code/i }).first()
+  await agentSelect.click()
+})
+
+// Pillar 2(扫描总开关):Settings → 定时扫描 tab → 开总开关 → 断言 UI 反映开启态 → 关闭 → 断言关闭态。
+// scanMasterToggle 写后端 scan_enabled → ScheduleManager.Paused(后端 Task 2/4)。
+// beforeAll 删除 config.yaml → 服务器以 DefaultConfig 启动 → ScanEnabled=false(零值)→ 初始关闭。
+// 本测试断言点击后 UI toggle 状态变化(经 apiPut 往返),恢复关闭避免污染后续测试。
+test('扫描总开关切换后 UI 反映状态', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  await page.getByRole('menuitem', { name: /设置/i }).click()
+  // Settings 的 Tabs 顺序:agents → schedules → detectors-rules(规则配置)。
+  // 默认激活首个 agents tab,需显式点「定时扫描」切过去(总开关 Card 只在该 tab 渲染)。
+  await page.getByRole('tab', { name: /定时扫描/ }).click()
+  // 总开关 Card:Switch + 「允许定时扫描」文案(SettingsSchedules L111-112)。
+  const masterLabel = page.getByText('允许定时扫描', { exact: true })
+  await expect(masterLabel).toBeVisible({ timeout: 10000 })
+  const masterSwitch = page.locator('.ant-card').filter({ hasText: '允许定时扫描' }).getByRole('switch').first()
+  await expect(masterSwitch).toBeVisible({ timeout: 5000 })
+  // 开启:点击触发 saveScanToggle(true) → apiPut 往返 → scanEnabled=true → checked=true。
+  await masterSwitch.click()
+  await expect(masterSwitch).toBeChecked({ timeout: 10000 })
+  // 关闭:再点 → scanEnabled=false → checked=false。恢复关闭态(初始值),避免污染后续测试。
+  await masterSwitch.click()
+  await expect(masterSwitch).not.toBeChecked({ timeout: 10000 })
+})
+
+// Pillar 3(RescanModal):点 TopBar「重新扫描」→ modal 弹出 → 选 project scope →
+// 断言项目 Select 出现 → 取消关闭(不实际跑扫描,避免慢/flaky)。
+test('RescanModal 打开并切换 project scope 显示项目选择', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  // TopBar「重新扫描」按钮(Task 15:onClick → openRescan → RescanModal open=true)。
+  await page.getByRole('button', { name: /重新扫描/ }).click()
+  // Modal 标题 rescan.title = 「重扫描」(中文 fixture)。
+  const modal = page.locator('.ant-modal').filter({ hasText: '重扫描' })
+  await expect(modal).toBeVisible({ timeout: 10000 })
+  // 选「项目」scope:antd Radio 渲染 <label><input type=radio><span>项目</span></label>,
+  // getByRole('radio',{name:'项目'}) 靠可见文本匹配。点击后 scopeType='project'。
+  await modal.getByRole('radio', { name: '项目' }).click()
+  // 项目 Select 渲染(RescanModal L53-55:scopeType==='project' 时渲染 Select)。
+  // antd Select 的 placeholder 不在 DOM placeholder 属性上,而在 .ant-select-selection-placeholder 内,
+  // 故用 getByText 匹配文案 rescan.selectProject = 「选择项目」。
+  await expect(modal.getByText('选择项目', { exact: true })).toBeVisible({ timeout: 5000 })
+  // 取消关闭 modal(不跑扫描):cancelText = common.cancel = 「取消」,但 antd v5 对两字 CJK
+  // 文案在按钮内插空格 → 实际渲染为「取 消」。用正则 /取\s*消/ 匹配(兼容带/不带空格)。
+  await modal.getByRole('button', { name: /取\s*消/ }).click()
+  await expect(modal).not.toBeVisible({ timeout: 5000 })
 })
 

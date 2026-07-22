@@ -65,6 +65,13 @@ func runUninstall(home string, yes, keepConfig bool, out io.Writer) error {
 		return fmt.Errorf("拒绝:%s 不是目录", dataDir)
 	}
 
+	// 整目录删除需 --yes 确认;keepConfig 路径只删子项(保留 config.yaml),同样实际删数据。
+	// 两类实际删数据前先停并移除服务(若装过),避免删了数据服务还在跑报错。
+	// 放在 --yes 预览(“将删除...添加 --yes”)之后:未确认的卸载只打印提示,不动服务。
+	if keepConfig || yes {
+		_ = runServiceUninstall(true) // best-effort:无服务时 systemctl 失败被忽略、os.Remove 不存在单元文件也忽略
+	}
+
 	if keepConfig {
 		// 仅删子项(保留 config.yaml)
 		targets := []string{"history", "backups", "baseline.json", "suppressions.yaml", "rules"}
