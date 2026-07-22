@@ -64,6 +64,41 @@ func (s *spyRunner) RunScan(ctx context.Context, agentID string, scope scan.Scan
 
 func (s *spyRunner) EngineFor(agentID string) *configengine.Engine { return nil }
 
+// TestPostScanScopeQuery 验证 postScan 读 ?scope=/?path= 并构造 ScanScope 传 RunScan。
+// project/asset 需 path,未知 scope → 400,缺省 global。
+func TestPostScanScopeQuery(t *testing.T) {
+	dir := t.TempDir()
+	s := newTestServer(t, dir)
+	spy := &spyRunner{}
+	s.Runner = spy
+	// scope=project&path=/p
+	w := reqScan(t, s, "POST", "/api/scan?agent=claude-code&scope=project&path=/p", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("got %d %s", w.Code, w.Body)
+	}
+	if spy.lastScope.Type != "project" || spy.lastScope.Path != "/p" {
+		t.Errorf("scope 应为 project /p: got %+v", spy.lastScope)
+	}
+	// 无 scope → global
+	w2 := reqScan(t, s, "POST", "/api/scan", nil)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("got %d", w2.Code)
+	}
+	if spy.lastScope.Type != "global" {
+		t.Errorf("无 scope 应为 global: got %+v", spy.lastScope)
+	}
+	// scope=project 无 path → 400 bad_request
+	w3 := reqScan(t, s, "POST", "/api/scan?scope=project", nil)
+	if w3.Code != http.StatusBadRequest {
+		t.Errorf("project 无 path 应 400: got %d %s", w3.Code, w3.Body)
+	}
+	// scope=bogus → 400 bad_scope
+	w4 := reqScan(t, s, "POST", "/api/scan?scope=bogus", nil)
+	if w4.Code != http.StatusBadRequest {
+		t.Errorf("未知 scope 应 400: got %d %s", w4.Code, w4.Body)
+	}
+}
+
 func TestPostScan(t *testing.T) {
 	dir := t.TempDir()
 	claude := filepath.Join(dir, ".claude")

@@ -24,10 +24,21 @@ func (s *Server) postScan(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errorBody("unknown_agent", "未知 agent: "+agentID))
 		return
 	}
+	// scope:global(缺省)/project/asset;project/asset 需 path
+	scopeType := c.DefaultQuery("scope", "global")
+	scopePath := c.Query("path")
+	if (scopeType == "project" || scopeType == "asset") && scopePath == "" {
+		c.JSON(http.StatusBadRequest, errorBody("bad_request", scopeType+" scope 需 path 参数"))
+		return
+	}
+	if scopeType != "global" && scopeType != "project" && scopeType != "asset" {
+		c.JSON(http.StatusBadRequest, errorBody("bad_scope", "未知 scope: "+scopeType))
+		return
+	}
+	scope := scan.ScanScope{Type: scopeType, Path: scopePath}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
 	defer cancel()
-	// Task 11:scope 占位传 global(Task 14 将从 ?scope=/?path= 构造真实 scope)。
-	res, err := s.Runner.RunScan(ctx, agentID, scan.ScanScope{Type: "global"}, ids)
+	res, err := s.Runner.RunScan(ctx, agentID, scope, ids)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errorBody("scan_failed", err.Error()))
 		return
