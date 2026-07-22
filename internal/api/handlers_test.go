@@ -29,6 +29,22 @@ func newTestServer(t *testing.T, home string) *Server {
 	return NewServer(eng, orch, config.DefaultConfig(), "tok", hist, configengine.DefaultAgents(home, ""), ed)
 }
 
+// newTestServerWithAgents 用指定 agents 构造 Server(多 agent fixture 用)。
+// 与 newTestServer 的差异:agents 显式传入(而非 DefaultAgents 单 agent),
+// NewServer 内部用此 agents 列表构造 scan.Runner,EngineFor 按 agentID 池化。
+// hist 目录同样放在 home 外(与 .claude 同级)避免 configengine 扫到。
+// SelectedAgentID 默认置为 agents[0].ID(NewServer 既有行为)。
+func newTestServerWithAgents(t *testing.T, eng *configengine.Engine, agents []configengine.Agent) *Server {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	r := security.NewRegistry()
+	r.Register(security.NewRulesDetector(eng.HomeDir, nil))
+	orch := &security.Orchestrator{Registry: r}
+	hist := history.NewStore(filepath.Join(eng.HomeDir, "..", "history"))
+	ed := editor.New(eng, "", 0)
+	return NewServer(eng, orch, config.DefaultConfig(), "tok", hist, agents, ed)
+}
+
 func TestGetAssets(t *testing.T) {
 	dir := t.TempDir()
 	claude := filepath.Join(dir, ".claude")

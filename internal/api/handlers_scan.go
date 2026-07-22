@@ -17,6 +17,12 @@ func (s *Server) postScan(c *gin.Context) {
 		ids = strings.Split(d, ",")
 	}
 	agentID := c.Query("agent")
+	// 未知 agent(非空且不在 s.Agents)→ 400 unknown_agent。
+	// 空串仍回退首 agent(EngineFor 既有契约,兼容 sentinel scan 无 --agent、scheduler 内部调用)。
+	if agentID != "" && !s.agentExists(agentID) {
+		c.JSON(http.StatusBadRequest, errorBody("unknown_agent", "未知 agent: "+agentID))
+		return
+	}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
 	defer cancel()
 	res, err := s.Runner.RunScan(ctx, agentID, ids)
