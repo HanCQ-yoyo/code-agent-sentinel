@@ -45,3 +45,13 @@ func (s *Server) engineForQuery(c *gin.Context) (*configengine.Engine, string, e
 	}
 	return s.Runner.EngineFor(id), id, nil
 }
+
+// agentName 返回 agentID 的展示名;未知返回 id 本身。
+func (s *Server) agentName(agentID string) string {
+	for _, a := range s.Agents {
+		if a.ID == agentID {
+			return a.Name
+		}
+	}
+	return agentID
+}

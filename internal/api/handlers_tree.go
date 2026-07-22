@@ -13,7 +13,12 @@ import (
 
 func (s *Server) getTree(c *gin.Context) {
 	scope := c.Query("scope")
-	inv, err := s.Engine.Discover()
+	eng, _, err := s.engineForQuery(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, errorBody("unknown_agent", err.Error()))
+		return
+	}
+	inv, err := eng.Discover()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errorBody("discover_failed", err.Error()))
 		return
@@ -28,7 +33,7 @@ func (s *Server) getTree(c *gin.Context) {
 			return
 		}
 		// 根校验:path 必须是 ListProjects() 已知项目之一,防越权遍历。
-		known, _ := s.Engine.ListProjects()
+		known, _ := eng.ListProjects()
 		ok := false
 		for _, pr := range known {
 			if pr.Path == p {
@@ -50,7 +55,13 @@ func (s *Server) getTree(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, errorBody("no_agent", "no agent configured"))
 			return
 		}
-		root = s.Agents[0].RootDir
+		// 根目录用选中 agent 的 Engine.ClaudeDir(全局 .claude),
+		// 而非 s.Agents[0].RootDir——否则 ?agent=b 时树根仍是 agent a 的目录,
+		// 而 eng.Discover() 返回 b 的资产,BuildTree(root, assets) 用 a 的根 +
+		// b 的资产,b 的资产 filepath.Rel 后全部退化成根级 synthetic 节点,
+		// 非 agent[0] 的全局文件树因此坏掉。BuildTree 的 root 是独立参数,不从 eng 推导。
+		// engineForQuery 已返回非 nil eng(上方早 return),此 if 仅作文档化兜底。
+		root = eng.ClaudeDir
 		scope = "global"
 	}
 	// 按 scope 过滤资产(global 含 plugin;project 仅含选中项目 p 的资产)。
@@ -74,11 +85,11 @@ func (s *Server) getTree(c *gin.Context) {
 	// 仍可见该项目的资产而非白屏。global 根缺失属异常配置,仍走 BuildTree 报错。
 	if scope == "project" {
 		if _, statErr := os.Stat(root); statErr != nil {
-			c.JSON(http.StatusOK, s.Engine.BuildTreeFromAssets(root, assets))
+			c.JSON(http.StatusOK, eng.BuildTreeFromAssets(root, assets))
 			return
 		}
 	}
-	tree, err := s.Engine.BuildTree(root, assets)
+	tree, err := eng.BuildTree(root, assets)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errorBody("tree_failed", err.Error()))
 		return

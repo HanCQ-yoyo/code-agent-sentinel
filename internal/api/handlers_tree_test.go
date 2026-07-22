@@ -42,6 +42,65 @@ func TestGetTreeGlobal(t *testing.T) {
 	}
 }
 
+// TestGetTreeGlobalAgentScoped 回归(Task 7 review Finding 1):?agent=b 的全局树
+// 根目录必须用选中 agent 的 Engine.ClaudeDir(home/.claude-b),而非 s.Agents[0].RootDir
+// (home/.claude)。修复前 handler 用 s.Agents[0].RootDir 作 BuildTree 的 root,而
+// eng.Discover() 返回 b 的资产(source_path 在 home/.claude-b 下),filepath.Rel(home/.claude,
+// home/.claude-b/settings.json) = ../.claude-b/settings.json → b 的资产退化为根级
+// synthetic 节点,全局文件树对非首 agent 完全坏掉。
+//
+// 判据:BuildTree 的根节点 Name = filepath.Base(root)。修复前 root=home/.claude →
+// Name=".claude";修复后 root=eng.ClaudeDir=home/.claude-b → Name=".claude-b"。
+// 另外修复前会出现 Kind=synthetic 的 settings.json 子节点(b 的资产因根外被收进 synthetic),
+// 修复后应无 synthetic 节点。
+func TestGetTreeGlobalAgentScoped(t *testing.T) {
+	dir := t.TempDir()
+	s := newTwoAgentTestServer(t, dir)
+	r := s.Router()
+
+	req := httptest.NewRequest("GET", "/api/tree?scope=global&agent=b", nil)
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("got %d: %s", w.Code, w.Body)
+	}
+	var root configengine.TreeNode
+	json.Unmarshal(w.Body.Bytes(), &root)
+	// 根 Name 必须是 .claude-b(选中 agent b 的根 basename)。
+	// 修复前 root=s.Agents[0].RootDir=home/.claude → Name=".claude",会把 a 的真实
+	// 目录当根走 fs,b 的资产全部退化为 synthetic 节点。
+	if root.Name != ".claude-b" {
+		t.Errorf("根 Name = %q, 期望 .claude-b(选中 agent b 的根 basename);"+
+			"若为 .claude 说明 root 仍用 s.Agents[0].RootDir", root.Name)
+	}
+	if root.Kind != "dir" {
+		t.Errorf("根 Kind = %q, 期望 dir", root.Kind)
+	}
+	// 不应出现 synthetic 节点:修复前 b 的 settings.json 因根外被挂为 synthetic。
+	for _, c := range root.Children {
+		if c.Kind == "synthetic" {
+			t.Errorf("不应出现 synthetic 节点(根用错 agent 致 b 资产根外退化): name=%s path=%s", c.Name, c.Path)
+		}
+	}
+	// settings.json 必须作为真实 file 节点出现并挂资产。
+	found := false
+	for _, c := range root.Children {
+		if c.Path == "settings.json" && c.Kind == "file" && len(c.AssetIDs) > 0 {
+			found = true
+			break
+		}
+	}
+	if !found {
+		var kinds []string
+		for _, c := range root.Children {
+			kinds = append(kinds, c.Path+":"+c.Kind)
+		}
+		t.Errorf("缺 Kind=file 且挂资产的 settings.json 节点;children=%v", kinds)
+	}
+}
+
 func TestGetTreeProjectPathValidation(t *testing.T) {
 	dir := t.TempDir()
 	claude := filepath.Join(dir, ".claude")

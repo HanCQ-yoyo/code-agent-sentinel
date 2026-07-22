@@ -9,7 +9,12 @@ import (
 )
 
 func (s *Server) getAssets(c *gin.Context) {
-	inv, err := s.Engine.Discover()
+	eng, _, err := s.engineForQuery(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, errorBody("unknown_agent", err.Error()))
+		return
+	}
+	inv, err := eng.Discover()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errorBody("discover_failed", err.Error()))
 		return
@@ -23,7 +28,12 @@ func (s *Server) getAssets(c *gin.Context) {
 }
 
 func (s *Server) getAsset(c *gin.Context) {
-	inv, err := s.Engine.Discover()
+	eng, _, err := s.engineForQuery(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, errorBody("unknown_agent", err.Error()))
+		return
+	}
+	inv, err := eng.Discover()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errorBody("discover_failed", err.Error()))
 		return
