@@ -91,6 +91,13 @@ interface State {
   deleteSuppression: (id: string) => Promise<void>
   generateBaseline: () => Promise<BaselineResult | undefined>
   clearError: () => void
+  // P3 Task 16:页面级 rescan 入口(项目右键 + 资产详情)预填 scope。
+  // openRescan 传 initial 则预填(scopeType/scopePath),不传则默认 global。
+  // closeRescan 关闭并清空 initial(避免下次打开残留上次预填)。
+  rescanOpen: boolean
+  rescanInitial: { type: string; path?: string } | undefined
+  openRescan: (initial?: { type: string; path?: string }) => void
+  closeRescan: () => void
 }
 
 const wrap = async <T>(fn: () => Promise<T>, set: (p: Partial<State>) => void): Promise<T | undefined> => {
@@ -117,6 +124,8 @@ export const useStore = create<State>((set, get) => ({
   scanInterval: '',
   previewResult: null, editError: null,
   suppressions: [],
+  rescanOpen: false,
+  rescanInitial: undefined,
   fetchAssets: async () => {
     // Task 10:读 action 拼 ?agent=<selectedAgent>(空则不带,后端回退首 agent)。
     const a = get().selectedAgent
@@ -352,4 +361,6 @@ export const useStore = create<State>((set, get) => ({
     return wrap(() => apiPost<BaselineResult>('/api/baseline'), set)
   },
   clearError: () => set({ error: null, authError: false }),
+  openRescan: (initial) => set({ rescanOpen: true, rescanInitial: initial }),
+  closeRescan: () => set({ rescanOpen: false, rescanInitial: undefined }),
 }))

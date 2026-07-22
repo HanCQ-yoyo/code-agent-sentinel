@@ -1,5 +1,5 @@
 import { Routes, Route, useLocation } from 'react-router-dom'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 import { ConfigProvider, Layout } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import enUS from 'antd/locale/en_US'
@@ -22,9 +22,8 @@ const { Content } = Layout
 
 export default function App() {
   const { theme } = useTheme()
-  const { loading, fetchLatestScan, fetchSettings, fetchPinnedProjects } = useStore()
+  const { loading, fetchLatestScan, fetchSettings, fetchPinnedProjects, rescanOpen, rescanInitial, openRescan, closeRescan } = useStore()
   const { i18n } = useTranslation()
-  const [rescanOpen, setRescanOpen] = useState(false)
   useEffect(() => { fetchLatestScan() }, [fetchLatestScan])
   useEffect(() => { fetchSettings() }, [fetchSettings])
   useEffect(() => { fetchPinnedProjects() }, [fetchPinnedProjects])
@@ -38,7 +37,7 @@ export default function App() {
         <Layout style={{ minHeight: '100vh' }}>
           <Sidebar />
           <Layout>
-            <TopBar onOpenRescan={() => setRescanOpen(true)} loading={loading} />
+            <TopBar onOpenRescan={() => openRescan()} loading={loading} />
             <Content style={{ overflow: 'auto', padding: 24 }}>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
@@ -55,7 +54,7 @@ export default function App() {
           </Layout>
         </Layout>
       </AuthGate>
-      <RescanModal open={rescanOpen} onClose={() => setRescanOpen(false)} />
+      <RescanModal open={rescanOpen} onClose={closeRescan} initialScope={rescanInitial} />
     </ConfigProvider>
   )
 }

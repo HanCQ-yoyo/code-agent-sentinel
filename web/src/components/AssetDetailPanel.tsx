@@ -1,4 +1,4 @@
-import { Descriptions, Typography, Alert, Table } from 'antd'
+import { Descriptions, Typography, Alert, Table, Button } from 'antd'
 import { useTranslation } from 'react-i18next'
 import type { ColumnsType } from 'antd/es/table'
 import type { Asset, Finding, DetectorMeta, Severity } from '../types'
@@ -7,6 +7,7 @@ import { relativeClaudePath } from '../lib/path'
 import { AssetEditor } from './AssetEditor'
 import { SEVERITY_ORDER, SEVERITY_LABEL_KEY } from '../lib/severity'
 import { detectorNameById, ruleNameById } from '../lib/i18n-names'
+import { useStore } from '../store'
 
 // AssetDetailPanel:资产详情。三消费方(Assets 列表抽屉 50% / 树右栏 480px sticky / /assets/:id 全页)
 // 共用此组件,签名 { asset, findings?, detectors? }。阶段 C 重排:
@@ -20,6 +21,7 @@ import { detectorNameById, ruleNameById } from '../lib/i18n-names'
 // 详情抽屉在基础信息下方罗列该资产全部风险。detectors 可选,供检测器列双语名;无则回退 id。
 export function AssetDetailPanel({ asset, highlights, findings, detectors }: { asset: Asset, highlights?: { line: number; startCol: number; endCol: number }[], findings?: Finding[], detectors?: DetectorMeta[] }) {
   const { t } = useTranslation()
+  const { openRescan } = useStore()
   const description = (asset.fields as Record<string, unknown> | undefined)?.description
   const isMarkdown = ['memory', 'skill', 'command', 'agent'].includes(asset.type)
 
@@ -50,9 +52,10 @@ export function AssetDetailPanel({ asset, highlights, findings, detectors }: { a
         {isMarkdown && typeof description === 'string' && description ? (
           <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>{description}</Typography.Text>
         ) : null}
-        <div style={{ display: 'flex', gap: 8 }}>
+        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <Badge tone="neutral">{asset.type}</Badge>
           <Badge tone={`scope-${asset.scope}` as BadgeTone}>{asset.scope}</Badge>
+          <Button size="small" style={{ marginLeft: 'auto' }} onClick={() => openRescan({ type: 'asset', path: asset.source_path })}>{t('rescan.rescanThisAsset')}</Button>
         </div>
       </div>
 

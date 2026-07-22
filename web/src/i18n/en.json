@@ -11,7 +11,9 @@
     "selectAsset": "Select asset (source_path)",
     "agent": "Agent",
     "detectors": "Detectors",
-    "start": "Start scan"
+    "start": "Start scan",
+    "rescanThisProject": "Rescan this project",
+    "rescanThisAsset": "Rescan this asset"
   },
   "common": {
     "global": "Global",

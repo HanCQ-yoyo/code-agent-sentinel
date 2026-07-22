@@ -29,6 +29,7 @@ export default function Assets() {
     pinnedProjects, savePinnedProjects,
     detectors, fetchDetectors,
     selectedAgent,
+    openRescan,
   } = useStore()
   const [view, setView] = useState<View>('list')
   const [type, setType] = useState('')
@@ -173,6 +174,7 @@ export default function Assets() {
     const menuItems = [
       { key: 'pin', label: color ? t('assets.unpin') : t('assets.pin'), onClick: () => togglePin(p.path) },
       { key: 'color', label: t('assets.setColor'), children: COLORS.map((c) => ({ key: c.value, label: c.label, onClick: () => setColor(p.path, c.value) })) },
+      { key: 'rescan', label: t('rescan.rescanThisProject'), onClick: () => openRescan({ type: 'project', path: p.path }) },
     ]
     return (
       <Dropdown trigger={['contextMenu']} menu={{ items: menuItems }}>

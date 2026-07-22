@@ -11,7 +11,9 @@
     "selectAsset": "选择资产(source_path)",
     "agent": "Agent",
     "detectors": "检测器",
-    "start": "开始扫描"
+    "start": "开始扫描",
+    "rescanThisProject": "重扫此项目",
+    "rescanThisAsset": "重扫此资产"
   },
   "common": {
     "global": "全局",
