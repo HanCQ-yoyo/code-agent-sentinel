@@ -55,3 +55,20 @@ func (s *Server) agentName(agentID string) string {
 	}
 	return agentID
 }
+
+// agentIDForRequest 取请求要用的 agent ID(不校验合法性,不返回 Engine)。
+// 优先 ?agent= query;否则 Server.SelectedAgentID;再否则空串。
+// 与 engineForQuery 的差异:engineForQuery 校验未知 agent(报 400),返回 Engine + agentID;
+// agentIDForRequest 不校验——未知 agent 经 Runner.EngineFor 兜底回退首 agent,
+// 用于 partialRescan 容错路径(编辑已落盘成功,不应因 agent 拼写错让 rescan 报错)。
+//
+// 用途:commitAsset → partialRescan 需要一个 agentID 给 Runner.RunScan,但编辑路径
+// 不强制 400 未知 agent(写入已成功,rescan 失败可降级提示)。未知 agent → EngineFor
+// 回退首 agent → 扫首 agent 的资产(可能与被编辑资产不同 agent,但 rescan 本就 best-effort)。
+func (s *Server) agentIDForRequest(c *gin.Context) string {
+	id := c.Query("agent")
+	if id == "" {
+		id = s.SelectedAgentID
+	}
+	return id
+}

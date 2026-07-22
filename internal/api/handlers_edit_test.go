@@ -1,13 +1,16 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
 	"testing"
 
 	"code-agent-sentinel/internal/configengine"
+	"code-agent-sentinel/internal/scan"
 	"code-agent-sentinel/internal/security"
 )
 
@@ -92,10 +95,21 @@ func TestPreviewAssetNotEditable(t *testing.T) {
 }
 
 // getInventory 复用 GET /api/assets 拉资产(测试辅助)。
+// agentID 为空时拉首 agent(默认);非空时拉指定 agent(经 ?agent=)。
 func getInventory(t *testing.T, s *Server) configengine.Inventory {
 	t.Helper()
+	return getInventoryFor(t, s, "")
+}
+
+// getInventoryFor 拉指定 agent 的资产;agentID 空走首 agent。
+func getInventoryFor(t *testing.T, s *Server, agentID string) configengine.Inventory {
+	t.Helper()
 	r := s.Router()
-	req := httptest.NewRequest("GET", "/api/assets", nil)
+	path := "/api/assets"
+	if agentID != "" {
+		path += "?agent=" + agentID
+	}
+	req := httptest.NewRequest("GET", path, nil)
 	req.Host = "127.0.0.1"
 	req.Header.Set("Authorization", "Bearer tok")
 	w := httptest.NewRecorder()
@@ -349,16 +363,19 @@ func TestPartialRescanDedupSettingsEdit(t *testing.T) {
 // TestPartialRescanErrorSurfaced 验证重扫失败时 rescan_error 字段被设置(Fix 4)。
 // 旧 bug:partialRescan 失败返回 nil → new_findings: null → 前端误报"无新增风险"。
 //
-// 本测试通过让 Orchestrator.Registry 为 nil(无法 Scan)强制重扫失败,
-// 断言响应含 rescan_error 非空字符串。
+// Task 13 改造:partialRescan 现经 s.Runner.RunScan(不再直接调 s.Orchestrator.Scan),
+// 故破坏 s.Orchestrator 不再生效(Runner 持有自己的 Orchestrator 引用,NewServer 时注入)。
+// 改为注入 errorRunner(RunScan 返回 error,EngineFor 委托原 Runner 以便 getAssets 正常)
+// 强制重扫失败,断言响应含 rescan_error 非空。
 func TestPartialRescanErrorSurfaced(t *testing.T) {
 	dir := t.TempDir()
 	claude := filepath.Join(dir, ".claude")
 	writeFile(t, filepath.Join(claude, "settings.json"), `{"model":"opus"}`)
 	s := newTestServer(t, dir)
-	// 破坏 Orchestrator 使 Scan 必失败:nil Registry → Detectors() panic 或 nil deref。
-	// 用一个无 Registry 的 Orchestrator 替换。
-	s.Orchestrator = &security.Orchestrator{Registry: nil}
+	// 注入 errorRunner:EngineFor 委托原 Runner(使 getAssets 正常拉资产),RunScan 返回 error
+	// (模拟扫描失败)。partialRescan 应捕获 err 并返回 rescan_error="partial rescan failed: ..."。
+	realRunner := s.Runner
+	s.Runner = &errorRunner{inner: realRunner}
 	r := s.Router()
 	inv := getInventory(t, s)
 	id := inv.Assets[0].ID
@@ -382,5 +399,102 @@ func TestPartialRescanErrorSurfaced(t *testing.T) {
 	nf, _ := res["new_findings"].([]any)
 	if nf == nil {
 		t.Fatal("Fix 5: new_findings should be [] not null even on rescan failure")
+	}
+}
+
+// errorRunner 实现 ScanRunner 接口:RunScan 恒返回 error(模拟扫描失败),
+// EngineFor 委托内部 Runner(使 getAssets 等读路径正常),用于测试 partialRescan 的错误路径
+// (Task 13:partialRescan 经 Runner,需注入错误 Runner)。
+type errorRunner struct {
+	inner ScanRunner
+}
+
+func (e *errorRunner) RunScan(ctx context.Context, agentID string, scope scan.ScanScope, detectorIDs []string) (*security.ScanResult, error) {
+	return nil, errors.New("simulated scan failure")
+}
+
+func (e *errorRunner) EngineFor(agentID string) *configengine.Engine {
+	return e.inner.EngineFor(agentID)
+}
+
+// TestPartialRescanUsesRunnerAgent 验证 partialRescan 经 s.Runner.RunScan 走对应 agent 的 Engine,
+// 不再硬编码 s.Engine(Task 13)。
+//
+// 场景:两 agent fixture(agent a = home/.claude 含 Bash(*);agent b = home/.claude-b 含 model:opus)。
+// Editor 绑定 s.Engine(= agent a 的 Engine),只能找 a 的资产;故编辑目标是 a 的 permissions 资产。
+//
+// 判别设计:初始 a 含 Bash(*)→ global 扫描后 latest 含 baseline.wildcard-bash(AssetID=a.permissions)。
+// 编辑 a 的 permissions 追加 Read(**)(引入新危险 baseline.dangerous-read-all,不在 latest prior 中),
+// 带 ?agent=b commit:
+//   - 走 Runner(b):b 的 Engine 发现 b 的资产(home/.claude-b/...),scope=asset/path=<a 的 source_path>
+//     在 b 的 inventory 中无匹配 → scopeAssets 返回空 → 扫 0 资产 → new_findings 空、无 rescan_error。
+//   - 若仍走 s.Engine(a):a 的 inventory 含该 source_path 的 sibling(permissions)→ 扫到 a 的
+//     permissions sibling → 产生 baseline.dangerous-read-all(新,非 prior)→ new_findings 非空。
+//
+// 故断言:?agent=b 的 commit 成功(200),new_findings 空(因 b 的 Engine 找不到 a 的路径),
+// 无 rescan_error。这精确区分了走 Runner(b,空)与走 s.Engine(a,非空)的行为。
+//
+// 反向对照(走 a 应非空)由 TestPartialRescanDedup 覆盖(编辑 a 引入新危险后 ?agent 默认=a → 非空),
+// 这里不重复。
+func TestPartialRescanUsesRunnerAgent(t *testing.T) {
+	dir := t.TempDir()
+	s := newTwoAgentTestServer(t, dir)
+	r := s.Router()
+
+	// 1. 先跑一次 global 扫描使 latestScan("") 非 nil(prior 基线非空)。
+	//    首 agent(a)有 Bash(*) → latest 含 baseline.wildcard-bash(AssetID=a.permissions),
+	//    但不含 baseline.dangerous-read-all(初始无 Read(**))。
+	scanReq := httptest.NewRequest("POST", "/api/scan", nil)
+	scanReq.Host = "127.0.0.1"
+	scanReq.Header.Set("Authorization", "Bearer tok")
+	scanW := httptest.NewRecorder()
+	r.ServeHTTP(scanW, scanReq)
+	if scanW.Code != 200 {
+		t.Fatalf("POST /api/scan: got %d: %s", scanW.Code, scanW.Body)
+	}
+	latest := s.latestScan("")
+	if latest == nil {
+		t.Fatal("latestScan() nil after POST /api/scan")
+	}
+
+	// 2. 找 agent a 的 permissions 资产(Editor 绑定 s.Engine=a,只能找 a 的资产)。
+	invA := getInventoryFor(t, s, "a")
+	var permID, permHash string
+	for _, a := range invA.Assets {
+		if a.Type == configengine.AssetPermissions {
+			permID = a.ID
+			permHash = a.Hash
+			break
+		}
+	}
+	if permID == "" {
+		t.Fatalf("no permissions asset for agent a; inv=%+v", invA)
+	}
+
+	// 3. 编辑 a 的 permissions 追加 Read(**)(引入新危险 baseline.dangerous-read-all),
+	//    带 ?agent=b commit。partialRescan(?agent=b) 走 b 的 Engine:
+	//    b 的 inventory 无 a 的 source_path → 扫 0 资产 → new_findings 空。
+	body := `{"new_content":"{\"permissions\":{\"allow\":[\"Bash(*)\",\"Read(**)\"]}}","base_hash":"` + permHash + `"}`
+	req := httptest.NewRequest("PUT", "/api/assets/"+permID+"/content?agent=b", strings.NewReader(body))
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("PUT /api/assets/%s/content?agent=b: got %d: %s", permID, w.Code, w.Body)
+	}
+	var res map[string]any
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if re, ok := res["rescan_error"]; ok && re != nil && re != "" {
+		t.Fatalf("partialRescan(?agent=b) should not error (b's Engine finds 0 assets for a's path → empty result, not error): rescan_error=%v, res=%+v", re, res)
+	}
+	nf, _ := res["new_findings"].([]any)
+	// 关键断言:?agent=b 走 b 的 Engine,b 的 inventory 无 a 的 source_path → 扫 0 资产 → new_findings 空。
+	// 若 partialRescan 仍用 s.Engine(a),a 的 inventory 含该 source_path 的 sibling(permissions)→
+	// 扫到 baseline.dangerous-read-all(新,非 prior)→ new_findings 非空。故 nf 空 = 走了 b 的 Runner。
+	if len(nf) != 0 {
+		t.Errorf("partialRescan(?agent=b) should scan 0 assets (b's Engine has no asset at a's source_path), "+
+			"got %d new_findings — suggests partialRescan still uses s.Engine(a): %+v", len(nf), nf)
 	}
 }

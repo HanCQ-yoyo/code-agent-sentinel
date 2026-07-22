@@ -11,6 +11,7 @@ import (
 
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/editor"
+	"code-agent-sentinel/internal/scan"
 	"code-agent-sentinel/internal/security"
 )
 
@@ -80,7 +81,9 @@ func (s *Server) commitAsset(c *gin.Context) {
 		return
 	}
 	// 部分重扫:受影响资产(同 source_path)+ rules 检测器。
-	newFindings, rescanErr := s.partialRescan(res.Asset)
+	// 经 Runner.RunScan 走 agent 抽象(agentID 取 ?agent= 或 SelectedAgentID),
+	// 不再硬编码 s.Engine/Orchestrator(Task 13:统一扫描路径)。
+	newFindings, rescanErr := s.partialRescan(s.agentIDForRequest(c), res.Asset)
 	resp := gin.H{
 		"asset":        res.Asset,
 		"backup_path":  res.BackupPath,
@@ -95,9 +98,22 @@ func (s *Server) commitAsset(c *gin.Context) {
 }
 
 // partialRescan 跑受影响资产(同 source_path)的 rules 检测器,对比 latest 同检测器 findings 返回新增。
-// 返回 (newFindings, rescanError):rescanError 非空时表示重扫失败(Discover/Scan 错误或 fresh=nil),
+// 返回 (newFindings, rescanError):rescanError 非空时表示重扫失败(Discover/Scan 错误或 res==nil),
 // 前端据此提示用户手动全量重扫,而非误报"无新增风险"。
-func (s *Server) partialRescan(updated configengine.Asset) (fresh []security.Finding, rescanError string) {
+//
+// Task 13:改造为经 s.Runner.RunScan(ScanScope{Type:"asset"})走 agent 抽象,不再硬编码
+// s.Engine/Orchestrator。agentID 由 commitAsset 从 ?agent= 或 SelectedAgentID 传入;
+// 未知 agentID 经 Runner.EngineFor 兜底回退首 agent(容错,与 engineForQuery 的 400 语义不同:
+// 编辑已落盘,rescan 失败可降级,不应因 agent 拼写错让整个 commit 响应报错)。
+//
+// 行为变化:RunScan 内部 saveHistory 会写一条 asset-scope 历史记录(旧 partialRescan 直接调
+// Orchestrator.Scan 不写历史)。LatestForAgent 优先 global scope,故 asset-scope 记录不污染
+// dashboard 的 latest-global;仅作为审计轨迹留存(谁在何时对哪个资产做了 rescan)。
+//
+// prior 须在 RunScan 之前取:RunScan 会 saveHistory 写一条 asset-scope 记录,若 prior 在其后取,
+// latestScan("") 在无 global 历史的全新场景下可能退化为取该 asset-scope 记录 → prior=fresh →
+// 全部被去重 → new_findings 恒空(回归)。prior 取"本次 rescan 之前"的 latest,语义正确。
+func (s *Server) partialRescan(agentID string, updated configengine.Asset) (fresh []security.Finding, rescanError string) {
 	// rescan 不应 panic 崩溃整个 commit 响应(写入已成功);recover 兜底。
 	defer func() {
 		if r := recover(); r != nil {
@@ -105,37 +121,25 @@ func (s *Server) partialRescan(updated configengine.Asset) (fresh []security.Fin
 			rescanError = fmt.Sprintf("partial rescan failed: panic %v", r)
 		}
 	}()
-	inv, err := s.Engine.Discover()
-	if err != nil {
-		return make([]security.Finding, 0), "partial rescan failed: " + err.Error()
-	}
-	var affected []configengine.Asset
-	for _, a := range inv.Assets {
-		if a.SourcePath == updated.SourcePath {
-			affected = append(affected, a)
-		}
-	}
-	if len(affected) == 0 {
-		return make([]security.Finding, 0), "partial rescan failed: no affected assets found"
+	// 先取 prior(本次 rescan 之前的 latest 同 source_path sibling findings),
+	// 必须在 RunScan 之前:RunScan 会 saveHistory,若之后取可能读到刚写的 asset-scope 记录。
+	prior := s.priorFindingsForSourcePath(updated.SourcePath, []string{"rules"})
+	priorKeys := map[string]bool{}
+	for _, f := range prior {
+		priorKeys[findingKey(f)] = true
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	res, err := s.Orchestrator.Scan(ctx, affected, []string{"rules"})
+	// RunScan 内部:EngineFor(agentID) → Discover → scopeAssets(asset, updated.SourcePath)
+	//   → 扫同 source_path 的全部 sibling(settings + permissions + per-hook)→ saveHistory。
+	// scopeAssets 的 asset 分支与旧 affected 过滤同为 a.SourcePath == path,行为一致。
+	res, err := s.Runner.RunScan(ctx, agentID, scan.ScanScope{Type: "asset", Path: updated.SourcePath}, []string{"rules"})
 	if err != nil || res == nil {
 		msg := "partial rescan failed: scan returned nil"
 		if err != nil {
 			msg = "partial rescan failed: " + err.Error()
 		}
 		return make([]security.Finding, 0), msg
-	}
-	// 该资产在 latest 同检测器的 findings 集合(对比基线)。
-	// 同 source_path 的所有 sibling 资产(settings + permissions + per-hook)都参与重扫,
-	// rules findings 的 AssetID 是被扫 sibling 的 ID(如 permissions.ID),
-	// 而非编辑资产的 ID,故 prior 须收集 ALL sibling AssetID。
-	prior := s.priorFindingsForSourcePath(updated.SourcePath, []string{"rules"})
-	priorKeys := map[string]bool{}
-	for _, f := range prior {
-		priorKeys[findingKey(f)] = true
 	}
 	fresh = make([]security.Finding, 0)
 	for _, f := range res.Findings {
