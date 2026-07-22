@@ -87,3 +87,27 @@ func TestManagerApplyDisabledDoesNotStart(t *testing.T) {
 	}
 	m.Stop()
 }
+
+func TestManagerPausedSuppressesTicks(t *testing.T) {
+	var n int32
+	mk := func(agentID string) func(context.Context) error {
+		return func(context.Context) error { atomic.AddInt32(&n, 1); return nil }
+	}
+	m := NewManager(mk)
+	m.Apply([]config.ScheduleCfg{{AgentID: "a", Enabled: true, Interval: "50ms"}})
+	time.Sleep(120 * time.Millisecond) // 至少跑 1-2 次
+	before := atomic.LoadInt32(&n)
+	m.SetPaused(true) // 总开关关:所有任务暂停
+	time.Sleep(200 * time.Millisecond)
+	during := atomic.LoadInt32(&n)
+	if during > before {
+		t.Errorf("Paused 后不应再触发: before=%d during=%d", before, during)
+	}
+	m.SetPaused(false) // 恢复:重新跑
+	time.Sleep(200 * time.Millisecond)
+	after := atomic.LoadInt32(&n)
+	if after <= during {
+		t.Errorf("解除 Paused 后应恢复触发: during=%d after=%d", during, after)
+	}
+	m.Stop()
+}
