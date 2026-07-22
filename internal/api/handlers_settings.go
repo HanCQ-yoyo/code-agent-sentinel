@@ -62,17 +62,8 @@ func (s *Server) putSettings(c *gin.Context) {
 			return
 		}
 	}
-	if scanChanged && s.Scheduler != nil {
-		interval, _ := time.ParseDuration(s.Config.ScanInterval)
-		enabled := s.Config.ScanEnabled
-		// interval<=0 视为关闭(Task 7 语义:Start 对 interval<=0 no-op)。
-		// 与 putScheduler 行为一致:零/负 interval 强制 enabled=false 再 Reconfigure,
-		// 避免 Reconfigure(enabled, 0) 与 config.ScanEnabled=true 的语义不一致,
-		// 也避免空 scan_interval 绕过校验(ParseDuration("") 返回错误被 _ 丢弃)。
-		if interval <= 0 {
-			enabled = false
-		}
-		s.Scheduler.Reconfigure(enabled, interval)
+	if scanChanged {
+		s.applyScanToggle()
 	}
 	for _, k := range []string{"claude_dir", "discovery", "home_dir"} {
 		if _, ok := raw[k]; ok {
@@ -90,4 +81,17 @@ func (s *Server) putSettings(c *gin.Context) {
 		resp["warnings"] = warnings
 	}
 	c.JSON(http.StatusOK, resp)
+}
+
+// applyScanToggle 把 scan_enabled 总开关状态传播到 ScheduleManager.Paused。
+// 总开关关 → Paused=true,所有 per-agent 定时任务 tick 跳过(Status 仍报各自 enabled/interval);
+// 总开关开 → Paused=false,各任务按自身 schedule.enabled 跑。
+// scan_interval 不在此处强行覆盖 per-agent schedule.interval(后者以 /api/schedules 为准,
+// scan_interval 仅作无 schedule 时的回退默认,见 ResolveSchedules)。
+// 注:本方法不触已 dead 的 s.Scheduler.Reconfigure(后者由 Task 3 连同字段一并删除)。
+func (s *Server) applyScanToggle() {
+	if s.ScheduleManager == nil {
+		return
+	}
+	s.ScheduleManager.SetPaused(!s.Config.ScanEnabled)
 }

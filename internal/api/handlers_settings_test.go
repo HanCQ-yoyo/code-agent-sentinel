@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"code-agent-sentinel/internal/config"
 	"code-agent-sentinel/internal/scheduler"
@@ -79,32 +78,37 @@ func TestPutSettingsIgnoresRestartFieldsWithWarning(t *testing.T) {
 	}
 }
 
-// TestPutSettingsScanReconfigure 覆盖 Minor gap (c):带 scan_interval/scan_enabled
-// 的 PUT /api/settings 触发 Scheduler.Reconfigure,状态正确更新。
-func TestPutSettingsScanReconfigure(t *testing.T) {
+// TestPutSettingsScanToggle 覆盖 scan_enabled 总开关经 PUT /api/settings
+// 传播到 ScheduleManager.Paused(而非 dead s.Scheduler.Reconfigure)。
+// 旧 TestPutSettingsScanReconfigure 断言 s.Scheduler.Status(),但 putSettings
+// 的 scanChanged 分支已改为调 applyScanToggle(只动 ScheduleManager.Paused,
+// 不再触 s.Scheduler.Reconfigure),旧测试的断言路径已消失——故以本测试取代之。
+// s.Scheduler 字段本身及其余依赖它的测试(TestPutSettingsZeroIntervalDisables 等)
+// 由 Task 3 统一清理。
+func TestPutSettingsScanToggle(t *testing.T) {
 	dir := t.TempDir()
 	s := newTestServer(t, dir)
-	s.ConfigPath = filepath.Join(dir, "config.yaml")
-	s.Scheduler = scheduler.New(0, func(context.Context) error { return nil })
-	w := reqScheduler(t, s, "PUT", "/api/settings", map[string]any{
-		"scan_enabled":  true,
-		"scan_interval": "1h",
+	s.ScheduleManager = scheduler.NewManager(func(string) func(context.Context) error {
+		return func(context.Context) error { return nil }
 	})
+	// 关闭总开关 → Paused=true
+	w := reqScheduler(t, s, "PUT", "/api/settings", map[string]any{"scan_enabled": false})
 	if w.Code != 200 {
 		t.Fatalf("got %d: %s", w.Code, w.Body)
 	}
-	if !s.Config.ScanEnabled || s.Config.ScanInterval != "1h" {
-		t.Errorf("config 未更新: enabled=%v interval=%q", s.Config.ScanEnabled, s.Config.ScanInterval)
+	if !s.ScheduleManager.Paused() {
+		t.Error("scan_enabled=false 应令 ScheduleManager.Paused()=true")
 	}
-	if s.Scheduler == nil {
-		t.Fatal("Scheduler 不应为 nil")
+	// 开启 → Paused=false
+	w2 := reqScheduler(t, s, "PUT", "/api/settings", map[string]any{"scan_enabled": true})
+	if w2.Code != 200 {
+		t.Fatalf("got %d: %s", w2.Code, w2.Body)
 	}
-	st := s.Scheduler.Status()
-	if !st.Enabled {
-		t.Error("Reconfigure 后应 enabled")
+	if s.ScheduleManager.Paused() {
+		t.Error("scan_enabled=true 应令 ScheduleManager.Paused()=false")
 	}
-	if st.Interval != time.Hour {
-		t.Errorf("interval 应 1h,got %v", st.Interval)
+	if !s.Config.ScanEnabled {
+		t.Error("config.ScanEnabled 应已更新为 true")
 	}
 }
 
