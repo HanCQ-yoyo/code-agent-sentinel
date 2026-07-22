@@ -71,6 +71,8 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newSetupCmd())
 	// Task 22:uninstall 子命令(清理 ~/.claude-sentinel 数据目录)
 	cmd.AddCommand(newUninstallCmd())
+	// Task 20:service 子命令(install/uninstall/status 管理系统服务)
+	cmd.AddCommand(newServiceCmd())
 	return cmd
 }
 
