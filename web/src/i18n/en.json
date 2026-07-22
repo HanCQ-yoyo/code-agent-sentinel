@@ -63,6 +63,7 @@
     "confirmDelete": "Delete this scan record?",
     "delete": "Delete",
     "empty": "No scan history",
+    "noMatchAgent": "No scans for this agent",
     "totalCount": "Total {{count}} entries",
     "filterAgent": "Filter by agent"
   },

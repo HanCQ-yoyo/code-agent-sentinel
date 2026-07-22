@@ -63,6 +63,7 @@
     "confirmDelete": "确认删除此扫描记录?",
     "delete": "删除",
     "empty": "暂无历史扫描",
+    "noMatchAgent": "该 agent 暂无扫描记录",
     "totalCount": "共 {{count}} 条",
     "filterAgent": "按 agent 筛选"
   },

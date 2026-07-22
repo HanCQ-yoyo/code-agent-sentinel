@@ -28,6 +28,11 @@ export default function History() {
   const { history, agents, fetchHistory, fetchHistoryDetail, deleteHistory } = useStore()
   const [detail, setDetail] = useState<ScanRecord | null>(null)
   const [err, setErr] = useState('')
+  // Task 10:客户端 agent 筛选(历史列表本身是全局的,展示所有 agent 的扫描;下拉仅本地过滤)。
+  // 必须在 early return(detail 视图)之前调用:React Router 在 /history 与 /history/:id 间复用
+  // 同一 <History /> 实例(无 remount key),若 useState 在 early return 之后,列表视图与详情视图
+  // 的 hook 数量不一致 → "Rendered fewer hooks than expected" → 页面崩溃(白屏)。
+  const [agentFilter, setAgentFilter] = useState<string>('')
 
   useEffect(() => {
     if (!id) { fetchHistory(); return }
@@ -68,8 +73,7 @@ export default function History() {
     ) },
   ]
 
-  // Task 10:客户端 agent 筛选(历史列表本身是全局的,展示所有 agent 的扫描;下拉仅本地过滤)。
-  const [agentFilter, setAgentFilter] = useState<string>('')
+  // Task 10:filteredHistory 仅列表视图使用,放在 early return 之后即可(非 hook)。
   const filteredHistory = agentFilter ? history.filter(h => h.agent_id === agentFilter) : history
 
   return (
@@ -85,7 +89,7 @@ export default function History() {
           onChange={(v) => setAgentFilter(v ?? '')}
         />
       </div>
-      {filteredHistory.length === 0 ? <Empty description={t('history.empty')} /> : (
+      {filteredHistory.length === 0 ? <Empty description={(!agentFilter || history.length === 0) ? t('history.empty') : t('history.noMatchAgent')} /> : (
         <Table<ScanSummary>
           rowKey="id"
           columns={columns}
