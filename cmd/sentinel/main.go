@@ -140,8 +140,11 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	r.Register(security.NewDependencyDetector(cfg.Detectors))
 	orch := &security.Orchestrator{Registry: r}
 
-	// C-BUILD-1: --token 非空则用之(调试/测试),否则随机生成。
+	// token 优先级:--token flag(调试)> config.Token(服务模式预置)> 随机生成(前台交互)。
 	token := tokenFlag
+	if token == "" {
+		token = cfg.Token
+	}
 	if token == "" {
 		token = genToken()
 	}

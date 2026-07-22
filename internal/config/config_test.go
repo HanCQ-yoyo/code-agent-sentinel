@@ -245,3 +245,20 @@ func TestResolveSchedulesEmptyWhenScanDisabled(t *testing.T) {
 		t.Fatalf("scan 关闭且回退时应返回空: %+v", got)
 	}
 }
+
+// Task 17:Token 字段往返(service install 写入,后台进程读取)。
+func TestTokenFieldRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "config.yaml")
+	cfg := &Config{Token: "abc123", Language: "en"}
+	if err := Save(p, cfg); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Load(p)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Token != "abc123" {
+		t.Errorf("Token 往返: got %q want abc123", got.Token)
+	}
+}

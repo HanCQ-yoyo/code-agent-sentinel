@@ -47,6 +47,9 @@ type Config struct {
 	ScanEnabled bool `yaml:"scan_enabled"`
 	// #5:"zh"/"en";空 = 前端默认英文(用户可用 localStorage 覆盖,或在此显式配置)
 	Language string `yaml:"language"`
+	// Token 是服务模式预置的访问 token。空=前台交互场景随机生成(见 main.go)。
+	// service install 写入,使后台进程无需经 banner 展示即可拼接 #token= URL。
+	Token string `yaml:"token"`
 	// #4:置顶项目列表
 	PinnedProjects []PinnedProject `yaml:"pinned_projects"`
 	// 多 agent 配置(setup 写入)。空 → ResolveAgents 回退到 ClaudeDir。
