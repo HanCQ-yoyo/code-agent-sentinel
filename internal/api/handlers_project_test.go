@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
@@ -84,5 +85,32 @@ func TestPostProjectRemoved(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != 404 {
 		t.Errorf("POST /api/project 应已移除(404),实际 %d", w.Code)
+	}
+}
+
+// TestGetProjectAgentScoped 验证 getProject 按选中 agent 取 Engine(Task 8):
+//   - ?agent=a 返回 A 的项目列表(projects 键存在,200);
+//   - 未知 ?agent=zzz 经 engineForQuery 返回 400 unknown_agent(不再静默回退首 agent)。
+//
+// 注:newTwoAgentTestServer 的 agent b root = home/.claude-b,其 ClaudeJSON =
+// home/.claude-b.json(不存在)→ ListProjects 返回空。agent a 的 ClaudeJSON =
+// home/.claude.json(也不存在)→ 同样为空。故此处不断言两 agent 项目数差异,
+// 仅校验键存在与 400 路径(与 brief 一致,不过度工程化 fixture)。
+func TestGetProjectAgentScoped(t *testing.T) {
+	dir := t.TempDir()
+	s := newTwoAgentTestServer(t, dir)
+	// ?agent=a:返回 a 的项目(projects 键存在)
+	wa := doJSON[map[string]any](t, s, "GET", "/api/project?agent=a")
+	if _, ok := wa["projects"]; !ok {
+		t.Fatal("应返回 projects")
+	}
+	// 未知 agent → 400
+	req := httptest.NewRequest("GET", "/api/project?agent=zzz", nil)
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	rec := httptest.NewRecorder()
+	s.Router().ServeHTTP(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("未知 agent 应 400: got %d", rec.Code)
 	}
 }

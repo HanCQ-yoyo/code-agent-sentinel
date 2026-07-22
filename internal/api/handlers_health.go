@@ -9,7 +9,15 @@ import (
 )
 
 func (s *Server) getFindings(c *gin.Context) {
-	latest := s.latestScan("")
+	// getFindings 不直接调 Discover,但需 engineForQuery 来(a)校验/解析 ?agent=,
+	// (b)拿 agentID 传给 latestScan。eng 本身不在此 handler 使用(只读 latest.Findings),
+	// 故丢弃 eng 用 _。
+	_, agentID, err := s.engineForQuery(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, errorBody("unknown_agent", err.Error()))
+		return
+	}
+	latest := s.latestScan(agentID)
 	if latest == nil {
 		c.JSON(http.StatusOK, []security.Finding{})
 		return
@@ -26,9 +34,14 @@ func (s *Server) getFindings(c *gin.Context) {
 }
 
 func (s *Server) getHealth(c *gin.Context) {
-	latest := s.latestScan("")
+	eng, agentID, err := s.engineForQuery(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, errorBody("unknown_agent", err.Error()))
+		return
+	}
+	latest := s.latestScan(agentID)
 	if latest == nil || latest.HealthScore == nil {
-		inv, _ := s.Engine.Discover()
+		inv, _ := eng.Discover()
 		c.JSON(http.StatusOK, security.ComputeHealth(inv.Assets, nil))
 		return
 	}
