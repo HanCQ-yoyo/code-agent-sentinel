@@ -10,8 +10,11 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
 	"path/filepath"
 	"runtime"
+	"syscall"
+	"time"
 
 	"github.com/spf13/cobra"
 
@@ -164,6 +167,10 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	})
 	srv.ScheduleManager = mgr
 	mgr.Apply(cfg.ResolveSchedules(agentCfgs))
+	// defer mgr.Stop 作为所有返回路径(Listen 失败 / Serve 返回)的兜底。
+	// serveHTTP 的 stop 回调也调 mgr.Stop——双重调用安全:Manager.Stop 幂等
+	// (遍历 runners 后置空 map,二次调用遍历空 map = no-op;Scheduler.Stop 亦由
+	// !s.running 早返回守护)。Task 18:signal 路径下 stop 先跑,defer 后跑(no-op)。
 	defer mgr.Stop()
 	httpSrv := &http.Server{Handler: srv.Router()}
 
@@ -205,7 +212,42 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	if shouldPromptSetup(cfg, filepath.Join(home, ".claude")) {
 		fmt.Println("提示:尚未配置 code agent。运行 `sentinel setup` 进行交互式配置。")
 	}
-	httpSrv.Serve(ln)
+	// Task 18:SIGINT/SIGTERM 触发 http.Shutdown + mgr.Stop graceful 退出。
+	// sigCh 适配为 trigger chan(struct{}),让 serveHTTP 与测试共签名(<-chan struct{})。
+	// signal.Notify 的 sigCh 带 buffer(1),信号不会丢;close(trigger) 亦可叫停。
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+	trigger := make(chan struct{})
+	go func() {
+		select {
+		case <-sigCh:
+			close(trigger)
+		case <-trigger:
+		}
+	}()
+	if err := serveHTTP(ln, httpSrv, func() { mgr.Stop() }, trigger); err != nil {
+		return err
+	}
+	return nil
+}
+
+// serveHTTP 运行 HTTP server,在 shutdownTrigger 关闭时 graceful shutdown。
+// stop 在 Serve 返回后调用(停 scheduler),确保 signal 路径也跑到 mgr.Stop。
+// 返回 Serve 的错误(shutdown 时为 http.ErrServerClosed,此处转 nil)。
+// shutdownTrigger 是生产用 SIGINT/SIGTERM 信号 chan,测试用自定义 chan——
+// 避免测试里硬发信号(全局信号影响其他测试)。
+func serveHTTP(ln net.Listener, srv *http.Server, stop func(), shutdownTrigger <-chan struct{}) error {
+	go func() {
+		<-shutdownTrigger
+		fmt.Println("sentinel 正在关闭...")
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		_ = srv.Shutdown(ctx) // 在途请求给 10s 缓冲;超时强切(history 已在 scan 完成时落盘)
+	}()
+	if err := srv.Serve(ln); err != nil && err != http.ErrServerClosed {
+		return err
+	}
+	stop()
 	return nil
 }
 

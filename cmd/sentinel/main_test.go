@@ -1,9 +1,13 @@
 package main
 
 import (
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"code-agent-sentinel/internal/config"
 )
@@ -102,5 +106,37 @@ func TestShouldNotPromptWhenClaudeDirExists(t *testing.T) {
 	cfg := &config.Config{}
 	if shouldPromptSetup(cfg, filepath.Join(home, ".claude")) {
 		t.Error("默认 .claude 存在不应提示")
+	}
+}
+
+// TestServeHTTPGracefulShutdown:触发 shutdownTrigger 后 Serve 返回且 stop 被调用。
+// Task 18:验证 serveHTTP 抽出函数——shutdownTrigger 关闭 → srv.Shutdown → Serve 返回
+// http.ErrServerClosed(转 nil)→ stop 回调被调用(生产里即 mgr.Stop)。
+func TestServeHTTPGracefulShutdown(t *testing.T) {
+	ln, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	srv := &http.Server{Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(200) })}
+	var stopCalled int32
+	stop := func() { atomic.StoreInt32(&stopCalled, 1) }
+
+	trig := make(chan struct{})
+	done := make(chan error, 1)
+	go func() { done <- serveHTTP(ln, srv, stop, trig) }()
+
+	time.Sleep(50 * time.Millisecond) // 让 Serve 起来
+	close(trig)                        // 触发 shutdown
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("serveHTTP 应返回 nil: %v", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("serveHTTP 未在 3s 内返回")
+	}
+	if atomic.LoadInt32(&stopCalled) != 1 {
+		t.Error("stop(mgr.Stop) 应被调用")
 	}
 }
