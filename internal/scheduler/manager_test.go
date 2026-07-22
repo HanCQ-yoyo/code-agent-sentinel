@@ -98,6 +98,10 @@ func TestManagerPausedSuppressesTicks(t *testing.T) {
 	time.Sleep(120 * time.Millisecond) // 至少跑 1-2 次
 	before := atomic.LoadInt32(&n)
 	m.SetPaused(true) // 总开关关:所有任务暂停
+	// Paused 只闸 tick,不改 schedule 配置——Status 仍应报告 enabled=true, interval=50ms。
+	if st := m.Status(); len(st) != 1 || !st[0].Enabled || st[0].Interval != 50*time.Millisecond {
+		t.Errorf("Paused 不应改 schedule 配置: %+v", st)
+	}
 	time.Sleep(200 * time.Millisecond)
 	during := atomic.LoadInt32(&n)
 	if during > before {

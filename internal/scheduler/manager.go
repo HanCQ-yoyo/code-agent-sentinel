@@ -3,6 +3,7 @@ package scheduler
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"code-agent-sentinel/internal/config"
@@ -21,11 +22,18 @@ type ScheduleStatus struct {
 // Paused 是全局扫描总开关的内存闸门:为 true 时所有任务的 tick 跳过 run
 // (但不改各 schedule 的 enabled/interval,Status 仍如实报告)。供 PUT /api/settings
 // 的 scan_enabled 总开关使用——总开关是"门",per-agent schedule.enabled 是"哪些过门"。
+//
+// 并发注记:paused 用 atomic.Bool 而非 m.mu 下的 bool。原因:wrapRun 闭包在每次
+// tick 都要读 paused,若用 m.mu 会与 Apply 持锁调 sch.Stop()/Reconfigure()(后者
+// 内部 <-done 等待 loop goroutine 退出)形成死锁——in-flight tick 阻塞在 m.mu.Lock()
+// 时,loop goroutine 无法回到 select 看 ctx.Done(),done 不关闭,Apply 卡死。
+// atomic.Bool.Load/Store 无锁,从热路径移除 m.mu,消除该死锁。m.mu 仍用于保护
+// runners map(Apply/Status/Stop)。
 type Manager struct {
 	mu      sync.Mutex
 	runners map[string]*Scheduler // agentID → Scheduler
 	makeRun func(agentID string) func(context.Context) error
-	paused  bool
+	paused  atomic.Bool
 }
 
 // NewManager 构造 Manager。makeRun 工厂按 agentID 造 run 回调。
@@ -68,13 +76,16 @@ func (m *Manager) Apply(schedules []config.ScheduleCfg) {
 // wrapRun 把 run 回调包一层:Manager.paused 时跳过执行。
 // 在 Scheduler 创建时包装一次,Reconfigure 不重建 run——闸门始终读最新 m.paused,
 // 因此 reconfigure 只改 interval/enabled 即可,不需要重新包装。
+//
+// 热路径注记:闭包读 m.paused 用 atomic.Load,不获取 m.mu。这是故意的——
+// 早期版本用 m.mu.Lock()+读+Unlock(),会与 Apply 持 m.mu 调 sch.Stop() 形成死锁
+// (Stop 等 loop 退出,loop 卡在 tick 内的 m.mu.Lock())。atomic.Load 把锁从热路径
+// 移除,Apply 持 m.mu 时 in-flight tick 仍能无阻塞读完 paused 返回,loop 得以
+// 回到 select 看 ctx.Done(),done 关闭,Apply 返回。
 func (m *Manager) wrapRun(agentID string) func(context.Context) error {
 	inner := m.makeRun(agentID)
 	return func(ctx context.Context) error {
-		m.mu.Lock()
-		paused := m.paused
-		m.mu.Unlock()
-		if paused {
+		if m.paused.Load() {
 			return nil // 总开关关:跳过本次 tick
 		}
 		return inner(ctx)
@@ -83,16 +94,12 @@ func (m *Manager) wrapRun(agentID string) func(context.Context) error {
 
 // SetPaused 设置全局暂停闸门。true=所有任务 tick 跳过 run(不改 schedule.enabled)。
 func (m *Manager) SetPaused(paused bool) {
-	m.mu.Lock()
-	m.paused = paused
-	m.mu.Unlock()
+	m.paused.Store(paused)
 }
 
 // Paused 返回当前闸门状态。
 func (m *Manager) Paused() bool {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return m.paused
+	return m.paused.Load()
 }
 
 // Status 返回所有任务的当前状态。
