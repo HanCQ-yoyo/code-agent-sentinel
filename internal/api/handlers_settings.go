@@ -88,7 +88,7 @@ func (s *Server) putSettings(c *gin.Context) {
 // 总开关开 → Paused=false,各任务按自身 schedule.enabled 跑。
 // scan_interval 不在此处强行覆盖 per-agent schedule.interval(后者以 /api/schedules 为准,
 // scan_interval 仅作无 schedule 时的回退默认,见 ResolveSchedules)。
-// 注:本方法不触已 dead 的 s.Scheduler.Reconfigure(后者由 Task 3 连同字段一并删除)。
+// 注:Task 3 已删除 dead 的 s.Scheduler 字段与 Reconfigure 调用,本方法唯一落点即 ScheduleManager。
 func (s *Server) applyScanToggle() {
 	if s.ScheduleManager == nil {
 		return

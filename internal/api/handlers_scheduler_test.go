@@ -13,11 +13,18 @@ import (
 	"code-agent-sentinel/internal/scheduler"
 )
 
+// newSchedulerTestServer 构造带真实 ScheduleManager 的测试 server(替代旧版
+// 注入 dead s.Scheduler)。预设一个 AgentID==SelectedAgentID、enabled=false、
+// interval=1h 的任务,使 /api/scheduler 的 deprecated 转发路径有任务可改。
 func newSchedulerTestServer(t *testing.T) *Server {
 	t.Helper()
 	dir := t.TempDir()
 	s := newTestServer(t, dir)
-	s.Scheduler = scheduler.New(0, func(context.Context) error { return nil })
+	s.ScheduleManager = scheduler.NewManager(func(string) func(context.Context) error {
+		return func(context.Context) error { return nil }
+	})
+	s.Config.Schedules = []config.ScheduleCfg{{AgentID: s.SelectedAgentID, Enabled: false, Interval: "1h"}}
+	s.ScheduleManager.Apply(s.Config.Schedules)
 	s.ConfigPath = filepath.Join(dir, "config.yaml")
 	return s
 }
@@ -59,8 +66,21 @@ func TestPutSchedulerEnablesAndPersists(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatalf("got %d: %s", w.Code, w.Body)
 	}
-	if !s.Scheduler.Status().Enabled {
-		t.Error("应 enabled")
+	// Task 3:断言改为查 ScheduleManager.Status() 中 AgentID==SelectedAgentID 的任务
+	//(旧 s.Scheduler.Status() 已随字段删除)。
+	st := s.ScheduleManager.Status()
+	var found bool
+	for _, x := range st {
+		if x.AgentID == s.SelectedAgentID {
+			if !x.Enabled {
+				t.Error("schedule 任务应 enabled")
+			}
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("未找到 %s 的 schedule 任务", s.SelectedAgentID)
 	}
 	if s.Config.ScanEnabled != true || s.Config.ScanInterval != "1h" {
 		t.Errorf("config 未落盘: enabled=%v interval=%q", s.Config.ScanEnabled, s.Config.ScanInterval)
@@ -75,8 +95,10 @@ func TestPutSchedulerEnablesAndPersists(t *testing.T) {
 	if w2.Code != 200 {
 		t.Fatalf("关闭 got %d", w2.Code)
 	}
-	if s.Scheduler.Status().Enabled {
-		t.Error("应 disabled")
+	for _, x := range s.ScheduleManager.Status() {
+		if x.AgentID == s.SelectedAgentID && x.Enabled {
+			t.Error("关闭后 schedule 任务应 disabled")
+		}
 	}
 }
 
@@ -88,25 +110,27 @@ func TestPutSchedulerRejectsBadInterval(t *testing.T) {
 	}
 }
 
-// newNilSchedulerTestServer 构造 s.Scheduler == nil 的 server,测试优雅降级。
-// newTestServer 不设置 Scheduler(默认 nil),这里显式置 nil 并设 ConfigPath。
+// newNilSchedulerTestServer 构造 ScheduleManager == nil 的 server,测试 /api/scheduler
+// 的退化路径(schedulerStatusResponse 在无 Manager 时基于 config 构造)。
+// Task 3 后:s.Scheduler 字段已删,nil-safety 的语义改为 ScheduleManager==nil 退化。
 func newNilSchedulerTestServer(t *testing.T) *Server {
 	t.Helper()
 	dir := t.TempDir()
 	s := newTestServer(t, dir)
-	s.Scheduler = nil
+	// newTestServer 不设 ScheduleManager(默认 nil),这里显式置 nil 并设 ConfigPath。
+	s.ScheduleManager = nil
 	s.ConfigPath = filepath.Join(dir, "config.yaml")
 	return s
 }
 
-// TestSchedulerNilSafeGetAndPut 覆盖 Important finding:s.Scheduler == nil 时
+// TestSchedulerNilSafeGetAndPut 覆盖 Important finding:ScheduleManager == nil 时
 // GET 与 PUT /api/scheduler 都必须返回 200(基于 config 退化构造响应),不得 panic/500。
 func TestSchedulerNilSafeGetAndPut(t *testing.T) {
 	s := newNilSchedulerTestServer(t)
-	// GET:nil Scheduler 不 panic,返回 200 + 基于 config 的退化状态
+	// GET:nil ScheduleManager 不 panic,返回 200 + 基于 config 的退化状态
 	w := reqScheduler(t, s, "GET", "/api/scheduler", nil)
 	if w.Code != 200 {
-		t.Fatalf("GET nil Scheduler 应 200(退化),got %d: %s", w.Code, w.Body)
+		t.Fatalf("GET nil ScheduleManager 应 200(退化),got %d: %s", w.Code, w.Body)
 	}
 	var st map[string]any
 	json.Unmarshal(w.Body.Bytes(), &st)
@@ -116,10 +140,10 @@ func TestSchedulerNilSafeGetAndPut(t *testing.T) {
 	if st["interval"] != "0s" {
 		t.Errorf("空 ScanInterval 退化应 \"0s\",got %v", st["interval"])
 	}
-	// PUT:nil Scheduler 不 panic,返回 200,config 落盘
+	// PUT:nil ScheduleManager 不 panic,返回 200,config 落盘
 	w2 := reqScheduler(t, s, "PUT", "/api/scheduler", map[string]any{"enabled": true, "interval": "1h"})
 	if w2.Code != 200 {
-		t.Fatalf("PUT nil Scheduler 应 200(退化),got %d: %s", w2.Code, w2.Body)
+		t.Fatalf("PUT nil ScheduleManager 应 200(退化),got %d: %s", w2.Code, w2.Body)
 	}
 	var st2 map[string]any
 	json.Unmarshal(w2.Body.Bytes(), &st2)
@@ -139,11 +163,11 @@ func TestSchedulerNilSafeGetAndPut(t *testing.T) {
 func TestSchedulerNilSafeNoConfigPath(t *testing.T) {
 	dir := t.TempDir()
 	s := newTestServer(t, dir)
-	s.Scheduler = nil
+	s.ScheduleManager = nil
 	s.ConfigPath = "" // 显式:跳过 Save 路径
 	w := reqScheduler(t, s, "PUT", "/api/scheduler", map[string]any{"enabled": true, "interval": "30m"})
 	if w.Code != 200 {
-		t.Fatalf("PUT nil Scheduler + 空 ConfigPath 应 200,got %d: %s", w.Code, w.Body)
+		t.Fatalf("PUT nil ScheduleManager + 空 ConfigPath 应 200,got %d: %s", w.Code, w.Body)
 	}
 	if !s.Config.ScanEnabled || s.Config.ScanInterval != "30m" {
 		t.Errorf("内存 config 应更新: enabled=%v interval=%q", s.Config.ScanEnabled, s.Config.ScanInterval)

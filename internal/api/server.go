@@ -30,8 +30,7 @@ type Server struct {
 	SelectedAgentID string
 	Editor          *editor.Editor
 	Runner          ScanRunner           // HTTP/scheduler/CLI 共用的扫描路径(接口可注入 spy 测试)
-	Scheduler       *scheduler.Scheduler // 进程内定时扫描调度器(main.go 注入)
-	ScheduleManager *scheduler.Manager   // 多任务调度管理器(Task 6:/api/schedules CRUD 用)
+	ScheduleManager *scheduler.Manager   // 多任务调度管理器(/api/schedules CRUD + /api/scheduler deprecated 转发)
 }
 
 // ScanRunner 抽象 *scan.Runner 的公共方法面,让 Server.Runner 可在测试中替换为 spy。

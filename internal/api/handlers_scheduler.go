@@ -27,8 +27,7 @@ type schedulerResponse struct {
 //     (避免 time.Duration.String() 把 "30m" 漂移成 "30m0s")。
 //   - Manager 为 nil:退化用 config.ScanEnabled/ScanInterval(向后兼容)。
 //
-// 不再走 s.Scheduler 单任务路径(旧端点 deprecated);但 putScheduler 仍同步调用
-// s.Scheduler.Reconfigure(若非 nil),保留对老测试与未迁移代码的兼容。
+// Task 3 起旧 s.Scheduler 单任务路径已随字段一并删除,所有同步统一走 ScheduleManager。
 func (s *Server) schedulerStatusResponse() schedulerResponse {
 	if s.ScheduleManager != nil {
 		st := s.ScheduleManager.Status()
@@ -136,12 +135,6 @@ func (s *Server) putScheduler(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, errorBody("save_failed", err.Error()))
 			return
 		}
-	}
-	// Correction 1:保留对 s.Scheduler 单任务调度器的同步(若非 nil)。
-	// TestPutSchedulerEnablesAndPersists 直接断言 s.Scheduler.Status().Enabled 翻转,
-	// 丢掉此调用会让该测试失败。
-	if s.Scheduler != nil {
-		s.Scheduler.Reconfigure(enabled, interval)
 	}
 	// Task 7:同步到多任务 ScheduleManager(若非 nil),与新 /api/schedules 一致。
 	s.applySchedules()
