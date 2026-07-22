@@ -1,6 +1,18 @@
 {
   "nav": { "dashboard": "仪表盘", "assets": "资产发现", "findings": "风险管理", "history": "历史扫描", "settings": "系统设置" },
   "topbar": { "rescan": "重新扫描", "scanning": "扫描中…", "language": "语言", "theme": "主题", "leafAsset": "资产详情", "leafScan": "扫描详情", "dark": "深", "light": "浅" },
+  "rescan": {
+    "title": "重扫描",
+    "scope": "范围",
+    "scopeGlobal": "全局",
+    "scopeProject": "项目",
+    "scopeAsset": "资产",
+    "selectProject": "选择项目",
+    "selectAsset": "选择资产(source_path)",
+    "agent": "Agent",
+    "detectors": "检测器",
+    "start": "开始扫描"
+  },
   "common": {
     "global": "全局",
     "loadFailed": "加载失败",

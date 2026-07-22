@@ -1,5 +1,5 @@
 import { Routes, Route, useLocation } from 'react-router-dom'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { ConfigProvider, Layout } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import enUS from 'antd/locale/en_US'
@@ -13,6 +13,7 @@ import AssetDetail from './components/AssetDetail'
 import { AuthGate } from './components/AuthGate'
 import { Sidebar } from './components/Sidebar'
 import { TopBar } from './components/TopBar'
+import { RescanModal } from './components/RescanModal'
 import { useTheme } from './theme'
 import { antdTheme } from './theme/antdTheme'
 import { useStore } from './store'
@@ -21,8 +22,9 @@ const { Content } = Layout
 
 export default function App() {
   const { theme } = useTheme()
-  const { runScan, loading, detectors, fetchLatestScan, fetchSettings, fetchPinnedProjects } = useStore()
+  const { loading, fetchLatestScan, fetchSettings, fetchPinnedProjects } = useStore()
   const { i18n } = useTranslation()
+  const [rescanOpen, setRescanOpen] = useState(false)
   useEffect(() => { fetchLatestScan() }, [fetchLatestScan])
   useEffect(() => { fetchSettings() }, [fetchSettings])
   useEffect(() => { fetchPinnedProjects() }, [fetchPinnedProjects])
@@ -36,7 +38,7 @@ export default function App() {
         <Layout style={{ minHeight: '100vh' }}>
           <Sidebar />
           <Layout>
-            <TopBar onScan={() => runScan()} loading={loading} />
+            <TopBar onOpenRescan={() => setRescanOpen(true)} loading={loading} />
             <Content style={{ overflow: 'auto', padding: 24 }}>
               <Routes>
                 <Route path="/" element={<Dashboard />} />
@@ -53,6 +55,7 @@ export default function App() {
           </Layout>
         </Layout>
       </AuthGate>
+      <RescanModal open={rescanOpen} onClose={() => setRescanOpen(false)} />
     </ConfigProvider>
   )
 }

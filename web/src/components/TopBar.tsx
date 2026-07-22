@@ -12,7 +12,7 @@ import type { Agent } from '../types'
 const { Header } = Layout
 
 interface Props {
-  onScan: () => void
+  onOpenRescan: () => void
   loading: boolean
 }
 
@@ -23,7 +23,7 @@ function leafLabel(pathname: string, t: (k: string) => string): string | null {
   return null
 }
 
-export function TopBar({ onScan, loading }: Props) {
+export function TopBar({ onOpenRescan, loading }: Props) {
   const { theme, toggle } = useTheme()
   const { t, i18n } = useTranslation()
   const { agents, selectedAgent, setSelectedAgent, fetchAgents, language, saveLanguage } = useStore()
@@ -96,7 +96,7 @@ export function TopBar({ onScan, loading }: Props) {
           unCheckedChildren={t('topbar.light')}
           aria-label={t('topbar.theme')}
         />
-        <Button type="primary" icon={<ReloadOutlined />} loading={loading} onClick={onScan}>
+        <Button type="primary" icon={<ReloadOutlined />} loading={loading} onClick={onOpenRescan}>
           {loading ? t('topbar.scanning') : t('topbar.rescan')}
         </Button>
       </Space>

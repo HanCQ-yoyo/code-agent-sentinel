@@ -36,7 +36,7 @@ interface State {
   // 选 config/runtime 时隐藏非选中)。前端 Assets 用。
   selectedTagFilter: DirTag | null
   fetchAssets: () => Promise<void>
-  runScan: (agentID?: string, detectors?: string) => Promise<void>
+  runScan: (agentID?: string, detectors?: string, scope?: { type: string; path?: string }) => Promise<void>
   fetchDetectors: () => Promise<void>
   fetchDetectorConfig: () => Promise<void>
   saveDetectorConfig: (cfg: DetectorsConfig) => Promise<boolean>
@@ -124,7 +124,7 @@ export const useStore = create<State>((set, get) => ({
     const inv = await wrap(() => apiGet<Inventory>(`/api/assets${q}`), set)
     if (inv) set({ assets: inv })
   },
-  runScan: async (agentID, detectors) => {
+  runScan: async (agentID, detectors, scope) => {
     set({ loading: true, error: null })
     // agentID 显式传入时优先;否则回退 selectedAgent(纯视图状态,可能为空)。
     // 空 agent 时不带 query,后端回退首 agent(handlers_scan.go 与 RunScan 一致)。
@@ -132,6 +132,11 @@ export const useStore = create<State>((set, get) => ({
     const params = new URLSearchParams()
     if (a) params.set('agent', a)
     if (detectors) params.set('detectors', detectors)
+    // scope=global 不传 query,后端缺省 global,等价旧行为。
+    if (scope?.type && scope.type !== 'global') {
+      params.set('scope', scope.type)
+      if (scope.path) params.set('path', scope.path)
+    }
     const q = params.toString() ? `?${params.toString()}` : ''
     const res = await wrap(() => apiPost<ScanResult>(`/api/scan${q}`), set)
     set({ scan: res ?? null, loading: false })

@@ -1,6 +1,18 @@
 {
   "nav": { "dashboard": "Dashboard", "assets": "Assets", "findings": "Findings", "history": "History", "settings": "Settings" },
   "topbar": { "rescan": "Rescan", "scanning": "Scanning…", "language": "Language", "theme": "Theme", "leafAsset": "Asset Details", "leafScan": "Scan Details", "dark": "Dark", "light": "Light" },
+  "rescan": {
+    "title": "Rescan",
+    "scope": "Scope",
+    "scopeGlobal": "Global",
+    "scopeProject": "Project",
+    "scopeAsset": "Asset",
+    "selectProject": "Select project",
+    "selectAsset": "Select asset (source_path)",
+    "agent": "Agent",
+    "detectors": "Detectors",
+    "start": "Start scan"
+  },
   "common": {
     "global": "Global",
     "loadFailed": "Load failed",
