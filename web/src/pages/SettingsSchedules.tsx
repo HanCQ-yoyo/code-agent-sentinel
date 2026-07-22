@@ -121,7 +121,7 @@ export function SettingsSchedules() {
               onChange={(e) => setIntervalDraft(e.target.value)}
               onPressEnter={(e) => {
                 const nv = (e.currentTarget as HTMLInputElement).value.trim()
-                if (nv && nv !== scanInterval) saveScanToggle(scanEnabled, nv)
+                if (nv !== scanInterval) saveScanToggle(scanEnabled, nv)
               }}
               onBlur={(e) => {
                 const nv = e.target.value.trim()
