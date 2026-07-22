@@ -105,7 +105,14 @@ func (s *Server) postSuppression(c *gin.Context) {
 }
 
 // getSuppressions 返回全部豁免规则列表。
+// agent 门禁:经 engineForQuery 校验 ?agent=(未知 → 400 unknown_agent),与其它读路径一致。
+// 注:suppress 路径解析用 OS home(s.Engine.HomeDir),与 agent 无关——此处仅做 agent 校验,
+// 不用 eng 取数据(豁免文件是全局共享的,不按 agent 隔离)。
 func (s *Server) getSuppressions(c *gin.Context) {
+	if _, _, err := s.engineForQuery(c); err != nil {
+		c.JSON(http.StatusBadRequest, errorBody("unknown_agent", err.Error()))
+		return
+	}
 	path := s.Config.ResolveSuppressPath(s.Engine.HomeDir)
 	supprs, err := suppression.LoadSuppressions(path)
 	if err != nil {
@@ -173,8 +180,15 @@ func (s *Server) deleteSuppression(c *gin.Context) {
 // postBaseline 跑一次全量扫描,收集所有 Finding 的 fingerprint,
 // 合并到现有 baseline(union:保留已有 + 添加新发现),保存到 baseline.json(0o600)。
 // 不做 prune(清理不复现指纹是 CLI --prune 的职责)。
+// agent 化:Discover 经选中 agent 的 Engine 跑(各 agent 的资产不同)。
+// baseline 路径解析用 OS home(s.Engine.HomeDir),与 agent 无关——保持不动。
 func (s *Server) postBaseline(c *gin.Context) {
-	inv, err := s.Engine.Discover()
+	eng, _, err := s.engineForQuery(c)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, errorBody("unknown_agent", err.Error()))
+		return
+	}
+	inv, err := eng.Discover()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errorBody("discover_failed", err.Error()))
 		return

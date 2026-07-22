@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
@@ -226,6 +227,22 @@ func TestAPIGenerateBaseline(t *testing.T) {
 	}
 	if len(bs.Fingerprints) == 0 {
 		t.Error("baseline 无指纹(期望 dangerous-skip-permission 触发至少 1 条)")
+	}
+}
+
+// TestSuppressionsListAgentScoped 验证 GET /api/suppressions?agent=zzz 经 engineForQuery 返回 400
+// unknown_agent(未知 agent 不再静默回退首 agent——与 postScan/getAssets 等读路径一致)。
+// 注:仅校验 list 路径的 agent 门禁;suppress 路径解析本身用 OS home,与 agent 无关(见 brief)。
+func TestSuppressionsListAgentScoped(t *testing.T) {
+	dir := t.TempDir()
+	s := newTestServer(t, dir)
+	// newTestServer 是单 agent fixture(agent ID 非空但不是 "zzz"),zzz 对其未知。
+	code, respBody := reqSuppression(t, s, "GET", "/api/suppressions?agent=zzz", "")
+	if code != http.StatusBadRequest {
+		t.Errorf("未知 agent 应 400: got %d", code)
+	}
+	if !strings.Contains(string(respBody), "unknown_agent") {
+		t.Errorf("应含 unknown_agent code: %s", respBody)
 	}
 }
 
