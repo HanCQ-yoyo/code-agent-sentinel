@@ -22,9 +22,9 @@ const { Content } = Layout
 
 export default function App() {
   const { theme } = useTheme()
-  const { loading, fetchLatestScan, fetchSettings, fetchPinnedProjects, rescanOpen, rescanInitial, openRescan, closeRescan } = useStore()
+  const { loading, fetchLatestScan, fetchSettings, fetchPinnedProjects, rescanOpen, rescanInitial, openRescan, closeRescan, selectedAgent } = useStore()
   const { i18n } = useTranslation()
-  useEffect(() => { fetchLatestScan() }, [fetchLatestScan])
+  useEffect(() => { fetchLatestScan() }, [fetchLatestScan, selectedAgent])
   useEffect(() => { fetchSettings() }, [fetchSettings])
   useEffect(() => { fetchPinnedProjects() }, [fetchPinnedProjects])
   const locale = i18n.language === 'en' ? enUS : zhCN
