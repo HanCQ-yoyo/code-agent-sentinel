@@ -141,18 +141,32 @@ func (s *Store) Latest() (*ScanRecord, error) {
 	return s.Get(list[0].ID)
 }
 
-// LatestForAgent 返回指定 agent 最近一条完整记录;空 agentID 退化为 Latest()(全局最新)。
-// 无该 agent 历史返回 (nil, nil)。
+// LatestForAgent 返回指定 agent 最近一条完整记录;空 agentID 表示"所有 agent"。
+// 优先返回 scope 为 global(含空,即旧记录)的最新记录——dashboard/findings/health
+// 需要扫描全貌,而非某次 project/asset 窄范围 rescan(虽可能更晚)。若无 global scope
+// 记录,退化为该 agent(或全体)任意 scope 的最新一条,保留"至少展示一些"的语义。
+// 无匹配历史返回 (nil, nil)。
 func (s *Store) LatestForAgent(agentID string) (*ScanRecord, error) {
-	if agentID == "" {
-		return s.Latest()
-	}
 	list, err := s.List()
 	if err != nil {
 		return nil, err
 	}
+	target := agentID
+	// 第一遍:优先取 scope=="" || scope=="global" 的最新一条(agentID 过滤后)
 	for _, sum := range list { // List 已按 StartedAt 倒序
-		if sum.AgentID == agentID {
+		if (target == "" || sum.AgentID == target) && (sum.Scope == "" || sum.Scope == "global") {
+			return s.Get(sum.ID)
+		}
+	}
+	// 退化:任意 scope(agentID 过滤后第一条)
+	if target == "" {
+		if len(list) > 0 {
+			return s.Get(list[0].ID)
+		}
+		return nil, nil
+	}
+	for _, sum := range list {
+		if sum.AgentID == target {
 			return s.Get(sum.ID)
 		}
 	}

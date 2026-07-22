@@ -260,3 +260,15 @@ func TestLatestForAgent(t *testing.T) {
 		t.Fatalf("LatestForAgent(空) 应退化为全局最新: got %+v", gotAll)
 	}
 }
+
+func TestLatestForAgentPrefersGlobalScope(t *testing.T) {
+	s := NewStore(t.TempDir())
+	// a 的 project scope 扫描(较新)+ global scope 扫描(较旧)
+	s.Save(ScanRecord{ID: "a-global", AgentID: "a", Scope: "global", StartedAt: time.Now().Add(-1 * time.Hour)})
+	s.Save(ScanRecord{ID: "a-proj", AgentID: "a", Scope: "project", ScopePath: "/p", StartedAt: time.Now()})
+	// LatestForAgent("a") 应返回 a-global(虽较旧但 scope=global)
+	got, _ := s.LatestForAgent("a")
+	if got == nil || got.ID != "a-global" {
+		t.Fatalf("应取 scope=global 的最新: got %+v", got)
+	}
+}
