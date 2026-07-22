@@ -93,8 +93,17 @@ func (r *Runner) EngineFor(agentID string) *configengine.Engine {
 
 // RunScan 执行发现→扫描→持久化历史。agentID 空=回退首 agent;detectorIDs 空=全量检测器。
 // scope 控制扫描范围(global/project/asset);历史写入失败不阻断(降级体验,与原 postScan 一致)。
+//
+// agentID 归一化:空串在 EngineFor 内部回退首 agent,saveHistory 也须记录归一化后的
+// agent ID(而非空串),否则 latestScan(agentID) 在 partialRescan dedup 时按真实
+// agent ID 查不到空串记录 → prior 空 → 误报新增(多 agent 场景的跨 agent 误报根因)。
 func (r *Runner) RunScan(ctx context.Context, agentID string, scope ScanScope, detectorIDs []string) (*security.ScanResult, error) {
 	eng := r.EngineFor(agentID)
+	// 归一化 agentID 供 saveHistory 记录:与 EngineFor 的回退逻辑一致(空 → 首 agent ID)。
+	recordAgentID := agentID
+	if recordAgentID == "" && len(r.agents) > 0 {
+		recordAgentID = r.agents[0].ID
+	}
 	inv, err := eng.Discover()
 	if err != nil {
 		return nil, fmt.Errorf("发现资产失败: %w", err)
@@ -104,7 +113,7 @@ func (r *Runner) RunScan(ctx context.Context, agentID string, scope ScanScope, d
 	if err != nil {
 		return nil, fmt.Errorf("扫描失败: %w", err)
 	}
-	r.saveHistory(agentID, scope, res, &inv)
+	r.saveHistory(recordAgentID, scope, res, &inv)
 	return res, nil
 }
 

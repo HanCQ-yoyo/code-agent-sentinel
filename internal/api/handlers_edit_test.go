@@ -498,3 +498,134 @@ func TestPartialRescanUsesRunnerAgent(t *testing.T) {
 			"got %d new_findings — suggests partialRescan still uses s.Engine(a): %+v", len(nf), nf)
 	}
 }
+
+// TestPartialRescanDedupPerAgent 验证 partialRescan 的 prior 按 agent 取(修跨 agent 误报新增)。
+//
+// 场景:两 agent(a, b)各有自己的 settings.json,均含 Read(**)(触发 baseline.dangerous-read-all)。
+// 1. 分别对 a、b 跑 global 扫描 → 各自历史记录含 baseline.dangerous-read-all(AssetID=各自 permissions)。
+// 2. 编辑 b 的 settings 追加 Bash(*)(引入新危险 baseline.wildcard-bash),带 ?agent=b commit。
+//
+// 旧 bug:priorFindingsForSourcePath 调 latestScan("")(任意 agent 全局最新)→ 取到 a 的 latest
+// → 用 b 的 sourcePath 过滤 a 的 inventory → siblingIDs 空 → prior 空 → b 的全部 findings
+// (含已有的 Read(**))报为新增(过度报告)。
+//
+// 修复后:priorFindingsForSourcePath(agentID="b", ...)→ latestScan("b")→ 取 b 的 latest
+// → b 的 inventory 含同 source_path 的 permissions sibling → prior 含 Read(**) finding
+// → 仅 Bash(*) 被报为新增(Read(**) 被去重)。
+func TestPartialRescanDedupPerAgent(t *testing.T) {
+	dir := t.TempDir()
+	// 两 agent 各有 settings.json;均含 Read(**)(baseline.dangerous-read-all)。
+	writeFile(t, filepath.Join(dir, ".claude", "settings.json"),
+		`{"permissions":{"allow":["Read(**)"]}}`)
+	writeFile(t, filepath.Join(dir, ".claude-b", "settings.json"),
+		`{"permissions":{"allow":["Read(**)"]}}`)
+	agents := []configengine.Agent{
+		{ID: "a", Name: "Agent A", RootDir: filepath.Join(dir, ".claude"), ClaudeJSON: filepath.Join(dir, ".claude.json"), HomeDir: dir},
+		{ID: "b", Name: "Agent B", RootDir: filepath.Join(dir, ".claude-b"), ClaudeJSON: filepath.Join(dir, ".claude-b.json"), HomeDir: dir},
+	}
+	eng := configengine.NewEngineFromAgent(agents[0])
+	s := newTestServerWithAgents(t, eng, agents)
+	r := s.Router()
+
+	// 1. 对 a 跑 global 扫描(使 latestScan("a") 非 nil)。
+	scanA := httptest.NewRequest("POST", "/api/scan?agent=a", nil)
+	scanA.Host = "127.0.0.1"
+	scanA.Header.Set("Authorization", "Bearer tok")
+	wA := httptest.NewRecorder()
+	r.ServeHTTP(wA, scanA)
+	if wA.Code != 200 {
+		t.Fatalf("POST /api/scan?agent=a: got %d: %s", wA.Code, wA.Body)
+	}
+
+	// 2. 对 b 跑 global 扫描(使 latestScan("b") 非 nil,含 Read(**) finding)。
+	scanB := httptest.NewRequest("POST", "/api/scan?agent=b", nil)
+	scanB.Host = "127.0.0.1"
+	scanB.Header.Set("Authorization", "Bearer tok")
+	wB := httptest.NewRecorder()
+	r.ServeHTTP(wB, scanB)
+	if wB.Code != 200 {
+		t.Fatalf("POST /api/scan?agent=b: got %d: %s", wB.Code, wB.Body)
+	}
+	latestB := s.latestScan("b")
+	if latestB == nil {
+		t.Fatal("latestScan(\"b\") nil after POST /api/scan?agent=b")
+	}
+	if len(latestB.Findings) == 0 {
+		t.Fatal("expected b's latest scan to have baseline findings (Read(**)), got none")
+	}
+
+	// 3. 找 b 的 permissions 资产(Editor 绑定 s.Engine=a,只能找 a 的资产;但编辑 b 须用 b 的资产)。
+	//    注:Editor 绑定 s.Engine(=agent a 的 Engine),无法找 b 的资产;故这里直接取 b 的
+	//    inventory 用 b 的 permissions ID。但 commitAsset 走 Editor.Commit(用 s.Engine)→
+	//    找不到 b 的资产 → 404。故改为编辑 a 的资产、带 ?agent=b 走 b 的 rescan(与
+	//    TestPartialRescanUsesRunnerAgent 同构),但这里 a 和 b 的 sourcePath 不同,
+	//    latestScan("") 取到 a 的 latest → 用 b 的 sourcePath 过滤 a 的 inventory → 空 → prior 空。
+	//
+	//    重新设计:用同 sourcePath 的场景。但 a、b 的 root 不同 → sourcePath 不同。
+	//    要测跨 agent 误报,须 a 的 latest 被错误取为 b 的 prior 基线。
+	//
+	//    改为:编辑 a 的 permissions(追加 Bash(*)),带 ?agent=a commit。
+	//    latestScan("") 取 a 的 latest(因 a 更早扫)→ a 的 inventory 含 a 的 sourcePath
+	//    → prior 非空 → Read(**) 去重 → 仅 Bash(*) 新增。这是正确行为(单 agent)。
+	//    要测跨 agent,须 latestScan("") 取到 b 而非 a → b 更晚扫。
+	//
+	//    最终设计:先扫 a,再扫 b(b 更晚 → latestScan("") 取 b)。
+	//    然后编辑 a 的 permissions(追加 Bash(*)),带 ?agent=a commit。
+	//    旧 bug:priorFindingsForSourcePath("a 的 sourcePath")→ latestScan("")→ 取 b 的 latest
+	//    → b 的 inventory 不含 a 的 sourcePath → prior 空 → a 的全部 findings(含已有 Read(**))
+	//    报为新增。
+	//    修复后:latestScan("a")→ 取 a 的 latest → a 的 inventory 含 a 的 sourcePath
+	//    → prior 含 Read(**) → 仅 Bash(*) 报为新增。
+	invA := getInventoryFor(t, s, "a")
+	var permID, permHash string
+	for _, a := range invA.Assets {
+		if a.Type == configengine.AssetPermissions {
+			permID = a.ID
+			permHash = a.Hash
+			break
+		}
+	}
+	if permID == "" {
+		t.Fatalf("no permissions asset for agent a; inv=%+v", invA)
+	}
+
+	// 4. 编辑 a 的 permissions 追加 Bash(*)(引入新危险 baseline.wildcard-bash),
+	//    带 ?agent=a commit。此时 latestScan("")=b(更晚),但 latestScan("a")=a(正确)。
+	body := `{"new_content":"{\"permissions\":{\"allow\":[\"Read(**)\",\"Bash(*)\"]}}","base_hash":"` + permHash + `"}`
+	req := httptest.NewRequest("PUT", "/api/assets/"+permID+"/content?agent=a", strings.NewReader(body))
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("PUT /api/assets/%s/content?agent=a: got %d: %s", permID, w.Code, w.Body)
+	}
+	var res map[string]any
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if re, ok := res["rescan_error"]; ok && re != nil && re != "" {
+		t.Fatalf("unexpected rescan_error: %v, res=%+v", re, res)
+	}
+	nf, _ := res["new_findings"].([]any)
+	// 关键断言:仅 Bash(*) 的 baseline.wildcard-bash 报为新增;Read(**) 的
+	// baseline.dangerous-read-all 须被 a 的 latest prior 去重。
+	// 旧 bug(latestScan("")=b):b 的 inventory 不含 a 的 sourcePath → prior 空
+	// → a 的全部 findings(含 Read(**))报为新增 → len(nf) >= 2。
+	if len(nf) == 0 {
+		t.Fatalf("expected 1 new finding (Bash(*) → baseline.wildcard-bash), got 0; res=%+v", res)
+	}
+	// 提取 rule_id 列表,断言不含 baseline.dangerous-read-all(已被去重)。
+	ruleIDs := map[string]bool{}
+	for _, x := range nf {
+		if m, ok := x.(map[string]any); ok {
+			if rid, ok := m["rule_id"].(string); ok {
+				ruleIDs[rid] = true
+			}
+		}
+	}
+	if ruleIDs["baseline.dangerous-read-all"] {
+		t.Errorf("baseline.dangerous-read-all (Read(**)) should be deduped by a's latest prior, "+
+			"but was reported as new (cross-agent bug: latestScan(\"\") took b's inventory). "+
+			"new_findings rules=%v", ruleIDs)
+	}
+}

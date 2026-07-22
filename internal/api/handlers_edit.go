@@ -111,7 +111,7 @@ func (s *Server) commitAsset(c *gin.Context) {
 // dashboard 的 latest-global;仅作为审计轨迹留存(谁在何时对哪个资产做了 rescan)。
 //
 // prior 须在 RunScan 之前取:RunScan 会 saveHistory 写一条 asset-scope 记录,若 prior 在其后取,
-// latestScan("") 在无 global 历史的全新场景下可能退化为取该 asset-scope 记录 → prior=fresh →
+// latestScan(agentID) 在无 global 历史的全新场景下可能退化为取该 asset-scope 记录 → prior=fresh →
 // 全部被去重 → new_findings 恒空(回归)。prior 取"本次 rescan 之前"的 latest,语义正确。
 func (s *Server) partialRescan(agentID string, updated configengine.Asset) (fresh []security.Finding, rescanError string) {
 	// rescan 不应 panic 崩溃整个 commit 响应(写入已成功);recover 兜底。
@@ -123,7 +123,10 @@ func (s *Server) partialRescan(agentID string, updated configengine.Asset) (fres
 	}()
 	// 先取 prior(本次 rescan 之前的 latest 同 source_path sibling findings),
 	// 必须在 RunScan 之前:RunScan 会 saveHistory,若之后取可能读到刚写的 asset-scope 记录。
-	prior := s.priorFindingsForSourcePath(updated.SourcePath, []string{"rules"})
+	// prior 须按编辑目标 agent 取:partialRescan 跑 RunScan(agentID),dedup 基线也应来自该 agent
+	// 的 latest;旧实现传 ""(任意 agent 的全局最新)会在多 agent 场景误取它 agent inventory
+	// → siblingIDs 为空 → prior 空 → 全部报为新增(过度报告,安全方向但错误/烦人)。
+	prior := s.priorFindingsForSourcePath(agentID, updated.SourcePath, []string{"rules"})
 	priorKeys := map[string]bool{}
 	for _, f := range prior {
 		priorKeys[findingKey(f)] = true
@@ -150,12 +153,16 @@ func (s *Server) partialRescan(agentID string, updated configengine.Asset) (fres
 	return fresh, ""
 }
 
-// priorFindingsForSourcePath 从 latest scan 取同 source_path 的所有 sibling 资产
+// priorFindingsForSourcePath 从指定 agent 最近一次 scan 取同 source_path 的所有 sibling 资产
 // + 指定检测器的 findings。同 source_path 的资产(settings + permissions + per-hook)
 // 共享一个物理文件,重扫覆盖全部 sibling,但 rules findings 的 AssetID
 // 是被扫 sibling 的 ID(如 permissions.ID),故须用全部 sibling AssetID 过滤 prior。
-func (s *Server) priorFindingsForSourcePath(sourcePath string, detectorIDs []string) []security.Finding {
-	latest := s.latestScan("")
+//
+// agentID 指定 dedup 基线取自哪个 agent 的 latest scan(空串退化为全局最新,与 latestScan 语义一致);
+// 必须与 partialRescan 的 RunScan agentID 一致,否则多 agent 场景下会取到它 agent 的 inventory
+// → siblingIDs 为空 → prior 空 → 全部报为新增(过度报告)。
+func (s *Server) priorFindingsForSourcePath(agentID, sourcePath string, detectorIDs []string) []security.Finding {
+	latest := s.latestScan(agentID)
 	if latest == nil {
 		return nil
 	}
