@@ -11,20 +11,27 @@ import { RiskTrendChart } from '../components/RiskTrendChart'
 
 export default function Dashboard() {
   const { t } = useTranslation()
-  const { dashboard, fetchDashboard, history, fetchHistory, error, authError } = useStore()
+  const { dashboard, selectedAgent, fetchDashboard, history, fetchHistory, error, authError } = useStore()
   const [selectedDetector, setSelectedDetector] = useState<string | undefined>(undefined)
   useEffect(() => {
     fetchDashboard()
     fetchHistory()
-  }, [fetchDashboard, fetchHistory])
+  }, [fetchDashboard, fetchHistory, selectedAgent])
 
   const detectors = dashboard?.detectors ?? []
   const counts = dashboard?.asset_counts ?? {}
   const findings = dashboard?.last_scan?.findings ?? []
+  // Task 10:顶部 agent 上下文行(选中 agent 名称 + 上次扫描时间)。
+  const lastScan = dashboard?.last_scan
+  const agentLabel = dashboard?.agent_name ?? dashboard?.agent ?? '-'
+  const lastScanTime = lastScan?.started_at ? new Date(lastScan.started_at).toLocaleString() : '-'
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {error ? <Alert type="error" message={t('common.loadFailed')} description={error} showIcon /> : null}
+      <div style={{ marginBottom: 12, color: 'var(--text-secondary)', fontSize: 13 }}>
+        {t('dashboard.agentContext', { agent: agentLabel, time: lastScanTime })}
+      </div>
       <Row gutter={16} align="stretch">
         <Col xs={24} lg={8} style={{ display: 'flex' }}><HealthScoreCard h={dashboard?.last_scan?.health_score} /></Col>
         <Col xs={24} lg={16} style={{ display: 'flex' }}><AssetStatTiles counts={counts} /></Col>

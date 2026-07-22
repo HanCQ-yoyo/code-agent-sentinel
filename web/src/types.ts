@@ -161,4 +161,7 @@ export interface DashboardData {
   duplicates: unknown[]
   detectors: DetectorMeta[]
   last_scan: ScanRecord | null
+  // Task 10:后端 dashboard 按 ?agent= 过滤后返回的 agent 上下文(当前选中 agent 的 id/name)。
+  agent?: string
+  agent_name?: string
 }

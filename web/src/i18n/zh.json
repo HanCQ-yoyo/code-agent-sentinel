@@ -18,7 +18,8 @@
   },
   "dashboard": {
     "detectorStatus": "检测器状态",
-    "tokenExpired": "token 失效,请重新带 #token= 访问。"
+    "tokenExpired": "token 失效,请重新带 #token= 访问。",
+    "agentContext": "Agent: {{agent}} · 上次扫描 {{time}}"
   },
   "assets": {
     "viewList": "列表",
@@ -62,7 +63,8 @@
     "confirmDelete": "确认删除此扫描记录?",
     "delete": "删除",
     "empty": "暂无历史扫描",
-    "totalCount": "共 {{count}} 条"
+    "totalCount": "共 {{count}} 条",
+    "filterAgent": "按 agent 筛选"
   },
   "settings": {
     "binaryPath": "二进制路径",

@@ -28,6 +28,7 @@ export default function Assets() {
     favorites, fetchFavorites, saveFavorites,
     pinnedProjects, savePinnedProjects,
     detectors, fetchDetectors,
+    selectedAgent,
   } = useStore()
   const [view, setView] = useState<View>('list')
   const [type, setType] = useState('')
@@ -49,15 +50,17 @@ export default function Assets() {
     fetchFavorites()
     // 拉检测器元数据,供资产详情抽屉风险列表的检测器列双语名(与 Findings 页同模式)。
     fetchDetectors()
-  }, [fetchAssets, fetchProjects, fetchAgents, fetchDirTags, fetchFavorites, fetchDetectors])
+    // Task 10:selectedAgent 变化时,资产/项目列表需按新 agent 重拉(后端按 ?agent= 过滤)。
+  }, [fetchAssets, fetchProjects, fetchAgents, fetchDirTags, fetchFavorites, fetchDetectors, selectedAgent])
 
   // 切换上方标签页 → 重新拉对应项目的文件树。与上面一次性 effect 分离:
   // 原先 activeProjectTab 进了同一 effect deps,导致每次点标签页都重跑 fetchProjects,
   // 后端 map 顺序非确定时标签顺序抖动、选中标签跳到最右。现在 projects 只挂载时拉一次,
   // 切标签页只 fetchTree(树随项目变,本就该重拉)。
+  // Task 10:selectedAgent 变化时树也要重拉(后端 Task 7 按 agent 过滤,global 根随 agent root_dir 变)。
   useEffect(() => {
     fetchTree(activeProjectTab)
-  }, [fetchTree, activeProjectTab])
+  }, [fetchTree, activeProjectTab, selectedAgent])
 
   // 一次性迁移:若后端收藏为空但旧 localStorage 有数据,并入后端后清掉本地。
   useEffect(() => {
@@ -80,10 +83,11 @@ export default function Assets() {
     setRawPath(null)
   }, [activeProjectTab])
 
-  // 全局根绝对路径(agents[0].root_dir);项目根 = <tab.path>/.claude。供树拼无资产文件绝对路径。
-  const globalRoot = agents?.agents?.[0]?.root_dir ?? ''
+  // Task 10:全局根绝对路径用 SELECTED agent 的 root_dir(后端 Task 7:global tree 根 = 选中 agent 的 root);
+  // 项目根 = <tab.path>/.claude。供树拼无资产文件绝对路径。
+  const curAgent = (agents?.agents ?? []).find(a => a.id === selectedAgent) ?? agents?.agents?.[0]
   const rootAbs = activeProjectTab.kind === 'global'
-    ? globalRoot
+    ? (curAgent?.root_dir ?? '')
     : `${activeProjectTab.path.replace(/\/$/, '')}/.claude`
 
   const favSet = new Set(favorites)

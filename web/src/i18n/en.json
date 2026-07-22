@@ -18,7 +18,8 @@
   },
   "dashboard": {
     "detectorStatus": "Detector Status",
-    "tokenExpired": "Token expired, please revisit with #token=."
+    "tokenExpired": "Token expired, please revisit with #token=.",
+    "agentContext": "Agent: {{agent}} · Last scan {{time}}"
   },
   "assets": {
     "viewList": "List",
@@ -62,7 +63,8 @@
     "confirmDelete": "Delete this scan record?",
     "delete": "Delete",
     "empty": "No scan history",
-    "totalCount": "Total {{count}} entries"
+    "totalCount": "Total {{count}} entries",
+    "filterAgent": "Filter by agent"
   },
   "settings": {
     "binaryPath": "Binary path",

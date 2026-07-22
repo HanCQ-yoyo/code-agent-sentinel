@@ -118,7 +118,10 @@ export const useStore = create<State>((set, get) => ({
   previewResult: null, editError: null,
   suppressions: [],
   fetchAssets: async () => {
-    const inv = await wrap(() => apiGet<Inventory>('/api/assets'), set)
+    // Task 10:读 action 拼 ?agent=<selectedAgent>(空则不带,后端回退首 agent)。
+    const a = get().selectedAgent
+    const q = a ? `?agent=${encodeURIComponent(a)}` : ''
+    const inv = await wrap(() => apiGet<Inventory>(`/api/assets${q}`), set)
     if (inv) set({ assets: inv })
   },
   runScan: async (agentID, detectors) => {
@@ -168,7 +171,10 @@ export const useStore = create<State>((set, get) => ({
     return false
   },
   fetchLatestScan: async () => {
-    const res = await wrap(() => apiGet<ScanRecord>('/api/scan/result'), set)
+    // Task 10:latest scan 也按 selectedAgent 过滤(getScanResult 已支持 ?agent=)。
+    const a = get().selectedAgent
+    const q = a ? `?agent=${encodeURIComponent(a)}` : ''
+    const res = await wrap(() => apiGet<ScanRecord>(`/api/scan/result${q}`), set)
     if (res && res.findings) set({ scan: res })
   },
   fetchHistory: async () => {
@@ -176,7 +182,10 @@ export const useStore = create<State>((set, get) => ({
     if (list) set({ history: list })
   },
   fetchDashboard: async () => {
-    const res = await wrap(() => apiGet<DashboardData>('/api/dashboard'), set)
+    // Task 10:dashboard 按 selectedAgent 过滤;后端返回 agent/agent_name 供页面上下文显示。
+    const a = get().selectedAgent
+    const q = a ? `?agent=${encodeURIComponent(a)}` : ''
+    const res = await wrap(() => apiGet<DashboardData>(`/api/dashboard${q}`), set)
     if (res) {
       // 归一化 detectors 的 available/reason(与 fetchDetectors 一致)
       const detectors = (res.detectors ?? []).map(m => {
@@ -226,13 +235,19 @@ export const useStore = create<State>((set, get) => ({
     return !!res
   },
   fetchProjects: async () => {
-    const res = await wrap(() => apiGet<{ projects: Project[] }>('/api/project'), set)
+    // Task 10:project 列表也按 selectedAgent 过滤(后端 Task 7 已支持 ?agent=)。
+    const a = get().selectedAgent
+    const q = a ? `?agent=${encodeURIComponent(a)}` : ''
+    const res = await wrap(() => apiGet<{ projects: Project[] }>(`/api/project${q}`), set)
     if (res) set({ projects: res.projects ?? [] })
   },
   fetchTree: async (tab) => {
+    // Task 10:tree 拼 &agent=<selectedAgent>(仅非空时);scope 原有逻辑不变。
+    const a = get().selectedAgent
+    const agentParam = a ? `&agent=${encodeURIComponent(a)}` : ''
     const url = tab.kind === 'global'
-      ? '/api/tree?scope=global'
-      : `/api/tree?scope=project&path=${encodeURIComponent(tab.path)}`
+      ? `/api/tree?scope=global${agentParam}`
+      : `/api/tree?scope=project&path=${encodeURIComponent(tab.path)}${agentParam}`
     const tree = await wrap(() => apiGet<TreeNode>(url), set)
     if (tree) set({ tree })
   },

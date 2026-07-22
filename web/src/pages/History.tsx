@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { Table, Button, Card, Row, Col, Spin, Empty, Typography, Alert, Popconfirm } from 'antd'
+import { Table, Button, Card, Row, Col, Spin, Empty, Typography, Alert, Popconfirm, Select } from 'antd'
 import { ArrowLeftOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { useTranslation } from 'react-i18next'
@@ -68,13 +68,28 @@ export default function History() {
     ) },
   ]
 
+  // Task 10:客户端 agent 筛选(历史列表本身是全局的,展示所有 agent 的扫描;下拉仅本地过滤)。
+  const [agentFilter, setAgentFilter] = useState<string>('')
+  const filteredHistory = agentFilter ? history.filter(h => h.agent_id === agentFilter) : history
+
   return (
     <Card>
-      {history.length === 0 ? <Empty description={t('history.empty')} /> : (
+      {/* Task 10:agent 筛选下拉(本地过滤,allowClear 清空即显示全部)。 */}
+      <div style={{ marginBottom: 12 }}>
+        <Select
+          allowClear
+          placeholder={t('history.filterAgent')}
+          style={{ width: 180 }}
+          value={agentFilter || undefined}
+          options={(agents?.agents ?? []).map(a => ({ value: a.id, label: a.name }))}
+          onChange={(v) => setAgentFilter(v ?? '')}
+        />
+      </div>
+      {filteredHistory.length === 0 ? <Empty description={t('history.empty')} /> : (
         <Table<ScanSummary>
           rowKey="id"
           columns={columns}
-          dataSource={history}
+          dataSource={filteredHistory}
           // defaultPageSize(非受控)而非 pageSize(受控):避免页大小选择器改动被受控 pageSize
           // 重置回 20(详见 AssetTable 注释)。
           pagination={{ defaultPageSize: 20, showSizeChanger: true, pageSizeOptions: ['10', '20', '50', '100'], showTotal: (total) => t('history.totalCount', { count: total }), size: 'small' }}
