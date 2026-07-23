@@ -1139,3 +1139,620 @@ rules:
         - { field: allow, op: regex_match, value: "sqlite3\\s+[^\\s]+\\s+<\\s+" }
     metadata: { source: dcg, domain: database, dcg_rule_id: "sqlite.sqlite3-stdin" }
     remediation: "Review the SQL file contents first. Use .backup before running. Wrap file contents in BEGIN/COMMIT."
+
+  # ===== database.snowflake 域(源 dcg database/snowflake.rs,50 dest + 0 safe)=====
+  # snowflake 特殊:50 条规则匹配 snow sql 内联 SQL。本 Task 先纯正则转写(匹配
+  # SQL 关键字),Task 9 重写 SQL lexer 后改走语义求值。
+  # severity 直接映射 dcg 枚举(见各规则)。
+  # 语义规则(前 40):dcg 源 regex 为 (?!)(不可满足),由 scan_sql 语义层求值。
+  # sentinel 纯正则版用 snow\b.*\b<SQL_KEYWORDS>\b 近似匹配,不精确(可能匹配
+  # 注释/字符串中的关键字)但可接受 — Task 9 的 lexer 修复。
+  # CLI 规则(后 10):dcg 源 regex 直接转写(匹配 snow <subcommand> drop 形态)。
+  # 0 safe_pattern → 无 post_exclude。
+
+  # --- 语义规则(40 条)---
+
+  - id: destructive.database.snowflake.stdin-unverified
+    severity: high
+    asset_type: hook
+    description: "snow sql receives SQL or a source that dcg cannot completely verify."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?!)" }
+        - { field: content, op: regex_match, value: "(?!)" }
+        - { field: allow, op: regex_match, value: "(?!)" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.stdin-unverified" }
+    remediation: "Materialize the exact rendered SQL, keep all !source inputs local, and review every statement before execution."
+
+  - id: destructive.database.snowflake.drop-database
+    severity: critical
+    asset_type: hook
+    description: "DROP DATABASE removes the database and every contained schema and object."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bDROP\\s+DATABASE\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bDROP\\s+DATABASE\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bDROP\\s+DATABASE\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.drop-database" }
+    remediation: "Verify with SHOW DATABASES and consider CREATE DATABASE <name>_backup CLONE <name> first."
+
+  - id: destructive.database.snowflake.drop-schema
+    severity: critical
+    asset_type: hook
+    description: "DROP SCHEMA removes the schema and can remove all contained objects."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bDROP\\s+SCHEMA\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bDROP\\s+SCHEMA\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bDROP\\s+SCHEMA\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.drop-schema" }
+    remediation: "Review schema contents, prefer RESTRICT, and clone the schema before broad DDL."
+
+  - id: destructive.database.snowflake.drop-table
+    severity: critical
+    asset_type: hook
+    description: "DROP TABLE removes the active table and its data."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:TABLE|EXTERNAL\\s+TABLE|EVENT\\s+TABLE|HYBRID\\s+TABLE|ICEBERG\\s+TABLE)\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:TABLE|EXTERNAL\\s+TABLE|EVENT\\s+TABLE|HYBRID\\s+TABLE|ICEBERG\\s+TABLE)\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:TABLE|EXTERNAL\\s+TABLE|EVENT\\s+TABLE|HYBRID\\s+TABLE|ICEBERG\\s+TABLE)\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.drop-table" }
+    remediation: "Verify the target, inspect retention, and create a zero-copy clone before dropping."
+
+  - id: destructive.database.snowflake.replace-database
+    severity: critical
+    asset_type: hook
+    description: "CREATE OR REPLACE DATABASE replaces a live database."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+DATABASE\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+DATABASE\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+DATABASE\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.replace-database" }
+    remediation: "Create and validate a separate database or clone instead of replacing the active database."
+
+  - id: destructive.database.snowflake.replace-schema
+    severity: critical
+    asset_type: hook
+    description: "CREATE OR REPLACE SCHEMA replaces a live schema."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+SCHEMA\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+SCHEMA\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+SCHEMA\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.replace-schema" }
+    remediation: "Clone the schema and test the migration against the clone before changing production."
+
+  - id: destructive.database.snowflake.replace-table
+    severity: critical
+    asset_type: hook
+    description: "CREATE OR REPLACE TABLE replaces the active table."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+(?:TABLE|EXTERNAL\\s+TABLE|EVENT\\s+TABLE|HYBRID\\s+TABLE|ICEBERG\\s+TABLE)\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+(?:TABLE|EXTERNAL\\s+TABLE|EVENT\\s+TABLE|HYBRID\\s+TABLE|ICEBERG\\s+TABLE)\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+(?:TABLE|EXTERNAL\\s+TABLE|EVENT\\s+TABLE|HYBRID\\s+TABLE|ICEBERG\\s+TABLE)\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.replace-table" }
+    remediation: "Build and validate a separate table or clone, then use a reviewed cutover operation."
+
+  - id: destructive.database.snowflake.truncate-table
+    severity: critical
+    asset_type: hook
+    description: "TRUNCATE TABLE removes every row from the target table."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bTRUNCATE\\s+(?:TABLE\\s+)?[a-zA-Z_]" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bTRUNCATE\\s+(?:TABLE\\s+)?[a-zA-Z_]" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bTRUNCATE\\s+(?:TABLE\\s+)?[a-zA-Z_]" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.truncate-table" }
+    remediation: "Preview the row count and clone the table before truncating."
+
+  - id: destructive.database.snowflake.delete-all
+    severity: critical
+    asset_type: hook
+    description: "DELETE without a top-level WHERE clause removes every row."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bDELETE\\s+FROM\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bDELETE\\s+FROM\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bDELETE\\s+FROM\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.delete-all" }
+    remediation: "Add a reviewed WHERE predicate and run the equivalent SELECT and COUNT first."
+    # 注意:纯正则版不区分有无 WHERE,bounded-delete 规则单独处理带 WHERE 的 DELETE。
+
+  - id: destructive.database.snowflake.update-all
+    severity: critical
+    asset_type: hook
+    description: "UPDATE without a top-level WHERE clause modifies every row."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bUPDATE\\s+\\S+\\s+SET\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bUPDATE\\s+\\S+\\s+SET\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bUPDATE\\s+\\S+\\s+SET\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.update-all" }
+    remediation: "Add a reviewed WHERE predicate and preview the exact target rows first."
+
+  - id: destructive.database.snowflake.drop-data-product
+    severity: high
+    asset_type: hook
+    description: "DROP removes a live view, materialized view, or dynamic table."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:VIEW|MATERIALIZED\\s+VIEW|DYNAMIC\\s+TABLE)\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:VIEW|MATERIALIZED\\s+VIEW|DYNAMIC\\s+TABLE)\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:VIEW|MATERIALIZED\\s+VIEW|DYNAMIC\\s+TABLE)\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.drop-data-product" }
+    remediation: "Inspect dependencies and validate a replacement object before removing the live query surface."
+
+  - id: destructive.database.snowflake.drop-ingestion-object
+    severity: high
+    asset_type: hook
+    description: "DROP removes a live stage, pipe, stream, or task."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:STAGE|PIPE|STREAM|TASK)\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:STAGE|PIPE|STREAM|TASK)\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:STAGE|PIPE|STREAM|TASK)\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.drop-ingestion-object" }
+    remediation: "Inspect pipeline dependencies and state before removing an ingestion or scheduling object."
+
+  - id: destructive.database.snowflake.drop-warehouse
+    severity: high
+    asset_type: hook
+    description: "DROP WAREHOUSE removes compute used by applications, tasks, or users."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bDROP\\s+WAREHOUSE\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bDROP\\s+WAREHOUSE\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bDROP\\s+WAREHOUSE\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.drop-warehouse" }
+    remediation: "Inspect warehouse consumers and prefer a reversible suspend after reviewing active workloads."
+
+  - id: destructive.database.snowflake.drop-principal
+    severity: high
+    asset_type: hook
+    description: "DROP USER or DROP ROLE can break services and revoke access hierarchies."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:USER|ROLE|DATABASE\\s+ROLE|APPLICATION\\s+ROLE)\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:USER|ROLE|DATABASE\\s+ROLE|APPLICATION\\s+ROLE)\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:USER|ROLE|DATABASE\\s+ROLE|APPLICATION\\s+ROLE)\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.drop-principal" }
+    remediation: "Review grants and dependencies, then disable access reversibly before deleting a principal."
+
+  - id: destructive.database.snowflake.drop-security-object
+    severity: high
+    asset_type: hook
+    description: "DROP removes a live integration, network policy, or share."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:INTEGRATION|API\\s+INTEGRATION|SECURITY\\s+INTEGRATION|STORAGE\\s+INTEGRATION|NOTIFICATION\\s+INTEGRATION|EXTERNAL\\s+ACCESS\\s+INTEGRATION|NETWORK\\s+POLICY|SHARE)\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:INTEGRATION|API\\s+INTEGRATION|SECURITY\\s+INTEGRATION|STORAGE\\s+INTEGRATION|NOTIFICATION\\s+INTEGRATION|EXTERNAL\\s+ACCESS\\s+INTEGRATION|NETWORK\\s+POLICY|SHARE)\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:INTEGRATION|API\\s+INTEGRATION|SECURITY\\s+INTEGRATION|STORAGE\\s+INTEGRATION|NOTIFICATION\\s+INTEGRATION|EXTERNAL\\s+ACCESS\\s+INTEGRATION|NETWORK\\s+POLICY|SHARE)\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.drop-security-object" }
+    remediation: "Review all consumers, grants, and recovery options before removing the security or sharing object."
+
+  - id: destructive.database.snowflake.drop-programmable-object
+    severity: medium
+    asset_type: hook
+    description: "DROP removes a file format, sequence, function, or procedure used by workloads."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:FILE\\s+FORMAT|SEQUENCE|FUNCTION|EXTERNAL\\s+FUNCTION|PROCEDURE)\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:FILE\\s+FORMAT|SEQUENCE|FUNCTION|EXTERNAL\\s+FUNCTION|PROCEDURE)\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:FILE\\s+FORMAT|SEQUENCE|FUNCTION|EXTERNAL\\s+FUNCTION|PROCEDURE)\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.drop-programmable-object" }
+    remediation: "Inspect object dependencies and preserve the current definition before removal."
+
+  - id: destructive.database.snowflake.remove-stage-files
+    severity: high
+    asset_type: hook
+    description: "REMOVE deletes files from an internal Snowflake stage."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bREMOVE\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bREMOVE\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bREMOVE\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.remove-stage-files" }
+    remediation: "LIST the exact stage path and verify retention or a backup before removing files."
+
+  - id: destructive.database.snowflake.pause-pipe
+    severity: high
+    asset_type: hook
+    description: "ALTER PIPE pauses ingestion and can silently make downstream data stale."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bALTER\\s+PIPE\\b.*PIPE_EXECUTION_PAUSED\\s+TRUE\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bALTER\\s+PIPE\\b.*PIPE_EXECUTION_PAUSED\\s+TRUE\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bALTER\\s+PIPE\\b.*PIPE_EXECUTION_PAUSED\\s+TRUE\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.pause-pipe" }
+    remediation: "Inspect pipe status and downstream freshness requirements before pausing ingestion."
+
+  - id: destructive.database.snowflake.suspend-task
+    severity: high
+    asset_type: hook
+    description: "ALTER TASK SUSPEND stops scheduled execution."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bALTER\\s+TASK\\b.*\\bSUSPEND\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bALTER\\s+TASK\\b.*\\bSUSPEND\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bALTER\\s+TASK\\b.*\\bSUSPEND\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.suspend-task" }
+    remediation: "Inspect task dependencies and active runs before suspending the task."
+
+  - id: destructive.database.snowflake.execute-task
+    severity: high
+    asset_type: hook
+    description: "EXECUTE TASK immediately starts a task run and may cascade a task graph."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bEXECUTE\\s+TASK\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bEXECUTE\\s+TASK\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bEXECUTE\\s+TASK\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.execute-task" }
+    remediation: "Inspect the task definition, owner privileges, graph dependencies, and active runs before forcing execution."
+
+  - id: destructive.database.snowflake.suspend-warehouse
+    severity: high
+    asset_type: hook
+    description: "ALTER WAREHOUSE SUSPEND can interrupt active or queued workloads."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bALTER\\s+WAREHOUSE\\b.*\\bSUSPEND\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bALTER\\s+WAREHOUSE\\b.*\\bSUSPEND\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bALTER\\s+WAREHOUSE\\b.*\\bSUSPEND\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.suspend-warehouse" }
+    remediation: "Inspect active queries and dependent tasks before suspending compute."
+
+  - id: destructive.database.snowflake.broad-revoke
+    severity: high
+    asset_type: hook
+    description: "REVOKE removes broad privileges or role membership and can break applications immediately."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bREVOKE\\b.*\\b(?:ALL|ACCOUNT|OWNERSHIP|ROLE|DATABASE\\s+ROLE)\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bREVOKE\\b.*\\b(?:ALL|ACCOUNT|OWNERSHIP|ROLE|DATABASE\\s+ROLE)\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bREVOKE\\b.*\\b(?:ALL|ACCOUNT|OWNERSHIP|ROLE|DATABASE\\s+ROLE)\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.broad-revoke" }
+    remediation: "Review current grants and identify every affected principal before revoking access."
+
+  - id: destructive.database.snowflake.broad-grant
+    severity: high
+    asset_type: hook
+    description: "GRANT creates account-wide, all-privilege, or ACCOUNTADMIN access."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bGRANT\\b.*\\b(?:ALL\\b|ON\\s+ACCOUNT\\b|ROLE\\s+ACCOUNTADMIN\\b)" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bGRANT\\b.*\\b(?:ALL\\b|ON\\s+ACCOUNT\\b|ROLE\\s+ACCOUNTADMIN\\b)" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bGRANT\\b.*\\b(?:ALL\\b|ON\\s+ACCOUNT\\b|ROLE\\s+ACCOUNTADMIN\\b)" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.broad-grant" }
+    remediation: "Grant only the required privileges on specific objects to a least-privilege role."
+
+  - id: destructive.database.snowflake.transfer-ownership
+    severity: high
+    asset_type: hook
+    description: "GRANT OWNERSHIP transfers control and can revoke or copy existing grants."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bGRANT\\s+OWNERSHIP\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bGRANT\\s+OWNERSHIP\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bGRANT\\s+OWNERSHIP\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.transfer-ownership" }
+    remediation: "Inventory outbound privileges and review COPY/REVOKE CURRENT GRANTS semantics before transferring ownership."
+
+  - id: destructive.database.snowflake.alter-table-drop-column
+    severity: high
+    asset_type: hook
+    description: "ALTER TABLE DROP COLUMN removes a column and its active data."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bALTER\\s+TABLE\\b.*\\bDROP\\s+COLUMN\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bALTER\\s+TABLE\\b.*\\bDROP\\s+COLUMN\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bALTER\\s+TABLE\\b.*\\bDROP\\s+COLUMN\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.alter-table-drop-column" }
+    remediation: "Clone the table and validate all downstream consumers before removing the column."
+
+  - id: destructive.database.snowflake.alter-table-swap
+    severity: high
+    asset_type: hook
+    description: "ALTER TABLE SWAP WITH exchanges table identities atomically."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bALTER\\s+TABLE\\b.*\\bSWAP\\s+WITH\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bALTER\\s+TABLE\\b.*\\bSWAP\\s+WITH\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bALTER\\s+TABLE\\b.*\\bSWAP\\s+WITH\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.alter-table-swap" }
+    remediation: "Verify both fully qualified tables and compare row counts and schemas before swapping."
+
+  - id: destructive.database.snowflake.insert-overwrite
+    severity: high
+    asset_type: hook
+    description: "INSERT OVERWRITE replaces the target table's current rows."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bINSERT\\s+OVERWRITE\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bINSERT\\s+OVERWRITE\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bINSERT\\s+OVERWRITE\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.insert-overwrite" }
+    remediation: "Write to and validate a separate table before a reviewed cutover."
+
+  - id: destructive.database.snowflake.copy-overwrite
+    severity: high
+    asset_type: hook
+    description: "COPY INTO a location with OVERWRITE = TRUE can replace exported files."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bCOPY\\s+INTO\\b.*\\bOVERWRITE\\s*=\\s*TRUE\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bCOPY\\s+INTO\\b.*\\bOVERWRITE\\s*=\\s*TRUE\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bCOPY\\s+INTO\\b.*\\bOVERWRITE\\s*=\\s*TRUE\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.copy-overwrite" }
+    remediation: "Export to a versioned path and LIST the destination before copying."
+
+  - id: destructive.database.snowflake.put-overwrite
+    severity: high
+    asset_type: hook
+    description: "PUT with OVERWRITE = TRUE can replace files in an internal stage."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bPUT\\b.*\\bOVERWRITE\\s*=\\s*TRUE\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bPUT\\b.*\\bOVERWRITE\\s*=\\s*TRUE\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bPUT\\b.*\\bOVERWRITE\\s*=\\s*TRUE\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.put-overwrite" }
+    remediation: "Upload to a versioned stage path and LIST existing files first."
+
+  - id: destructive.database.snowflake.replace-live-object
+    severity: high
+    asset_type: hook
+    description: "CREATE OR REPLACE replaces a live Snowflake object and may lose grants, state, or configuration."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+(?:PIPE|STREAM|TASK|STAGE|INTEGRATION|API\\s+INTEGRATION|SECURITY\\s+INTEGRATION|STORAGE\\s+INTEGRATION|NOTIFICATION\\s+INTEGRATION|EXTERNAL\\s+ACCESS\\s+INTEGRATION|CATALOG\\s+INTEGRATION|SHARE|PROCEDURE|FUNCTION|EXTERNAL\\s+FUNCTION|VIEW|MATERIALIZED\\s+VIEW|DYNAMIC\\s+TABLE)\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+(?:PIPE|STREAM|TASK|STAGE|INTEGRATION|API\\s+INTEGRATION|SECURITY\\s+INTEGRATION|STORAGE\\s+INTEGRATION|NOTIFICATION\\s+INTEGRATION|EXTERNAL\\s+ACCESS\\s+INTEGRATION|CATALOG\\s+INTEGRATION|SHARE|PROCEDURE|FUNCTION|EXTERNAL\\s+FUNCTION|VIEW|MATERIALIZED\\s+VIEW|DYNAMIC\\s+TABLE)\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+(?:PIPE|STREAM|TASK|STAGE|INTEGRATION|API\\s+INTEGRATION|SECURITY\\s+INTEGRATION|STORAGE\\s+INTEGRATION|NOTIFICATION\\s+INTEGRATION|EXTERNAL\\s+ACCESS\\s+INTEGRATION|CATALOG\\s+INTEGRATION|SHARE|PROCEDURE|FUNCTION|EXTERNAL\\s+FUNCTION|VIEW|MATERIALIZED\\s+VIEW|DYNAMIC\\s+TABLE)\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.replace-live-object" }
+    remediation: "Create and validate a separate object before changing the live definition."
+
+  - id: destructive.database.snowflake.bounded-delete
+    severity: medium
+    asset_type: hook
+    description: "DELETE mutates every row selected by its WHERE predicate."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bDELETE\\s+FROM\\b.*\\bWHERE\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bDELETE\\s+FROM\\b.*\\bWHERE\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bDELETE\\s+FROM\\b.*\\bWHERE\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.bounded-delete" }
+    remediation: "Run the equivalent SELECT and COUNT against a clone before deleting rows."
+
+  - id: destructive.database.snowflake.bounded-update
+    severity: medium
+    asset_type: hook
+    description: "UPDATE mutates every row selected by its WHERE predicate."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bUPDATE\\s+\\S+\\s+SET\\b.*\\bWHERE\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bUPDATE\\s+\\S+\\s+SET\\b.*\\bWHERE\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bUPDATE\\s+\\S+\\s+SET\\b.*\\bWHERE\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.bounded-update" }
+    remediation: "Preview affected rows and validate the update against a clone first."
+
+  - id: destructive.database.snowflake.merge-data
+    severity: medium
+    asset_type: hook
+    description: "MERGE can update, insert, or delete rows based on source matching."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bMERGE\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bMERGE\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bMERGE\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.merge-data" }
+    remediation: "Validate source uniqueness and preview matched and unmatched rows against a clone."
+
+  - id: destructive.database.snowflake.copy-into-table
+    severity: medium
+    asset_type: hook
+    description: "COPY INTO a table can load duplicate, corrupt, or unexpected data."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bCOPY\\s+INTO\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bCOPY\\s+INTO\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bCOPY\\s+INTO\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.copy-into-table" }
+    remediation: "Validate the staged files and load into a clone or scratch table first."
+    # 注意:纯正则版 copy-overwrite 与 copy-into-table 都匹配 COPY INTO,
+    # 但 copy-overwrite 额外要求 OVERWRITE=TRUE。两者可能同时命中(可接受)。
+
+  - id: destructive.database.snowflake.rename-object
+    severity: medium
+    asset_type: hook
+    description: "Renaming a database, schema, or table can break fully qualified consumers."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bALTER\\s+(?:DATABASE|SCHEMA|TABLE)\\b.*\\bRENAME\\s+TO\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bALTER\\s+(?:DATABASE|SCHEMA|TABLE)\\b.*\\bRENAME\\s+TO\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bALTER\\s+(?:DATABASE|SCHEMA|TABLE)\\b.*\\bRENAME\\s+TO\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.rename-object" }
+    remediation: "Inventory consumers and stage a coordinated cutover before renaming the object."
+
+  - id: destructive.database.snowflake.alter-column
+    severity: medium
+    asset_type: hook
+    description: "ALTER TABLE ALTER COLUMN can break writes and downstream consumers."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bALTER\\s+TABLE\\b.*\\b(?:ALTER|MODIFY)\\s+COLUMN\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bALTER\\s+TABLE\\b.*\\b(?:ALTER|MODIFY)\\s+COLUMN\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bALTER\\s+TABLE\\b.*\\b(?:ALTER|MODIFY)\\s+COLUMN\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.alter-column" }
+    remediation: "Validate type, nullability, default, and policy changes against a clone first."
+
+  - id: destructive.database.snowflake.warehouse-settings
+    severity: medium
+    asset_type: hook
+    description: "ALTER WAREHOUSE SET can create availability or cost risk."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bALTER\\s+WAREHOUSE\\b.*\\bSET\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bALTER\\s+WAREHOUSE\\b.*\\bSET\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bALTER\\s+WAREHOUSE\\b.*\\bSET\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.warehouse-settings" }
+    remediation: "Review active consumers, size, scaling, and auto-suspend settings before applying changes."
+
+  - id: destructive.database.snowflake.abort-query
+    severity: medium
+    asset_type: hook
+    description: "!abort cancels an active Snowflake query."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*!abort\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*!abort\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*!abort\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.abort-query" }
+    remediation: "Inspect query history and confirm the exact query ID before aborting it."
+
+  - id: destructive.database.snowflake.interactive-edit
+    severity: high
+    asset_type: hook
+    description: "!edit executes SQL modified in an external editor that dcg cannot inspect in advance."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*!edit\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*!edit\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*!edit\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.interactive-edit" }
+    remediation: "Materialize the final SQL in a reviewed local file and execute it with snow sql -f."
+
+  - id: destructive.database.snowflake.execute-immediate
+    severity: medium
+    asset_type: hook
+    description: "EXECUTE IMMEDIATE runs generated SQL whose rendered semantics require explicit review."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "snow\\b.*\\bEXECUTE\\s+IMMEDIATE\\b" }
+        - { field: content, op: regex_match, value: "snow\\b.*\\bEXECUTE\\s+IMMEDIATE\\b" }
+        - { field: allow, op: regex_match, value: "snow\\b.*\\bEXECUTE\\s+IMMEDIATE\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.execute-immediate" }
+    remediation: "Materialize and review the exact rendered SQL, including templates and variables, before executing it."
+
+  # --- CLI 规则(10 条,dcg 源 regex 直接转写)---
+
+  - id: destructive.database.snowflake.cli-object-drop-database
+    severity: critical
+    asset_type: hook
+    description: "snow object drop database/schema removes the object and everything inside it."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+object\\s+drop\\s+(?:database|schema)\\b" }
+        - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+object\\s+drop\\s+(?:database|schema)\\b" }
+        - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+object\\s+drop\\s+(?:database|schema)\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-object-drop-database" }
+    remediation: "Verify with snow object list database / snow object describe. Consider CREATE DATABASE <name>_backup CLONE <name> first."
+
+  - id: destructive.database.snowflake.cli-object-drop
+    severity: high
+    asset_type: hook
+    description: "snow object drop permanently removes a Snowflake object."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+object\\s+drop\\b" }
+        - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+object\\s+drop\\b" }
+        - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+object\\s+drop\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-object-drop" }
+    remediation: "Inspect first with snow object describe <type> <name>. --force skips the confirmation prompt."
+
+  - id: destructive.database.snowflake.cli-stage-drop
+    severity: high
+    asset_type: hook
+    description: "snow stage drop removes the stage; internal staged files are not recoverable."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+stage\\s+drop\\b" }
+        - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+stage\\s+drop\\b" }
+        - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+stage\\s+drop\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-stage-drop" }
+    remediation: "List contents first with snow stage list-files <stage>. Dropped stages cannot be recovered."
+
+  - id: destructive.database.snowflake.cli-stage-remove
+    severity: high
+    asset_type: hook
+    description: "snow stage remove deletes files from a stage."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+stage\\s+remove\\b" }
+        - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+stage\\s+remove\\b" }
+        - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+stage\\s+remove\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-stage-remove" }
+    remediation: "Preview with snow stage list-files <stage> and consider copying the files out first."
+
+  - id: destructive.database.snowflake.cli-app-teardown
+    severity: high
+    asset_type: hook
+    description: "snow app teardown drops the Native App and (with --cascade) its owned objects."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+app\\s+teardown\\b" }
+        - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+app\\s+teardown\\b" }
+        - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+app\\s+teardown\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-app-teardown" }
+    remediation: "snow app teardown drops the application object and development artifacts. Anyone using the app loses access immediately."
+
+  - id: destructive.database.snowflake.cli-app-version-drop
+    severity: medium
+    asset_type: hook
+    description: "snow app version drop removes a Native App version definition."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+app\\s+version\\s+drop\\b" }
+        - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+app\\s+version\\s+drop\\b" }
+        - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+app\\s+version\\s+drop\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-app-version-drop" }
+    remediation: "Dropping an application package version prevents new installs and upgrades of that version."
+
+  - id: destructive.database.snowflake.cli-snowpark-drop
+    severity: medium
+    asset_type: hook
+    description: "snow snowpark drop removes a deployed procedure or function from Snowflake."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+snowpark\\s+drop\\b" }
+        - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+snowpark\\s+drop\\b" }
+        - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+snowpark\\s+drop\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-snowpark-drop" }
+    remediation: "snow snowpark drop function/procedure drops the named object. Downstream callers fail until redeployed."
+
+  - id: destructive.database.snowflake.cli-spcs-drop
+    severity: high
+    asset_type: hook
+    description: "snow spcs ... drop removes container services infrastructure."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+spcs\\s+(?:service|compute-pool|image-repository)\\s+drop\\b" }
+        - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+spcs\\s+(?:service|compute-pool|image-repository)\\s+drop\\b" }
+        - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+spcs\\s+(?:service|compute-pool|image-repository)\\s+drop\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-spcs-drop" }
+    remediation: "Dropping an SPCS service stops and removes the running workload. Dropping a compute pool removes compute for every service on it."
+
+  - id: destructive.database.snowflake.cli-dbt-drop
+    severity: medium
+    asset_type: hook
+    description: "snow dbt drop removes a dbt project object from Snowflake."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+dbt\\s+drop\\b" }
+        - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+dbt\\s+drop\\b" }
+        - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+dbt\\s+drop\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-dbt-drop" }
+    remediation: "snow dbt drop removes the named DBT PROJECT object. Scheduled runs and tasks referencing it fail until redeployed."
+
+  - id: destructive.database.snowflake.cli-dcm-drop
+    severity: medium
+    asset_type: hook
+    description: "snow dcm drop removes a DCM project object from Snowflake."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+dcm\\s+drop\\b" }
+        - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+dcm\\s+drop\\b" }
+        - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+dcm\\s+drop\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-dcm-drop" }
+    remediation: "snow dcm drop removes the named DCM PROJECT object, including its deployment history."

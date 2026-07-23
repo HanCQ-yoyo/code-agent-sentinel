@@ -203,6 +203,19 @@ func TestDestructive_DatabaseDomain(t *testing.T) {
 		{"sqlite-delete-without-where", "sqlite3 mydb 'DELETE FROM users;'", "command", "destructive.database.sqlite.delete-without-where"},
 		{"sqlite-vacuum-into", "sqlite3 mydb 'VACUUM INTO \"backup.db\"'", "command", "destructive.database.sqlite.vacuum-into"},
 		{"sqlite3-stdin", "sqlite3 mydb < init.sql", "command", "destructive.database.sqlite.sqlite3-stdin"},
+		// ===== snowflake(50 dest + 0 safe;纯正则,Task 9 加语义)=====
+		// 语义规则(前 40):匹配 snow sql 上下文中的 SQL 关键字
+		{"snowflake-drop-database", "snow sql --query 'DROP DATABASE mydb'", "command", "destructive.database.snowflake.drop-database"},
+		{"snowflake-drop-table", "snow sql --query 'DROP TABLE users'", "command", "destructive.database.snowflake.drop-table"},
+		{"snowflake-truncate-table", "snow sql --query 'TRUNCATE TABLE users'", "command", "destructive.database.snowflake.truncate-table"},
+		{"snowflake-delete-all", "snow sql --query 'DELETE FROM users'", "command", "destructive.database.snowflake.delete-all"},
+		{"snowflake-replace-table", "snow sql --query 'CREATE OR REPLACE TABLE users (id INT)'", "command", "destructive.database.snowflake.replace-table"},
+		// CLI 规则(后 10):匹配 snow <subcommand> drop 形态
+		{"snowflake-cli-object-drop-db", "snow object drop database mydb", "command", "destructive.database.snowflake.cli-object-drop-database"},
+		{"snowflake-cli-object-drop", "snow object drop table mytable", "command", "destructive.database.snowflake.cli-object-drop"},
+		{"snowflake-cli-stage-drop", "snow stage drop mystage", "command", "destructive.database.snowflake.cli-stage-drop"},
+		{"snowflake-cli-stage-remove", "snow stage remove mystage", "command", "destructive.database.snowflake.cli-stage-remove"},
+		{"snowflake-cli-app-teardown", "snow app teardown myapp", "command", "destructive.database.snowflake.cli-app-teardown"},
 	}
 	for _, c := range hitCases {
 		t.Run(c.name, func(t *testing.T) {
