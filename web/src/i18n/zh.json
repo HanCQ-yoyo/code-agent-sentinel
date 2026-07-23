@@ -11,7 +11,6 @@
     "agent": "目标Agent",
     "detectors": "检测器",
     "start": "开始检测",
-    "scanOff": " (扫描关)",
     "colName": "名称",
     "colID": "ID",
     "colStatus": "状态",

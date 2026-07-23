@@ -583,8 +583,8 @@ test('RescanModal 打开并切换 project scope 显示项目选择', async ({ pa
   // Modal 标题 rescan.title = 「安全检测配置」(中文 fixture)。
   const modal = page.locator('.ant-modal').filter({ hasText: '安全检测配置' })
   await expect(modal).toBeVisible({ timeout: 10000 })
-  // 选「项目」scope:antd Radio 渲染 <label><input type=radio><span>项目</span></label>,
-  // getByRole('radio',{name:'项目'}) 靠可见文本匹配。点击后 scopeType='project'。
+  // 选「项目级」scope:antd Radio 渲染 <label><input type=radio><span>项目级</span></label>,
+  // getByRole('radio',{name:'项目级'}) 靠可见文本匹配。点击后 scopeType='project'。
   await modal.getByRole('radio', { name: '项目级' }).click()
   // 项目 Select 渲染(RescanModal L53-55:scopeType==='project' 时渲染 Select)。
   // antd Select 的 placeholder 不在 DOM placeholder 属性上,而在 .ant-select-selection-placeholder 内,

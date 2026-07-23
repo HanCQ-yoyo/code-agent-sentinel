@@ -11,7 +11,6 @@
     "agent": "Target Agents",
     "detectors": "Detectors",
     "start": "Start Scan",
-    "scanOff": " (off)",
     "colName": "Name",
     "colID": "ID",
     "colStatus": "Status",

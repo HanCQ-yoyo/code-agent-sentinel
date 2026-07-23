@@ -314,7 +314,7 @@ export default function Assets() {
             dirTagsDefaults={dirTagsDefaults}
             dirTagsOverrides={dirTagsOverrides}
           />
-          <AssetDrawer asset={selectedAsset ?? null} findings={scan?.findings} detectors={detectors} onClose={() => setSelected(null)} />
+          <AssetDrawer asset={selectedAsset ?? null} findings={scan?.findings} detectors={detectors} agentID={activeAgent} onClose={() => setSelected(null)} />
         </Card>
       ) : (
         <Splitter style={{ height: 'calc(100vh - 240px)', minHeight: 360 }}>
