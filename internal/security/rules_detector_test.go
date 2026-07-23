@@ -515,6 +515,10 @@ func TestRulesDetector_SemanticNoFalsePositive(t *testing.T) {
 // 期望:至少一条 semantic.filesystem.* finding 命中(语义 Deny 兜底)。
 // 语义 finding 的 RuleID 用 "semantic." 前缀 + dcg rule_id(如 semantic.filesystem.rm-rf-root-home),
 // 与正则规则 ID(destructive.filesystem.*)区分,便于审计追溯来源。
+//
+// review Important #1 回归断言:`rm -r -f /` 的语义 finding severity 必须是 critical
+// (载体规则按 dcg_rule_id == "filesystem.rm-rf-root-home" 精确匹配,继承 critical severity,
+// 而非首条域规则 sed-exec-unverified 的 high)。修前 bug:用首条域规则做载体 → high(失真)。
 func TestRulesDetector_SemanticCatchesSplitFlags(t *testing.T) {
 	home := newRulesHome(t)
 	d := NewRulesDetector(home, nil)
@@ -534,6 +538,15 @@ func TestRulesDetector_SemanticCatchesSplitFlags(t *testing.T) {
 	for _, f := range findings {
 		if strings.HasPrefix(f.RuleID, "semantic.filesystem.") {
 			found = true
+			// review Important #1:severity 必须是 critical(载体规则按 dcg_rule_id 精确匹配)。
+			// rm -r -f / → semRuleID=filesystem.rm-rf-root-home → 载体 destructive.filesystem.rm-rf-root-home(critical)。
+			if f.Severity != SeverityCritical {
+				t.Errorf("semantic.filesystem.* finding severity = %s, want critical (carrier rule 应按 dcg_rule_id 精确匹配 rm-rf-root-home): %+v", f.Severity, f)
+			}
+			// RuleID 应是 semantic.filesystem.rm-rf-root-home(不是 rm-rf-general)。
+			if f.RuleID != "semantic.filesystem.rm-rf-root-home" {
+				t.Errorf("RuleID = %s, want semantic.filesystem.rm-rf-root-home", f.RuleID)
+			}
 			break
 		}
 	}
@@ -545,6 +558,10 @@ func TestRulesDetector_SemanticCatchesSplitFlags(t *testing.T) {
 // TestRulesDetector_SemanticDenyGitResetHard 验证语义 Deny 对 git 域生效:
 // `git reset --hard` 语义判 Deny,应产 semantic.git.reset-hard finding。
 // 同时验证正则规则本身也能命中(两者不冲突,语义 Deny 优先构造 finding 并 continue)。
+//
+// review Important #1 回归断言:severity 必须是 critical(载体规则按 dcg_rule_id ==
+// "git.reset-hard" 精确匹配 destructive.git.reset-hard,继承 critical severity,
+// 而非首条 git 域规则 checkout-discard 的 high)。修前 bug:用首条域规则做载体 → high(失真)。
 func TestRulesDetector_SemanticDenyGitResetHard(t *testing.T) {
 	home := newRulesHome(t)
 	d := NewRulesDetector(home, nil)
@@ -564,6 +581,10 @@ func TestRulesDetector_SemanticDenyGitResetHard(t *testing.T) {
 	for _, f := range findings {
 		if f.RuleID == "semantic.git.reset-hard" {
 			found = true
+			// review Important #1:severity 必须是 critical(载体规则按 dcg_rule_id 精确匹配 git.reset-hard)。
+			if f.Severity != SeverityCritical {
+				t.Errorf("semantic.git.reset-hard severity = %s, want critical (carrier rule 应按 dcg_rule_id 精确匹配 destructive.git.reset-hard): %+v", f.Severity, f)
+			}
 			break
 		}
 	}

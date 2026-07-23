@@ -165,17 +165,15 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 			res := semantics.DispatchCommand(cmdText)
 			semResult = &res
 		}
-		// semDenyDomain 记录语义 Deny 来源域(从 RuleID 第一段提取,如 "filesystem"/"git"/"snowflake")。
-		// 仅对该域规则跳过正则(语义已判破坏,正则不必再跑)。
-		// 注意:snowflake 域 RuleID 是 "snowflake.drop",域段 = "snowflake",
-		// 但 sentinel 规则域是 "database" —— 需特殊映射(见下方 semDenyRuleDomain)。
-		semDenyDomain := ""
-		// semDenyRuleDomain 映射到 sentinel 规则的 domain Metadata:
+		// semDenyRuleDomain 映射语义 Deny 来源域到 sentinel 规则的 domain Metadata:
 		//   git → git, filesystem → filesystem, snowflake → database
+		// 从 RuleID 第一段提取(如 "filesystem"/"git"/"snowflake")。
+		// snowflake 域 RuleID 是 "snowflake.drop"(通用语义 RuleID),域段 = "snowflake",
+		// 但 sentinel 规则域是 "database" —— 需特殊映射。
+		// 仅对该域规则跳过正则(语义已判破坏,正则不必再跑)。
 		semDenyRuleDomain := ""
 		if semResult != nil && semResult.Decision == semantics.Deny && semResult.RuleID != "" {
-			semDenyDomain = strings.SplitN(semResult.RuleID, ".", 2)[0]
-			switch semDenyDomain {
+			switch strings.SplitN(semResult.RuleID, ".", 2)[0] {
 			case "git":
 				semDenyRuleDomain = "git"
 			case "filesystem":
@@ -186,6 +184,19 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 		}
 		// semFindingEmitted 标记语义 finding 是否已构造(去重:一个 asset 一条语义 finding)。
 		semFindingEmitted := false
+
+		// 预选语义 finding 载体规则(关卡 1 Deny 分支用):
+		// 优先匹配 r.Metadata["dcg_rule_id"] == sem.RuleID(精确匹配,继承正确 severity/remediation);
+		// 若无精确匹配(snowflake.drop 是通用语义 RuleID,无对应 dcg_rule_id),回退到该域首条
+		// asset_type 匹配规则。若该域无任何匹配规则,返回 nil(Deny 必有对应域规则,理论不会发生)。
+		//
+		// 修复 review Important #1:原实现用循环内首条域匹配规则做载体,若该规则 severity
+		// 与语义判定不匹配(如 rm -rf / → 首条 sed-exec-unverified high,而非 rm-rf-root-home critical),
+		// finding severity 被扭曲,健康分扣分失真。按 dcg_rule_id 精确匹配后,severity 从正确规则继承。
+		var semCarrier *ruleengine.Rule
+		if semResult != nil && semResult.Decision == semantics.Deny && semDenyRuleDomain != "" {
+			semCarrier = pickSemanticCarrier(allRules, a, semDenyRuleDomain, semResult.RuleID)
+		}
 
 		for _, r := range allRules {
 			// 规则按 asset_type 路由(Covers=nil → 全资产传入,内部按类型分发)
@@ -205,7 +216,7 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 			if semActive {
 				// 关卡 1:正则前语义判定。
 				//   Deny + 规则域 == 语义来源域(mapped)→ 该域所有规则跳过正则(语义已判破坏);
-				//     对首条匹配规则构造一次语义 finding(去重:semFindingEmitted 标记)。
+				//     对预选载体规则构造一次语义 finding(去重:semFindingEmitted 标记)。
 				//   Safe → 跳过该规则(防误报,如 git commit -m 数据区内的 rm 字面量)。
 				//     Safe 来自优先级最高的解析器(如 git),对所有有解析器的域规则生效 ——
 				//     若 git 判 Safe(commit -m 数据区),filesystem 规则也不应报(避免误报)。
@@ -213,13 +224,18 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 				switch semResult.Decision {
 				case semantics.Deny:
 					if domain == semDenyRuleDomain {
-						// 对首条匹配规则构造语义 finding(去重)。
-						// 优先用 dcg_rule_id == sem.RuleID 的规则(精确匹配,继承正确 severity/remediation);
-						// 若无精确匹配(snowflake.drop 是通用语义 RuleID,无对应 dcg_rule_id),
-						// 用该域首条规则做载体(severity 取规则自己的,但 RuleID 用 semantic.* 覆盖)。
+						// 对预选载体规则构造语义 finding(去重)。
+						// 载体规则已按 dcg_rule_id == sem.RuleID 精确匹配预选(见循环前 semCarrier):
+						// Severity/Remediation/Message 从正确规则继承(如 rm -rf / → rm-rf-root-home critical);
+						// RuleID 用 semantic.<dcg_rule_id> 覆盖(见 makeSemanticFinding)。
+						// 若 semCarrier 为 nil(域无匹配规则,理论不发生),用当前 r 兜底。
 						if !semFindingEmitted {
-							f := makeSemanticFinding(d, r, a, *semResult)
-							fp := ruleengine.Fingerprint(r, a.ID)
+							carrier := r
+							if semCarrier != nil {
+								carrier = *semCarrier
+							}
+							f := makeSemanticFinding(d, carrier, a, *semResult)
+							fp := ruleengine.Fingerprint(carrier, a.ID)
 							applySuppression(&f, fp, d.baseline, d.supprs)
 							out = append(out, f)
 							semFindingEmitted = true
@@ -350,20 +366,71 @@ func commandTextFromAsset(a configengine.Asset) (text string, field string) {
 	return "", ""
 }
 
+// pickSemanticCarrier 为语义 Deny finding 预选载体规则(修复 review Important #1)。
+//
+// 选择策略(按优先级):
+//  1. 精确匹配:规则 Metadata["dcg_rule_id"] == semRuleID(如 semRuleID="filesystem.rm-rf-root-home"
+//     匹配 destructive.filesystem.rm-rf-root-home 的 dcg_rule_id)。继承正确 severity/remediation。
+//  2. 回退:该域首条 asset_type 匹配规则(snowflake.drop 是通用语义 RuleID,无对应 dcg_rule_id,
+//     回退到首条 database 规则做载体)。
+//  3. 若该域无任何匹配规则(理论不发生,Deny 必有对应域规则),返回 nil。
+//
+// semRuleID 是语义解析器返回的 dcg 风格 RuleID(如 "filesystem.rm-rf-root-home" / "git.reset-hard" /
+// "snowflake.drop")。规则的 dcg_rule_id 在 Tasks 4-7 转写时设置(与 dcg 源 rule_id 对齐)。
+//
+// 修复前:用循环内首条域匹配规则做载体,若该规则 severity 与语义判定不匹配(如 rm -rf / →
+// 首条 sed-exec-unverified high,而非 rm-rf-root-home critical),finding severity 被扭曲,
+// 健康分扣分失真(underweighted 37.5%)。
+func pickSemanticCarrier(rules []ruleengine.Rule, a configengine.Asset, semDenyRuleDomain, semRuleID string) *ruleengine.Rule {
+	// 策略 1:精确匹配 dcg_rule_id == semRuleID。
+	// 遍历全部规则(不止该域),因 semRuleID 含域段(如 "filesystem.rm-rf-root-home"),
+	// dcg_rule_id 也含域段,跨域不会误匹配。
+	if semRuleID != "" {
+		for i := range rules {
+			r := &rules[i]
+			if string(r.AssetType) != string(a.Type) {
+				continue
+			}
+			if r.ProjectPath != "" && !pathInProject(a.SourcePath, r.ProjectPath) {
+				continue
+			}
+			if dcgID, _ := r.Metadata["dcg_rule_id"].(string); dcgID == semRuleID {
+				return r
+			}
+		}
+	}
+	// 策略 2:回退到该域首条 asset_type 匹配规则。
+	for i := range rules {
+		r := &rules[i]
+		if string(r.AssetType) != string(a.Type) {
+			continue
+		}
+		if r.ProjectPath != "" && !pathInProject(a.SourcePath, r.ProjectPath) {
+			continue
+		}
+		domain, _ := r.Metadata["domain"].(string)
+		if domain == semDenyRuleDomain {
+			return r
+		}
+	}
+	// 策略 3:无匹配(理论不发生)。
+	return nil
+}
+
 // makeSemanticFinding 构造语义 Deny finding(关卡 1 用)。
 //
 // 与正则 finding 的区别:
 //   - RuleID:用 `semantic.<dcg_rule_id>`(如 semantic.filesystem.rm-rf-root-home),
 //     与正则规则 ID(destructive.filesystem.rm-rf-root-home)区分,便于 UI/审计追溯来源。
 //   - Evidence:用 sem.Reason(语义解析器的判定理由,如 "rm -rf /(递归强制删根/home)")
-//   - Severity/Locations:语义解析器不产位置信息,Locations 留空;Severity 复用规则的 severity
-//     (规则是 destructive.filesystem.rm-rf-root-home → critical,语义 finding 继承)
+//   - Severity/Locations:语义解析器不产位置信息,Locations 留空;Severity 复用载体规则的 severity
+//     (载体规则按 dcg_rule_id == sem.RuleID 精确匹配,如 rm -rf / → rm-rf-root-home critical,
+//     语义 finding 继承正确 severity,健康分扣分不失真)
 //
 // RuleID 映射:sem.RuleID 是 dcg 风格(如 "filesystem.rm-rf-root-home" / "git.reset-hard"),
 // 加 "semantic." 前缀避免与正则规则 ID 冲突(正则规则用 "destructive." 前缀)。
-// 不查找匹配的 sentinel 规则取其 ID —— 简化实现,且语义 finding 与正则 finding
-// 可同时出现(若用户想区分来源)。Fingerprint 仍用规则 r 算(稳定锚定规则意图,
-// 不受 Evidence 文本变化影响)。
+// 载体规则 r 由 pickSemanticCarrier 预选(按 dcg_rule_id 精确匹配,fallback 到域首条规则)。
+// Fingerprint 仍用载体规则 r 算(稳定锚定规则意图,不受 Evidence 文本变化影响)。
 func makeSemanticFinding(d *RulesDetector, r ruleengine.Rule, a configengine.Asset,
 	sem semantics.SemanticResult) Finding {
 	ruleID := "semantic." + sem.RuleID
