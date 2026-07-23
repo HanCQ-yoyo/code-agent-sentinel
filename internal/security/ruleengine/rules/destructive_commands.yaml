@@ -16,8 +16,8 @@
 
 rules:
   # ===== git 域(源 dcg core/git.rs:4207-4462,12 dest + 6 safe→post_exclude)=====
-  # severity 采用 brief 映射(reset-hard/clean-force/push-force-*/stash-clear 在 dcg 中
-  # 为 Critical,本域统一降为 high;stash-drop/stash-clear 为 medium)。
+  # severity 直接映射 dcg 枚举(reset-hard/clean-force/push-force-*/stash-clear=Critical;
+  # checkout-*/restore-*/reset-merge/branch-force-delete=High;stash-drop=Medium)。
   # 正则适配:[[:alnum:]_]→\w;(?:^|[^[:alnum:]_-])→(?:^|[^\w-]);YAML 双引号内 \\。
 
   - id: destructive.git.checkout-discard
@@ -81,7 +81,7 @@ rules:
     remediation: "改用 git restore --staged 仅取消暂存,保留工作区改动"
 
   - id: destructive.git.reset-hard
-    severity: high
+    severity: critical
     asset_type: hook
     description: "git reset --hard 丢弃工作区与暂存区改动,不可恢复。先用 git stash。"
     match:
@@ -105,7 +105,7 @@ rules:
     remediation: "改用 git stash 保存改动,git merge --abort 安全中止合并"
 
   - id: destructive.git.clean-force
-    severity: high
+    severity: critical
     asset_type: hook
     description: "git clean -f/--force 永久删除未跟踪文件。先用 git clean -n 预览。"
     match:
@@ -120,7 +120,7 @@ rules:
     remediation: "改用 git clean -n 预览,git clean -i 交互选择"
 
   - id: destructive.git.push-force-long
-    severity: high
+    severity: critical
     asset_type: hook
     description: "git push --force 会覆盖远程历史。改用 --force-with-lease。"
     match:
@@ -132,7 +132,7 @@ rules:
     remediation: "改用 git push --force-with-lease,失败说明远程有新提交"
 
   - id: destructive.git.push-force-short
-    severity: high
+    severity: critical
     asset_type: hook
     description: "git push -f 会覆盖远程历史。改用 --force-with-lease。"
     match:
@@ -168,7 +168,7 @@ rules:
     remediation: "改用 git stash pop(成功才删除)或 git stash apply(不删除)"
 
   - id: destructive.git.stash-clear
-    severity: medium
+    severity: critical
     asset_type: hook
     description: "git stash clear 永久删除所有 stash,难以恢复。"
     match:

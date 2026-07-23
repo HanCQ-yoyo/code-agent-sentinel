@@ -99,6 +99,8 @@ func TestDestructive_GitDomain(t *testing.T) {
 		{"checkout-orphan-safe", "git checkout --orphan newbranch", "command", ""},
 		{"clean-dry-run-safe", "git clean -nfd", "command", ""},
 		{"git-commit-msg-safe", "git commit -m \"rm -rf /\"", "command", ""},
+		// push-force-long/short 的 (?![-a-z]) lookahead 使 --force-with-lease 不匹配
+		{"push-force-with-lease-safe", "git push --force-with-lease origin main", "command", ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
