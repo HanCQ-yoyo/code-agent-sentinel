@@ -100,7 +100,11 @@ func GitSemanticDecision(command string) SemanticResult {
 	return SemanticResult{Decision: Unknown}
 }
 
-// stripGitGlobalFlags 去掉 -C <path> / --git-dir 等全局 flag(它们在子命令前)。
+// stripGitGlobalFlags 去掉 -C <path> / -c key=value / --git-dir <path> 等全局 flag
+// (它们在子命令前)。这些 flag 各消费下一个 token,故跳过 flag + 下一个 token。
+// --git-dir=/path 等 = 形式:value 内联,只跳本 token。
+// 修 review Important #1:-c 配置覆盖 flag 未剥离,致 git -c user.name=x reset --hard
+// 漏报(falls through to Unknown,sub 变成 "-c")。
 func stripGitGlobalFlags(s string) string {
 	parts := strings.Fields(s)
 	var out []string
@@ -110,8 +114,14 @@ func stripGitGlobalFlags(s string) string {
 			skipNext = false
 			continue
 		}
-		if p == "-C" || p == "--git-dir" || p == "--work-tree" {
+		// -C <path> / -c <key=value> / --git-dir <path> / --work-tree <path>
+		// 各消费下一个 token,跳过 flag 本身 + 下一个 token。
+		if p == "-C" || p == "-c" || p == "--git-dir" || p == "--work-tree" {
 			skipNext = true
+			continue
+		}
+		// --git-dir=/path / --work-tree=/path 等 = 形式:value 内联,只跳本 token。
+		if strings.HasPrefix(p, "--git-dir=") || strings.HasPrefix(p, "--work-tree=") {
 			continue
 		}
 		out = append(out, p)

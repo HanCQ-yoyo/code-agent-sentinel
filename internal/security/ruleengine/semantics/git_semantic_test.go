@@ -138,3 +138,30 @@ func TestGitSemantic_GitDirGlobalFlag(t *testing.T) {
 		t.Errorf("git -C ... reset --hard: got %v want Deny", r.Decision)
 	}
 }
+
+// TestGitSemantic_ConfigOverrideFlag: git -c user.name=x reset --hard
+// 应跳过 -c user.name=x,识别 reset --hard。
+// 回归 review Important #1:此前 -c 未被 stripGitGlobalFlags 剥离,sub 变成 "-c"
+// → Unknown(漏报破坏性 reset)。
+func TestGitSemantic_ConfigOverrideFlag(t *testing.T) {
+	r := GitSemanticDecision("git -c user.name=x reset --hard")
+	if r.Decision != Deny {
+		t.Errorf("git -c ... reset --hard: got %v want Deny (rule=%s)", r.Decision, r.RuleID)
+	}
+	if r.RuleID != "git.reset-hard" {
+		t.Errorf("git -c ... reset --hard rule: got %q want git.reset-hard", r.RuleID)
+	}
+}
+
+// TestGitSemantic_GitDirEqualsForm: git --git-dir=/repo reset --hard
+// 应跳过 --git-dir=/repo(= 形式),识别 reset --hard。
+// 回归 review Minor #1:--git-dir=/path 等 = 形式未剥离。
+func TestGitSemantic_GitDirEqualsForm(t *testing.T) {
+	r := GitSemanticDecision("git --git-dir=/repo reset --hard")
+	if r.Decision != Deny {
+		t.Errorf("git --git-dir=... reset --hard: got %v want Deny (rule=%s)", r.Decision, r.RuleID)
+	}
+	if r.RuleID != "git.reset-hard" {
+		t.Errorf("git --git-dir=... reset --hard rule: got %q want git.reset-hard", r.RuleID)
+	}
+}
