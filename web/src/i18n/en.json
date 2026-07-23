@@ -12,6 +12,7 @@
     "agent": "Agent",
     "detectors": "Detectors",
     "start": "Start scan",
+    "scanOff": " (scan off)",
     "rescanThisProject": "Rescan this project",
     "rescanThisAsset": "Rescan this asset"
   },
@@ -101,6 +102,7 @@
     "agentsReadonlyHint": "Enabled code agents",
     "agentsReadonlyDesc": "To change, run `sentinel setup` and restart sentinel",
     "agentName": "Name",
+    "scanSwitch": "Scan Switch",
     "rootDir": "Config root dir",
     "claudeJson": "Machine management file",
     "schedulesTab": "Scheduled scans",

@@ -12,6 +12,7 @@
     "agent": "Agent",
     "detectors": "检测器",
     "start": "开始扫描",
+    "scanOff": " (扫描关)",
     "rescanThisProject": "重扫此项目",
     "rescanThisAsset": "重扫此资产"
   },
@@ -101,6 +102,7 @@
     "agentsReadonlyHint": "已启用的 code agent",
     "agentsReadonlyDesc": "修改请运行 `sentinel setup` 并重启 sentinel",
     "agentName": "名称",
+    "scanSwitch": "扫描开关",
     "rootDir": "配置根目录",
     "claudeJson": "机器管理文件",
     "schedulesTab": "定时扫描",
