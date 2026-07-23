@@ -8,34 +8,73 @@ import { DetectorPanel } from '../components/DetectorPanel'
 import { AssetStatTiles } from '../components/AssetStatTiles'
 import { TopRiskTypes } from '../components/TopRiskTypes'
 import { RiskTrendChart } from '../components/RiskTrendChart'
+import { AgentMultiSelect } from '../components/AgentMultiSelect'
+import { agentMetaById } from '../lib/agents'
+import { formatDateTimeShort } from '../lib/format'
+import type { Finding } from '../types'
 
 export default function Dashboard() {
   const { t } = useTranslation()
-  const { dashboard, selectedAgents, fetchDashboard, history, fetchHistory, error, authError } = useStore()
+  const { dashboard, selectedAgents, setSelectedAgents, fetchDashboard, history, fetchHistory, error, authError } = useStore()
   const [selectedDetector, setSelectedDetector] = useState<string | undefined>(undefined)
   useEffect(() => {
     fetchDashboard()
     fetchHistory()
-    // Task 9:TEMPORARY shim — selectedAgents 替换 selectedAgent。Task 10 重建 Dashboard 聚合视图。
   }, [fetchDashboard, fetchHistory, selectedAgents])
 
   const detectors = dashboard?.detectors ?? []
   const counts = dashboard?.asset_counts ?? {}
-  const findings = dashboard?.last_scan?.findings ?? []
-  // Task 10:顶部 agent 上下文行(选中 agent 名称 + 上次扫描时间)。
-  const lastScan = dashboard?.last_scan
-  const agentLabel = dashboard?.agent_name ?? dashboard?.agent ?? '-'
-  const lastScanTime = lastScan?.started_at ? new Date(lastScan.started_at).toLocaleString() : '-'
+  const isAggregate = !!dashboard?.is_aggregate && Array.isArray(dashboard?.agent_scans)
+  const agentScans = isAggregate ? (dashboard?.agent_scans ?? []) : []
+
+  // Findings 来源(Task 10 决策):
+  // - 聚合模式:拼接所有 agent_scans[].last_scan?.findings,每条 finding 自带 agent_id(Task 2),
+  //   SeverityChart/TopRiskTypes 显示合并视图(不做跨 agent 健康分聚合 —— 每个圆圈独立评分)。
+  // - 单 agent 模式:沿用 dashboard.last_scan.findings。
+  const findings: Finding[] = isAggregate
+    ? agentScans.flatMap((as) => as.last_scan?.findings ?? [])
+    : (dashboard?.last_scan?.findings ?? [])
+
+  // 健康分圆圈:聚合模式每 agent 一张;单 agent 模式一张。
+  // 每张圆圈外附 agent 名标签,让用户区分哪个圆圈对应哪个 agent。
+  const healthCards = isAggregate
+    ? agentScans.map((as) => ({
+        key: as.agent_id,
+        agentId: as.agent_id,
+        agentName: as.agent_name,
+        h: as.last_scan?.health_score,
+        lastScanAt: as.last_scan?.started_at,
+      }))
+    : [{
+        key: dashboard?.agent ?? 'single',
+        agentId: dashboard?.agent ?? '',
+        agentName: dashboard?.agent_name ?? dashboard?.agent ?? '-',
+        h: dashboard?.last_scan?.health_score,
+        lastScanAt: dashboard?.last_scan?.started_at,
+      }]
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {error ? <Alert type="error" message={t('common.loadFailed')} description={error} showIcon /> : null}
-      <div style={{ marginBottom: 12, color: 'var(--text-secondary)', fontSize: 13 }}>
-        {t('dashboard.agentContext', { agent: agentLabel, time: lastScanTime })}
+      {/* 顶部:多 agent 筛选器 */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <Typography.Text strong>{t('dashboard.multiAgentView')}</Typography.Text>
+        <AgentMultiSelect value={selectedAgents} onChange={setSelectedAgents} />
+      </div>
+      {/* 健康分圆圈行:聚合模式多圆圈,单 agent 模式单圆圈。每圆圈附 agent 名 + 上次扫描时间。 */}
+      <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'stretch' }}>
+        {healthCards.map((c) => (
+          <div key={c.key} style={{ flex: '1 1 220px', minWidth: 220, maxWidth: 320, display: 'flex', flexDirection: 'column', gap: 4 }}>
+            <HealthScoreCard h={c.h} />
+            <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>
+              {agentMetaById(c.agentId).icon} {c.agentName}
+              {c.lastScanAt ? ` · ${formatDateTimeShort(c.lastScanAt)}` : ` · ${t('dashboard.notScanned')}`}
+            </div>
+          </div>
+        ))}
       </div>
       <Row gutter={16} align="stretch">
-        <Col xs={24} lg={8} style={{ display: 'flex' }}><HealthScoreCard h={dashboard?.last_scan?.health_score} /></Col>
-        <Col xs={24} lg={16} style={{ display: 'flex' }}><AssetStatTiles counts={counts} /></Col>
+        <Col xs={24} lg={24} style={{ display: 'flex' }}><AssetStatTiles counts={counts} /></Col>
       </Row>
       <Card title={t('dashboard.detectorStatus')} size="small">
         <DetectorPanel detectors={detectors} selectedId={selectedDetector} onSelect={setSelectedDetector} />

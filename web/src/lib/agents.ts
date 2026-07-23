@@ -11,3 +11,9 @@ const META: Record<string, AgentMeta> = {
 export function agentMeta(a: Agent): AgentMeta {
   return META[a.id] ?? { id: a.id, label: a.name || a.id, icon: '▪' }
 }
+
+// agentMetaById:仅凭 agent_id 取展示元数据(无完整 Agent 对象时的回退)。
+// 已知 agent 走 META;未知 agent 用 id 作 label(RiskTrendChart legend / 点 tooltip 用)。
+export function agentMetaById(id: string): AgentMeta {
+  return META[id] ?? { id, label: id, icon: '▪' }
+}

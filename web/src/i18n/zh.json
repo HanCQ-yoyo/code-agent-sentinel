@@ -33,7 +33,10 @@
   "dashboard": {
     "detectorStatus": "检测器状态",
     "tokenExpired": "token 失效,请重新带 #token= 访问。",
-    "agentContext": "Agent: {{agent}} · 上次扫描 {{time}}"
+    "agentContext": "Agent: {{agent}} · 上次扫描 {{time}}",
+    "allAgents": "所有 Agent",
+    "multiAgentView": "多 Agent 视图",
+    "notScanned": "未扫描"
   },
   "assets": {
     "viewList": "列表",

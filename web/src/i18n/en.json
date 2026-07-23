@@ -33,7 +33,10 @@
   "dashboard": {
     "detectorStatus": "Detector Status",
     "tokenExpired": "Token expired, please revisit with #token=.",
-    "agentContext": "Agent: {{agent}} · Last scan {{time}}"
+    "agentContext": "Agent: {{agent}} · Last scan {{time}}",
+    "allAgents": "All Agents",
+    "multiAgentView": "Multi-Agent View",
+    "notScanned": "Not scanned"
   },
   "assets": {
     "viewList": "List",
