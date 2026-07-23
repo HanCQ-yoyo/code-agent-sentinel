@@ -11,6 +11,7 @@ import { RawFilePanel } from '../components/RawFilePanel'
 import { resolveDirTag, type DirTag } from '../lib/dirTags'
 import { relativeClaudePath } from '../lib/path'
 import { agentMeta } from '../lib/agents'
+import { AgentIcon } from '../components/AgentIcon'
 
 type View = 'list' | 'tree'
 
@@ -243,7 +244,7 @@ export default function Assets() {
   // 仅 scanEnabledAgents 完全为空(未配置任何 agent)时不渲染。
   const agentTabItems = scanEnabledAgents.map((a) => {
     const m = agentMeta(a)
-    return { key: a.id, label: `${m.icon} ${m.label}` }
+    return { key: a.id, label: <span style={{ whiteSpace: 'nowrap' }}><AgentIcon id={a.id} /> {m.label}</span> }
   })
   const showAgentTabs = scanEnabledAgents.length > 0
 

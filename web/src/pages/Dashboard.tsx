@@ -9,7 +9,7 @@ import { AssetStatTiles } from '../components/AssetStatTiles'
 import { TopRiskTypes } from '../components/TopRiskTypes'
 import { RiskTrendChart } from '../components/RiskTrendChart'
 import { AgentMultiSelect } from '../components/AgentMultiSelect'
-import { agentMetaById } from '../lib/agents'
+import { AgentIcon } from '../components/AgentIcon'
 import { formatDateTimeShort } from '../lib/format'
 import type { Finding } from '../types'
 
@@ -67,7 +67,7 @@ export default function Dashboard() {
           <div key={c.key} style={{ flex: '1 1 220px', minWidth: 220, maxWidth: 320, display: 'flex', flexDirection: 'column', gap: 4 }}>
             <HealthScoreCard h={c.h} />
             <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>
-              {agentMetaById(c.agentId).icon} {c.agentName}
+              <AgentIcon id={c.agentId} /> {c.agentName}
               {c.lastScanAt ? ` · ${formatDateTimeShort(c.lastScanAt)}` : ` · ${t('dashboard.notScanned')}`}
             </div>
           </div>

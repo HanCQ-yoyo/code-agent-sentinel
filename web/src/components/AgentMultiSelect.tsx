@@ -2,6 +2,7 @@ import { Select } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
 import { agentMeta } from '../lib/agents'
+import { AgentIcon } from './AgentIcon'
 
 // AgentMultiSelect:多 agent 筛选器,选项来自 store.scanEnabledAgents。
 // value=[] 表示全选聚合(Dashboard 渲染所有 agent 的聚合视图);
@@ -10,10 +11,10 @@ import { agentMeta } from '../lib/agents'
 export function AgentMultiSelect({ value, onChange }: { value: string[]; onChange: (ids: string[]) => void }) {
   const { t } = useTranslation()
   const scanEnabledAgents = useStore((s) => s.scanEnabledAgents)
-  // 选项标签沿用 TopBar 旧风格:图标 + 显示名,保持视觉一致(agentMeta 已处理未知 agent 回退)。
+  // 选项 label 用 AgentIcon(品牌 logo)+ 显示名(ReactNode,antd Select label 支持)。
   const options = scanEnabledAgents.map((a) => {
     const m = agentMeta(a)
-    return { value: a.id, label: `${m.icon} ${m.label}` }
+    return { value: a.id, label: <span style={{ whiteSpace: 'nowrap' }}><AgentIcon id={a.id} /> {m.label}</span> }
   })
   return (
     <Select

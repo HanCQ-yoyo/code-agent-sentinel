@@ -8,6 +8,7 @@ import { SEVERITY_ORDER, SEVERITY_LABEL_KEY, SEVERITY_DOT } from '../lib/severit
 import { formatDateTime } from '../lib/format'
 import { detectorNameById, ruleNameById } from '../lib/i18n-names'
 import { agentMetaById } from '../lib/agents'
+import { AgentIcon } from './AgentIcon'
 
 
 // 筛选标签内的色点颜色(复用 sev token);「全部」用 accent。
@@ -100,7 +101,7 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
       render: (id?: string) => {
         if (!id) return '-'
         const m = agentMetaById(id)
-        return <span style={{ whiteSpace: 'nowrap' }}>{m.icon} {m.label}</span>
+        return <span style={{ whiteSpace: 'nowrap' }}><AgentIcon id={id} /> {m.label}</span>
       },
     },
     {

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Modal, Radio, Select, Checkbox, Space, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
+import { AgentIcon } from './AgentIcon'
 
 const { Text } = Typography
 
@@ -35,10 +36,10 @@ export function RescanModal({ open, onClose, initialScope }: Props) {
   const availDetectors = (detectors ?? []).map(d => ({ label: d.name ?? d.id, value: d.id, disabled: d.available === false }))
 
   // agent 多选 options:所有 agents(含扫描关闭的),label 带开关状态。
-  // 允许选已关闭的 agent(强制扫一次),故不 disable。
+  // 允许选已关闭的 agent(强制扫一次),故不 disable。label 用 AgentIcon 品牌图标 + 名 + 开关标记。
   const agentOptions = (agents?.agents ?? []).map(a => ({
     value: a.id,
-    label: `${a.name}${a.scan_enabled ? '' : t('rescan.scanOff')}`,
+    label: <span style={{ whiteSpace: 'nowrap' }}><AgentIcon id={a.id} /> {a.name}{a.scan_enabled ? '' : t('rescan.scanOff')}</span>,
   }))
 
   const start = async () => {

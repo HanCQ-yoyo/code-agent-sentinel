@@ -11,6 +11,7 @@ import { SeverityChart } from '../components/SeverityChart'
 import { FindingTable } from '../components/FindingTable'
 import { formatDateTime, formatDateTimeShort } from '../lib/format'
 import { agentMetaById } from '../lib/agents'
+import { AgentIcon } from '../components/AgentIcon'
 
 // 风险指数色:score → sev token(复用现有 4 级绿→红色阶,与 band 5 级对齐)。
 // Excellent(≥90)/Good(≥75)同属健康,合 sev-low(绿);Fair→medium;At-Risk→high;Critical→critical。
@@ -103,7 +104,7 @@ export default function History() {
               <div key={r.id} style={{ flex: '1 1 220px', minWidth: 220, maxWidth: 320, display: 'flex', flexDirection: 'column', gap: 4 }}>
                 <HealthScoreCard h={r.health_score} />
                 <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>
-                  {m.icon} {m.label}
+                  <AgentIcon id={aid} /> {m.label}
                 </div>
               </div>
             )
@@ -130,7 +131,7 @@ export default function History() {
 
   const columns: ColumnsType<ScanSummary> = [
     { title: t('history.colTime'), dataIndex: 'started_at', width: 150, render: (time: string, h: ScanSummary) => <Link to={`/history/${h.id}`}><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{formatDateTimeShort(time)}</span></Link> },
-    { title: t('history.agent'), dataIndex: 'agent_id', width: 120, render: (id: string) => { const m = agentMetaById(id ?? ''); return id ? <span style={{ whiteSpace: 'nowrap' }}>{m.icon} {m.label}</span> : '-' } },
+    { title: t('history.agent'), dataIndex: 'agent_id', width: 120, render: (id: string) => { const m = agentMetaById(id ?? ''); return id ? <span style={{ whiteSpace: 'nowrap' }}><AgentIcon id={id} /> {m.label}</span> : '-' } },
     { title: t('history.colRiskScore'), width: 90, render: (_: unknown, h: ScanSummary) => (
       <span title={h.band} style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: riskColor(h.health_score) }}>{h.health_score}</span>
     ) },
