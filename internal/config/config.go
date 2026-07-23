@@ -72,10 +72,19 @@ type PinnedProject struct {
 
 // AgentCfg 是单个 code agent 的用户配置(setup 写入)。
 type AgentCfg struct {
-	ID         string `yaml:"id"          json:"id"`          // "claude-code"
-	Enabled    bool   `yaml:"enabled"     json:"enabled"`     // setup 勾选结果
-	RootDir    string `yaml:"root_dir"    json:"root_dir"`    // 配置根:~/.claude;空=默认
-	ClaudeJSON string `yaml:"claude_json" json:"claude_json"` // 机器管理文件:~/.claude.json;空=默认
+	ID          string `yaml:"id"            json:"id"`
+	Enabled     bool   `yaml:"enabled"       json:"enabled"`       // setup 勾选结果
+	ScanEnabled *bool  `yaml:"scan_enabled,omitempty" json:"scan_enabled"` // 运行期扫描覆盖开关。nil→默认 true(向后兼容旧配置)
+	RootDir     string `yaml:"root_dir"      json:"root_dir"`      // 配置根:~/.claude;空=默认
+	ClaudeJSON  string `yaml:"claude_json"   json:"claude_json"`   // 机器管理文件:~/.claude.json;空=默认
+}
+
+// ScanEnabledEffective 展开 ScanEnabled 三态:nil→true(向后兼容旧配置)。
+func (a *AgentCfg) ScanEnabledEffective() bool {
+	if a.ScanEnabled == nil {
+		return true
+	}
+	return *a.ScanEnabled
 }
 
 // ScheduleCfg 是单个 agent 的定时扫描任务配置。
@@ -167,6 +176,18 @@ func (c *Config) ResolveAgents(home string) []AgentCfg {
 		RootDir:    c.ResolveClaudeDir(home),
 		ClaudeJSON: filepath.Join(home, ".claude.json"),
 	}}
+}
+
+// ResolveScanAgents 返回「Enabled(加载)且 ScanEnabledEffective(扫描)」的 agent 子集。
+func (c *Config) ResolveScanAgents(home string) []AgentCfg {
+	all := c.ResolveAgents(home)
+	out := make([]AgentCfg, 0, len(all))
+	for _, a := range all {
+		if a.Enabled && a.ScanEnabledEffective() {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // ResolveSchedules 解析定时任务列表。

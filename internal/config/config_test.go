@@ -246,6 +246,58 @@ func TestResolveSchedulesEmptyWhenScanDisabled(t *testing.T) {
 	}
 }
 
+// Task 1:AgentCfg.ScanEnabled 三态 + ResolveScanAgents
+func TestScanEnabledTriState(t *testing.T) {
+	// nil → true(旧配置向后兼容)
+	var nilPtr *bool
+	a := AgentCfg{ID: "test", Enabled: true, ScanEnabled: nilPtr}
+	if !a.ScanEnabledEffective() {
+		t.Error("nil ScanEnabled 应视为 true")
+	}
+	// 显式 false
+	f := false
+	a.ScanEnabled = &f
+	if a.ScanEnabledEffective() {
+		t.Error("false ScanEnabled 应视为 false")
+	}
+	// 显式 true
+	tr := true
+	a.ScanEnabled = &tr
+	if !a.ScanEnabledEffective() {
+		t.Error("true ScanEnabled 应视为 true")
+	}
+}
+
+func TestResolveScanAgents_FiltersDisabled(t *testing.T) {
+	home := t.TempDir()
+	tr, f := true, false
+	c := &Config{
+		Agents: []AgentCfg{
+			{ID: "a", Enabled: true, ScanEnabled: &tr},
+			{ID: "b", Enabled: true, ScanEnabled: &f},  // 扫描关闭
+			{ID: "c", Enabled: false, ScanEnabled: &tr}, // setup 未启用
+		},
+	}
+	got := c.ResolveScanAgents(home)
+	if len(got) != 1 || got[0].ID != "a" {
+		t.Errorf("应只返回 a: got %v", got)
+	}
+}
+
+func TestResolveScanAgents_NilMeansAll(t *testing.T) {
+	home := t.TempDir()
+	c := &Config{
+		Agents: []AgentCfg{
+			{ID: "x", Enabled: true}, // ScanEnabled nil → true
+			{ID: "y", Enabled: true},
+		},
+	}
+	got := c.ResolveScanAgents(home)
+	if len(got) != 2 {
+		t.Errorf("nil ScanEnabled 应全保留: got %d", len(got))
+	}
+}
+
 // Task 17:Token 字段往返(service install 写入,后台进程读取)。
 func TestTokenFieldRoundTrip(t *testing.T) {
 	dir := t.TempDir()
