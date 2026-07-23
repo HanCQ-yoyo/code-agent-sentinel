@@ -1,4 +1,5 @@
-import { Descriptions, Typography, Alert, Table, Button } from 'antd'
+import { useState } from 'react'
+import { Descriptions, Typography, Alert, Table, Button, Modal, Checkbox, Space } from 'antd'
 import { useTranslation } from 'react-i18next'
 import type { ColumnsType } from 'antd/es/table'
 import type { Asset, Finding, DetectorMeta, Severity } from '../types'
@@ -19,10 +20,24 @@ import { useStore } from '../store'
 // 风险列表:findings(可选)筛选出本资产的 finding,在基础信息下方用 4 列表展示
 // (风险名称/级别/检测器/规则)。一个资产可能存在多个风险,故列改为数量(见 AssetTable),
 // 详情抽屉在基础信息下方罗列该资产全部风险。detectors 可选,供检测器列双语名;无则回退 id。
-export function AssetDetailPanel({ asset, highlights, findings, detectors }: { asset: Asset, highlights?: { line: number; startCol: number; endCol: number }[], findings?: Finding[], detectors?: DetectorMeta[] }) {
+export function AssetDetailPanel({ asset, highlights, findings, detectors, agentID }: { asset: Asset, highlights?: { line: number; startCol: number; endCol: number }[], findings?: Finding[], detectors?: DetectorMeta[], agentID?: string }) {
   const { t } = useTranslation()
-  const { openRescan } = useStore()
+  const { runScan, detectors: storeDetectors } = useStore()
   const description = (asset.fields as Record<string, unknown> | undefined)?.description
+  // 安全检查:只配检测器,scope=asset-id 按 Asset.ID 精确单扫(不动 scope=asset 的 sibling 语义)。
+  // getContainer={false}:Modal 渲染进 Drawer DOM 树 → 位于 Drawer 之上,修复"弹框在抽屉下面"。
+  const [checkOpen, setCheckOpen] = useState(false)
+  const [checkDets, setCheckDets] = useState<string[]>([])
+  const openCheck = () => {
+    setCheckDets((storeDetectors ?? []).map(d => d.id)) // 默认全选
+    setCheckOpen(true)
+  }
+  const startCheck = async () => {
+    const det = checkDets.length === (storeDetectors ?? []).length ? undefined : checkDets.join(',')
+    // agentID 空 → 不传 agents(后端回退 SelectedAgentID);scope=asset-id+path=asset.id 精确单扫。
+    await runScan(agentID ? [agentID] : [], det, { type: 'asset-id', path: asset.id })
+    setCheckOpen(false)
+  }
   const isMarkdown = ['memory', 'skill', 'command', 'agent'].includes(asset.type)
 
   // 本资产的风险:按 asset_id 筛选,按严重度排序(critical→info)。
@@ -55,7 +70,7 @@ export function AssetDetailPanel({ asset, highlights, findings, detectors }: { a
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <Badge tone="neutral">{asset.type}</Badge>
           <Badge tone={`scope-${asset.scope}` as BadgeTone}>{asset.scope}</Badge>
-          <Button size="small" style={{ marginLeft: 'auto' }} onClick={() => openRescan({ type: 'asset', path: asset.source_path })}>{t('rescan.rescanThisAsset')}</Button>
+          <Button size="small" style={{ marginLeft: 'auto' }} onClick={openCheck}>{t('rescan.check')}</Button>
         </div>
       </div>
 
@@ -96,6 +111,31 @@ export function AssetDetailPanel({ asset, highlights, findings, detectors }: { a
       {/* key={asset.id}:切资产时重挂载 AssetEditor(含 ContentArea),使其 Segmented view state
           和编辑态(editing/draft/preview)回默认,避免上一资产的草稿/视图泄漏到新资产。 */}
       <AssetEditor key={asset.id} asset={asset} highlights={highlights} />
+
+      {/* 安全检查:只配检测器,scope=asset-id 按 ID 单扫。getContainer={false} 渲染进 Drawer DOM 树,
+          修复原 RescanModal(根级)被 AssetDrawer 同 z-index mask 盖住的"弹框在抽屉下面"问题。 */}
+      <Modal
+        open={checkOpen}
+        title={t('rescan.checkTitle')}
+        onCancel={() => setCheckOpen(false)}
+        onOk={startCheck}
+        okText={t('rescan.start')}
+        cancelText={t('common.cancel')}
+        getContainer={false}
+      >
+        <Space direction="vertical" size={12} style={{ width: '100%' }}>
+          <Typography.Text type="secondary">{t('rescan.checkHint')}</Typography.Text>
+          <div>
+            <Typography.Text strong>{t('rescan.detectors')}</Typography.Text>
+            <Checkbox.Group
+              value={checkDets}
+              onChange={(v) => setCheckDets(v as string[])}
+              options={(storeDetectors ?? []).map(d => ({ label: d.name ?? d.id, value: d.id, disabled: d.available === false }))}
+              style={{ display: 'block', marginTop: 4 }}
+            />
+          </div>
+        </Space>
+      </Modal>
     </div>
   )
 }
