@@ -24,7 +24,9 @@ export function AgentIcon({ id, size = '1em', style }: Props) {
         width={size}
         viewBox="0 0 24 24"
         xmlns="http://www.w3.org/2000/svg"
-        style={{ flex: 'none', lineHeight: 1, verticalAlign: '-0.125em', ...style }}
+        // display:inline-block 保证与同行文字水平排列(默认 inline 在部分布局下会换行到上一行);
+        // verticalAlign:middle 使 logo 与文字中线对齐;marginRight 留出图标与文字的间距。
+        style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '0.2em', lineHeight: 1, ...style }}
         role="img"
         aria-label="Claude Code"
       >
@@ -34,5 +36,5 @@ export function AgentIcon({ id, size = '1em', style }: Props) {
     )
   }
   // 未知 agent:回退方块(与旧 agentMeta '▪' 一致),避免空白。
-  return <span style={{ display: 'inline-block', width: size, ...style }}>▪</span>
+  return <span style={{ display: 'inline-block', width: size, verticalAlign: 'middle', marginRight: '0.2em', ...style }}>▪</span>
 }
