@@ -10,6 +10,7 @@ import { AssetDetailPanel } from '../components/AssetDetailPanel'
 import { RawFilePanel } from '../components/RawFilePanel'
 import { resolveDirTag, type DirTag } from '../lib/dirTags'
 import { relativeClaudePath } from '../lib/path'
+import { agentMeta } from '../lib/agents'
 
 type View = 'list' | 'tree'
 
@@ -28,7 +29,7 @@ export default function Assets() {
     favorites, fetchFavorites, saveFavorites,
     pinnedProjects, savePinnedProjects,
     detectors, fetchDetectors,
-    selectedAgents,
+    scanEnabledAgents,
     openRescan,
   } = useStore()
   const [view, setView] = useState<View>('list')
@@ -43,29 +44,46 @@ export default function Assets() {
   // 标签编辑弹窗:点击树节点标签徽标时打开,选 配置/运行时/恢复默认。
   const [tagEdit, setTagEdit] = useState<{ relPath: string; current: DirTag | undefined } | null>(null)
 
-  // Task 9:TEMPORARY shim — selectedAgents[0] ?? '' 替换 selectedAgent。
-  // Task 11 将加 per-agent tabs + agentID override,不再用首 agent 派生。
-  const selectedAgent = selectedAgents[0] ?? ''
+  // Task 11:L1 一级 tab = 每个 scanEnabledAgent 一个。activeAgent = 当前选中的 agent ID。
+  // 替换 Task 9 的 selectedAgents[0] ?? '' 临时 shim:Assets 页不再依赖全局 selectedAgents,
+  // 而是用本页 activeAgent state 显式驱动 fetchAssets/fetchTree/fetchProjects。
+  const [activeAgent, setActiveAgent] = useState<string>('')
 
+  // 初始化:scanEnabledAgents 加载后默认选第一个 agent(若有)。
+  // 仅在 activeAgent 为空(首次加载)时回填,避免覆盖用户后续切换。
   useEffect(() => {
-    fetchAssets()
-    fetchProjects()
+    if (!activeAgent && scanEnabledAgents.length > 0) {
+      setActiveAgent(scanEnabledAgents[0].id)
+    }
+  }, [scanEnabledAgents, activeAgent])
+
+  // 挂载时拉 agents(派生 scanEnabledAgents)+ 不依赖 agent 的资源(dir-tags/favorites/detectors)。
+  // assets/projects/tree 依赖 activeAgent,放在下面的 effect。
+  useEffect(() => {
     fetchAgents()
     fetchDirTags()
     fetchFavorites()
-    // 拉检测器元数据,供资产详情抽屉风险列表的检测器列双语名(与 Findings 页同模式)。
     fetchDetectors()
-    // Task 9:selectedAgents 变化时,资产/项目列表需按新 agent 重拉(后端按 ?agent= 过滤)。
-  }, [fetchAssets, fetchProjects, fetchAgents, fetchDirTags, fetchFavorites, fetchDetectors, selectedAgents])
+  }, [fetchAgents, fetchDirTags, fetchFavorites, fetchDetectors])
 
-  // 切换上方标签页 → 重新拉对应项目的文件树。与上面一次性 effect 分离:
-  // 原先 activeProjectTab 进了同一 effect deps,导致每次点标签页都重跑 fetchProjects,
-  // 后端 map 顺序非确定时标签顺序抖动、选中标签跳到最右。现在 projects 只挂载时拉一次,
-  // 切标签页只 fetchTree(树随项目变,本就该重拉)。
-  // Task 9:selectedAgents 变化时树也要重拉(后端 Task 7 按 agent 过滤,global 根随 agent root_dir 变)。
+  // Task 11:activeAgent 变化 → 重拉该 agent 的 assets/projects + 重置 L2 到 global。
+  // 不含 fetchTree(tree 依赖 activeProjectTab,由下方独立 effect 驱动,避免双重拉取)。
   useEffect(() => {
-    fetchTree(activeProjectTab)
-  }, [fetchTree, activeProjectTab, selectedAgents])
+    if (!activeAgent) return
+    fetchAssets(activeAgent)
+    fetchProjects(activeAgent)
+    // 切 agent → 重置 L2 到 global(切到新 agent 后旧项目 tab 路径可能不存在)。
+    setActiveProjectTab({ kind: 'global' })
+  }, [activeAgent, fetchAssets, fetchProjects, setActiveProjectTab])
+
+  // 切换 L2 标签页 → 重新拉对应项目的文件树。与上面 activeAgent effect 分离:
+  // 原先 activeProjectTab 进了同一 effect deps,导致每次点标签页都重跑 fetchProjects,
+  // 后端 map 顺序非确定时标签顺序抖动、选中标签跳到最右。现在 projects 只在 activeAgent 变化时拉,
+  // 切标签页只 fetchTree(树随项目变,本就该重拉)。
+  // Task 11:fetchTree 显式传 activeAgent(单 agent 或空,不走 agentQuery 的 ?agent=all)。
+  useEffect(() => {
+    fetchTree(activeProjectTab, activeAgent || undefined)
+  }, [fetchTree, activeProjectTab, activeAgent])
 
   // 一次性迁移:若后端收藏为空但旧 localStorage 有数据,并入后端后清掉本地。
   useEffect(() => {
@@ -88,9 +106,16 @@ export default function Assets() {
     setRawPath(null)
   }, [activeProjectTab])
 
-  // Task 10:全局根绝对路径用 SELECTED agent 的 root_dir(后端 Task 7:global tree 根 = 选中 agent 的 root);
+  // Task 11:切 agent(L1 tab)→ 也关闭详情抽屉/右栏,清选中态(与切 L2 同语义)。
+  useEffect(() => {
+    setSelected(null)
+    setRawPath(null)
+  }, [activeAgent])
+
+  // Task 10/11:全局根绝对路径用 ACTIVE agent 的 root_dir(后端 Task 7:global tree 根 = 选中 agent 的 root);
   // 项目根 = <tab.path>/.claude。供树拼无资产文件绝对路径。
-  const curAgent = (agents?.agents ?? []).find(a => a.id === selectedAgent) ?? agents?.agents?.[0]
+  // curAgent 从 agents.agents 中按 activeAgent 查找;activeAgent 为空时回退首 agent(兼容初始空态)。
+  const curAgent = (agents?.agents ?? []).find(a => a.id === activeAgent) ?? agents?.agents?.[0]
   const rootAbs = activeProjectTab.kind === 'global'
     ? (curAgent?.root_dir ?? '')
     : `${activeProjectTab.path.replace(/\/$/, '')}/.claude`
@@ -212,9 +237,27 @@ export default function Assets() {
   ]
   const tagFilterValue = selectedTagFilter ?? 'all'
 
+  // Task 11:L1 agent tab items — 每个 scanEnabledAgent 一个 tab。
+  // label = 图标 + 显示名(沿用 AgentMultiSelect/TopBar 风格,agentMeta 处理未知 agent 回退)。
+  // 仅 scanEnabledAgents.length > 1 时渲染 L1(单 agent 时 L1 无意义,省一层 tab 减少视觉噪声)。
+  const agentTabItems = scanEnabledAgents.map((a) => {
+    const m = agentMeta(a)
+    return { key: a.id, label: `${m.icon} ${m.label}` }
+  })
+  const showAgentTabs = scanEnabledAgents.length > 1
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {error ? <Alert type="error" message={t('common.loadFailed')} description={error} showIcon /> : null}
+      {showAgentTabs ? (
+        <Tabs
+          items={agentTabItems}
+          activeKey={activeAgent}
+          onChange={(key) => setActiveAgent(key)}
+          size="small"
+          style={{ marginBottom: -8 }}
+        />
+      ) : null}
       <Tabs
         items={tabItems}
         activeKey={activeTabKey}

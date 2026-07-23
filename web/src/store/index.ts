@@ -38,7 +38,11 @@ interface State {
   // selectedTagFilter:null = 不过滤;否则只显示该标签(untagged 项在「全部」时显示,
   // 选 config/runtime 时隐藏非选中)。前端 Assets 用。
   selectedTagFilter: DirTag | null
-  fetchAssets: () => Promise<void>
+  // Task 11:fetchAssets/fetchProjects/fetchTree 加可选 agentID 参数。
+  // Assets L1 tab 显式传入 agentID;其他调用方(commitAssetEdit 等)不传 → 回退 selectedAgents[0] ?? ''。
+  // 注意:这三个绝不走 agentQuery()——/api/assets、/api/tree、/api/project 不支持 ?agent=all 聚合,
+  // 只接受单 ID 或空(后端回退首 agent)。agentID ?? selectedAgents[0] ?? '' 产出空或单 ID,永不为 all。
+  fetchAssets: (agentID?: string) => Promise<void>
   // Task 9:runScan 改多 agent。agentIDs 空数组 → 后端回退到所有 scan_enabled agent。
   // 响应为 AgentScanResult[](数组,非单个 ScanResult),含每 agent 的 findings/health_score/error。
   // 注:新响应无整体 findings 数组(每 agent 各自有),故不再 set scan;fetchDashboard/fetchHistory 负责刷新视图。
@@ -55,7 +59,8 @@ interface State {
   // Task 9:替换 setSelectedAgent。空数组=全选聚合;[id]=单选;[id1,id2]=多选。
   setSelectedAgents: (ids: string[]) => void
   // Task 9:agentQuery 拼 ?agent= 查询串(全选→?agent=all;否则 ?agent=id1,id2)。
-  // fetchDashboard/fetchLatestScan 用之;fetchAssets/fetchTree/fetchProjects 暂用单 agent 派生(Task 11 改)。
+  // fetchDashboard/fetchLatestScan 用之(这两个支持聚合 ?agent=all)。
+  // fetchAssets/fetchTree/fetchProjects 不用之(Task 11 起接受 agentID 参数,单 agent 或空,不支持 all)。
   agentQuery: () => string
   // Task 9:per-agent 扫描开关持久化(PUT /api/agents/:id)。成功后刷新 agents + scanEnabledAgents。
   saveAgentScanEnabled: (agentID: string, enabled: boolean) => Promise<void>
@@ -63,8 +68,8 @@ interface State {
   createSchedule: (agent_id: string, interval: string, enabled: boolean) => Promise<boolean>
   updateSchedule: (agent_id: string, interval: string, enabled: boolean) => Promise<boolean>
   deleteSchedule: (agent_id: string) => Promise<boolean>
-  fetchProjects: () => Promise<void>
-  fetchTree: (tab: ProjectTab) => Promise<void>
+  fetchProjects: (agentID?: string) => Promise<void>
+  fetchTree: (tab: ProjectTab, agentID?: string) => Promise<void>
   setActiveProjectTab: (tab: ProjectTab) => void
   fetchDirTags: () => Promise<void>
   saveDirTags: (overrides: DirTagsMap) => Promise<void>
@@ -139,16 +144,16 @@ export const useStore = create<State>((set, get) => ({
   rescanOpen: false,
   rescanInitial: undefined,
   // Task 9:agentQuery — 全选聚合(?agent=all)或逗号分隔 IDs。
-  // fetchDashboard/fetchLatestScan 用之;fetchAssets/fetchTree/fetchProjects 暂用单 agent 派生(Task 11 正式改)。
+  // fetchDashboard/fetchLatestScan 用之(支持聚合);fetchAssets/fetchTree/fetchProjects 不用之(Task 11 起 agentID 参数,单 agent)。
   agentQuery: () => {
     const ids = get().selectedAgents
     if (ids.length === 0) return '?agent=all'
     return `?agent=${encodeURIComponent(ids.join(','))}`
   },
-  fetchAssets: async () => {
-    // TEMPORARY(Task 11 正式改):Assets 页按单 agent 派生(selectedAgents[0] ?? '' = 空 → 不带 query,
-    // 后端回退首 agent)。Task 11 将加 agentID override 参数支持 per-agent tabs。
-    const a = get().selectedAgents[0] ?? ''
+  fetchAssets: async (agentID?: string) => {
+    // Task 11:agentID 显式传入(Assets L1 tab)优先;否则回退 selectedAgents[0] ?? ''(其他调用方兼容)。
+    // 绝不用 agentQuery():/api/assets 不支持 ?agent=all,只接受单 ID 或空(后端回退首 agent)。
+    const a = agentID ?? get().selectedAgents[0] ?? ''
     const q = a ? `?agent=${encodeURIComponent(a)}` : ''
     const inv = await wrap(() => apiGet<Inventory>(`/api/assets${q}`), set)
     if (inv) set({ assets: inv })
@@ -280,17 +285,17 @@ export const useStore = create<State>((set, get) => ({
     if (res) await get().fetchSchedules()
     return !!res
   },
-  fetchProjects: async () => {
-    // TEMPORARY(Task 11 正式改):project 列表按单 agent 派生。Task 11 加 agentID override。
-    const a = get().selectedAgents[0] ?? ''
+  fetchProjects: async (agentID?: string) => {
+    // Task 11:agentID 显式传入(Assets L1 tab)优先;否则回退 selectedAgents[0] ?? ''。
+    const a = agentID ?? get().selectedAgents[0] ?? ''
     const q = a ? `?agent=${encodeURIComponent(a)}` : ''
     const res = await wrap(() => apiGet<{ projects: Project[] }>(`/api/project${q}`), set)
     if (res) set({ projects: res.projects ?? [] })
   },
-  fetchTree: async (tab) => {
-    // TEMPORARY(Task 11 正式改):tree 按 &agent=<single>(仅非空时);scope 原有逻辑不变。
-    // Task 11 将加 agentID override 参数支持 per-agent tabs。
-    const a = get().selectedAgents[0] ?? ''
+  fetchTree: async (tab, agentID?: string) => {
+    // Task 11:agentID 显式传入(Assets L1 tab)优先;否则回退 selectedAgents[0] ?? ''。
+    // 仅非空时加 &agent=<single>;绝不走 agentQuery()(不支持 ?agent=all)。
+    const a = agentID ?? get().selectedAgents[0] ?? ''
     const agentParam = a ? `&agent=${encodeURIComponent(a)}` : ''
     const url = tab.kind === 'global'
       ? `/api/tree?scope=global${agentParam}`
