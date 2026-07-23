@@ -139,6 +139,23 @@ func TestDestructive_DatabaseDomain(t *testing.T) {
 		{"mongo-aggregate-safe", "db.users.aggregate([{$match: {x: 1}}])", "command", ""},
 		{"mongo-explain-safe", "db.users.find({}).explain()", "command", ""},
 		{"mongo-mongodump-no-drop-safe", "mongodump --out=/backup", "command", ""},
+		// ===== mysql(11 dest + 5 safe)=====
+		{"mysql-drop-database", "mysql -e 'DROP DATABASE prod'", "command", "destructive.database.mysql.drop-database"},
+		{"mysql-drop-table", "mysql -e 'DROP TABLE users'", "command", "destructive.database.mysql.drop-table"},
+		{"mysql-truncate-table", "mysql -e 'TRUNCATE TABLE users'", "command", "destructive.database.mysql.truncate-table"},
+		{"mysql-delete-without-where", "mysql -e 'DELETE FROM users;'", "command", "destructive.database.mysql.delete-without-where"},
+		{"mysql-mysqladmin-drop", "mysqladmin drop mydb", "command", "destructive.database.mysql.mysqladmin-drop"},
+		{"mysql-mysqldump-add-drop-database", "mysqldump --add-drop-database mydb", "command", "destructive.database.mysql.mysqldump-add-drop-database"},
+		{"mysql-mysqldump-add-drop-table", "mysqldump --add-drop-table mydb", "command", "destructive.database.mysql.mysqldump-add-drop-table"},
+		{"mysql-grant-all", "mysql -e \"GRANT ALL ON *.* TO 'user'@'host'\"", "command", "destructive.database.mysql.grant-all"},
+		{"mysql-drop-user", "mysql -e 'DROP USER admin'", "command", "destructive.database.mysql.drop-user"},
+		{"mysql-reset-master", "mysql -e 'RESET MASTER'", "command", "destructive.database.mysql.reset-master"},
+		// safe 不误报
+		{"mysql-select-safe", "mysql -e 'SELECT 1'", "command", ""},
+		{"mysql-show-safe", "mysql -e 'SHOW DATABASES'", "command", ""},
+		{"mysql-describe-safe", "mysql -e 'DESCRIBE users'", "command", ""},
+		{"mysql-mysqldump-no-drop-safe", "mysqldump mydb > backup.sql", "command", ""},
+		{"mysql-delete-with-where-safe", "mysql -e 'DELETE FROM users WHERE id = 1'", "command", ""},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

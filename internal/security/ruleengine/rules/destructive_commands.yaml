@@ -644,3 +644,145 @@ rules:
         - { field: allow, op: regex_match, value: "db\\.[a-zA-Z_][a-zA-Z0-9_]*\\.drop\\s*\\(" }
     metadata: { source: dcg, domain: database, dcg_rule_id: "mongodb.collection-drop" }
     remediation: "db.<collection>.drop() deletes the collection and all documents. Backup first and check stats."
+
+  # ===== database.mysql 域(源 dcg database/mysql.rs,11 dest + 5 safe)=====
+  # severity 直接映射 dcg 枚举(drop-database/mysqladmin-drop/reset-master=Critical;
+  # drop-table/truncate-table/delete-without-where/mysqldump-add-drop-database/grant-all=High;
+  # mysqldump-add-drop-table/drop-user=Medium;stdin-unverified=High)。
+  # dcg safe_pattern(5 条:select/show/describe/mysqldump-no-drop/mysql-select)针对整条
+  # 命令做 ^-anchored 匹配。sentinel 中 destructive 正则只匹配破坏性 SQL 关键字
+  # (DROP DATABASE/TABLE/TRUNCATE/DELETE FROM/RESET MASTER 等),read 操作不匹配,
+  # 故无 false-positive 风险;post_exclude 不适用。
+  # delete-without-where 正则要求表名后紧跟 ; 或 $,带 WHERE 子句不匹配(忠实 dcg 语义)。
+
+  - id: destructive.database.mysql.stdin-unverified
+    severity: high
+    asset_type: hook
+    description: "mysql/mariadb receives indirect input that dcg cannot statically verify."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?!)" }
+        - { field: content, op: regex_match, value: "(?!)" }
+        - { field: allow, op: regex_match, value: "(?!)" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.stdin-unverified" }
+    remediation: "Materialize and review the exact SQL before piping or redirecting it into the client."
+
+  - id: destructive.database.mysql.drop-database
+    severity: critical
+    asset_type: hook
+    description: "DROP DATABASE permanently deletes the entire database. Verify and back up first."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bDROP\\s+DATABASE\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bDROP\\s+DATABASE\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bDROP\\s+DATABASE\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.drop-database" }
+    remediation: "Backup first: mysqldump -h host -u user -p dbname > backup.sql. Verify: SHOW DATABASES LIKE 'dbname'."
+
+  - id: destructive.database.mysql.drop-table
+    severity: high
+    asset_type: hook
+    description: "DROP TABLE permanently deletes the table. Verify and back up first."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bDROP\\s+TABLE\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bDROP\\s+TABLE\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bDROP\\s+TABLE\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.drop-table" }
+    remediation: "Backup table first: mysqldump dbname tablename > table_backup.sql. Preview: SELECT COUNT(*) FROM tablename."
+
+  - id: destructive.database.mysql.truncate-table
+    severity: high
+    asset_type: hook
+    description: "TRUNCATE permanently deletes all rows. Cannot be rolled back in MySQL."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)TRUNCATE\\s+(?:TABLE\\s+)?[a-zA-Z_]" }
+        - { field: content, op: regex_match, value: "(?i)TRUNCATE\\s+(?:TABLE\\s+)?[a-zA-Z_]" }
+        - { field: allow, op: regex_match, value: "(?i)TRUNCATE\\s+(?:TABLE\\s+)?[a-zA-Z_]" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.truncate-table" }
+    remediation: "TRUNCATE is non-transactional in MySQL. Check row count first: SELECT COUNT(*) FROM tablename."
+
+  - id: destructive.database.mysql.delete-without-where
+    severity: high
+    asset_type: hook
+    description: "DELETE without WHERE clause deletes ALL rows. Add a WHERE clause."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)DELETE\\s+FROM\\s+(?:(?:[a-zA-Z_][a-zA-Z0-9_]*|`[^`]+`)(?:\\.(?:[a-zA-Z_][a-zA-Z0-9_]*|`[^`]+`))?)\\s*(?:;|$)" }
+        - { field: content, op: regex_match, value: "(?i)DELETE\\s+FROM\\s+(?:(?:[a-zA-Z_][a-zA-Z0-9_]*|`[^`]+`)(?:\\.(?:[a-zA-Z_][a-zA-Z0-9_]*|`[^`]+`))?)\\s*(?:;|$)" }
+        - { field: allow, op: regex_match, value: "(?i)DELETE\\s+FROM\\s+(?:(?:[a-zA-Z_][a-zA-Z0-9_]*|`[^`]+`)(?:\\.(?:[a-zA-Z_][a-zA-Z0-9_]*|`[^`]+`))?)\\s*(?:;|$)" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.delete-without-where" }
+    remediation: "Add a WHERE clause: DELETE FROM tablename WHERE condition. Preview: SELECT COUNT(*) FROM tablename."
+
+  - id: destructive.database.mysql.mysqladmin-drop
+    severity: critical
+    asset_type: hook
+    description: "mysqladmin drop permanently deletes the database. Verify carefully."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "mysqladmin\\s+.*drop\\b" }
+        - { field: content, op: regex_match, value: "mysqladmin\\s+.*drop\\b" }
+        - { field: allow, op: regex_match, value: "mysqladmin\\s+.*drop\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.mysqladmin-drop" }
+    remediation: "mysqladmin drop is CLI equivalent of DROP DATABASE. Backup first: mysqldump dbname > backup.sql."
+
+  - id: destructive.database.mysql.mysqldump-add-drop-database
+    severity: high
+    asset_type: hook
+    description: "mysqldump --add-drop-database drops the database before restore."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "mysqldump\\s+.*--add-drop-database" }
+        - { field: content, op: regex_match, value: "mysqldump\\s+.*--add-drop-database" }
+        - { field: allow, op: regex_match, value: "mysqldump\\s+.*--add-drop-database" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.mysqldump-add-drop-database" }
+    remediation: "Restore to a new database first. Without --add-drop-database: mysqldump dbname > backup.sql."
+
+  - id: destructive.database.mysql.mysqldump-add-drop-table
+    severity: medium
+    asset_type: hook
+    description: "mysqldump --add-drop-table drops tables before creating them on restore."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "mysqldump\\s+.*--add-drop-table" }
+        - { field: content, op: regex_match, value: "mysqldump\\s+.*--add-drop-table" }
+        - { field: allow, op: regex_match, value: "mysqldump\\s+.*--add-drop-table" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.mysqldump-add-drop-table" }
+    remediation: "Use --skip-add-drop-table to disable drops: mysqldump --skip-add-drop-table dbname > backup.sql."
+
+  - id: destructive.database.mysql.grant-all
+    severity: high
+    asset_type: hook
+    description: "GRANT ALL ON *.* gives unrestricted access to all databases."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)GRANT\\s+ALL\\s+(?:PRIVILEGES\\s+)?ON\\s+\\*\\.\\*" }
+        - { field: content, op: regex_match, value: "(?i)GRANT\\s+ALL\\s+(?:PRIVILEGES\\s+)?ON\\s+\\*\\.\\*" }
+        - { field: allow, op: regex_match, value: "(?i)GRANT\\s+ALL\\s+(?:PRIVILEGES\\s+)?ON\\s+\\*\\.\\*" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.grant-all" }
+    remediation: "Limit to specific database: GRANT ALL ON specific_db.* TO 'user'@'host'."
+
+  - id: destructive.database.mysql.drop-user
+    severity: medium
+    asset_type: hook
+    description: "DROP USER permanently removes the user account and all their privileges."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bDROP\\s+USER\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bDROP\\s+USER\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bDROP\\s+USER\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.drop-user" }
+    remediation: "Document privileges first: SHOW GRANTS FOR 'user'@'host'. Consider: ALTER USER 'user'@'host' ACCOUNT LOCK."
+
+  - id: destructive.database.mysql.reset-master
+    severity: critical
+    asset_type: hook
+    description: "RESET MASTER deletes all binary logs and resets the binlog position."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bRESET\\s+MASTER\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bRESET\\s+MASTER\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bRESET\\s+MASTER\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.reset-master" }
+    remediation: "Use PURGE BINARY LOGS BEFORE 'date' for selective cleanup. Check replicas first: SHOW SLAVE STATUS."
