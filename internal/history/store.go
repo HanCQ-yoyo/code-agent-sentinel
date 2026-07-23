@@ -175,6 +175,59 @@ func (s *Store) LatestForAgent(agentID string) (*ScanRecord, error) {
 	return nil, nil
 }
 
+// LatestForAgents 返回每个 agent 最近一次 global scope 完整记录。
+// agentIDs 空、或仅含空串(如 []string{""},空 query 的 strings.Split 产物)
+// → 返回所有 agent 各自最新 global。
+// 与 LatestForAgent 不同:此方法不退化为任意 scope,只取 global(含空 scope)
+// 记录;仅有 project/asset scope 的 agent 不出现在结果中。
+func (s *Store) LatestForAgents(agentIDs []string) (map[string]*ScanRecord, error) {
+	list, err := s.List()
+	if err != nil {
+		return nil, err
+	}
+	// 过滤空串:[]string{""}(空 query split 产物)按"所有 agent"处理(与 nil/[] 一致)。
+	// 同时容忍 ["a", ""] 这类混合输入,只保留非空 id。
+	nonEmpty := make([]string, 0, len(agentIDs))
+	for _, id := range agentIDs {
+		if id != "" {
+			nonEmpty = append(nonEmpty, id)
+		}
+	}
+	agentIDs = nonEmpty
+	if len(agentIDs) == 0 {
+		// 空 → 从 list 收集所有唯一 agentID
+		seen := map[string]bool{}
+		for _, sum := range list {
+			seen[sum.AgentID] = true
+		}
+		for id := range seen {
+			agentIDs = append(agentIDs, id)
+		}
+	}
+	targets := map[string]bool{}
+	for _, id := range agentIDs {
+		targets[id] = true
+	}
+	result := map[string]*ScanRecord{}
+	for _, sum := range list { // List 已按 StartedAt 倒序
+		if !targets[sum.AgentID] {
+			continue
+		}
+		if _, done := result[sum.AgentID]; done {
+			continue // 已取到该 agent 的最新
+		}
+		if sum.Scope != "" && sum.Scope != "global" {
+			continue // 只取 global,不退化为 project/asset
+		}
+		rec, err := s.Get(sum.ID)
+		if err != nil {
+			continue
+		}
+		result[sum.AgentID] = rec
+	}
+	return result, nil
+}
+
 // Delete 删除单条记录。不存在返回 ErrNotFound。
 func (s *Store) Delete(id string) error {
 	err := os.Remove(s.path(id))

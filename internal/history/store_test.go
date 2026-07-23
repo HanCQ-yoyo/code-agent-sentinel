@@ -307,3 +307,57 @@ func TestLatestForAgentPrefersGlobalScope(t *testing.T) {
 		t.Fatalf("应取 scope=global 的最新: got %+v", got)
 	}
 }
+
+func TestLatestForAgents_MultiAgent(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+	now := time.Now()
+	// agent-a 两条记录,取最新
+	s.Save(ScanRecord{ID: "a-old", AgentID: "agent-a", StartedAt: now.Add(-time.Hour), Scope: "global"})
+	s.Save(ScanRecord{ID: "a-new", AgentID: "agent-a", StartedAt: now, Scope: "global"})
+	// agent-b 一条
+	s.Save(ScanRecord{ID: "b-rec", AgentID: "agent-b", StartedAt: now, Scope: "global"})
+	// agent-c 只有 project scope(应被跳过,无 global)
+	s.Save(ScanRecord{ID: "c-proj", AgentID: "agent-c", StartedAt: now, Scope: "project", ScopePath: "/tmp/x"})
+
+	got, err := s.LatestForAgents([]string{"agent-a", "agent-b", "agent-c"})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	if got["agent-a"].ID != "a-new" {
+		t.Errorf("agent-a 应取最新: got %q", got["agent-a"].ID)
+	}
+	if got["agent-b"].ID != "b-rec" {
+		t.Errorf("agent-b 应取 b-rec: got %q", got["agent-b"].ID)
+	}
+	if _, ok := got["agent-c"]; ok {
+		t.Error("agent-c 无 global scope 应不在结果中")
+	}
+}
+
+// TestLatestForAgents_EmptyStringMeansAll 验证 brief 契约:
+// "传空或 []string{""} 表示所有 agent"。[]string{""} 来自空 query 的
+// strings.Split("", ",") 产物,必须按"所有 agent"处理,而非当作 AgentID==""。
+func TestLatestForAgents_EmptyStringMeansAll(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+	now := time.Now()
+	// agent-a 与 agent-b 各一条 global scope 记录
+	s.Save(ScanRecord{ID: "a-rec", AgentID: "agent-a", StartedAt: now.Add(-time.Hour), Scope: "global"})
+	s.Save(ScanRecord{ID: "b-rec", AgentID: "agent-b", StartedAt: now, Scope: "global"})
+
+	got, err := s.LatestForAgents([]string{""})
+	if err != nil {
+		t.Fatalf("err: %v", err)
+	}
+	// [""] 必须按"所有 agent"处理,返回 agent-a 与 agent-b 两条
+	if len(got) != 2 {
+		t.Fatalf("[\"\"] 应按所有 agent 处理返回 2 条, got %d: %+v", len(got), got)
+	}
+	if got["agent-a"] == nil || got["agent-a"].ID != "a-rec" {
+		t.Errorf("agent-a 应取 a-rec: got %+v", got["agent-a"])
+	}
+	if got["agent-b"] == nil || got["agent-b"].ID != "b-rec" {
+		t.Errorf("agent-b 应取 b-rec: got %+v", got["agent-b"])
+	}
+}
