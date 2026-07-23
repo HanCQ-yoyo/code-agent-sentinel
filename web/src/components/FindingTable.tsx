@@ -7,6 +7,12 @@ import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { SEVERITY_ORDER, SEVERITY_LABEL_KEY, SEVERITY_DOT } from '../lib/severity'
 import { formatDateTime } from '../lib/format'
 import { detectorNameById, ruleNameById } from '../lib/i18n-names'
+import { useStore } from '../store'
+import { agentMetaById } from '../lib/agents'
+
+// Agent Tag 色板(固定 hex,与 RiskTrendChart 同色系,保证多页 agent 配色一致)。
+// 按已知 agents 列表稳定映射:id → 索引 → COLORS[i % n]。未知 agent 回退 'default'。
+const AGENT_COLORS = ['#1677ff', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#13c2c2']
 
 // 筛选标签内的色点颜色(复用 sev token);「全部」用 accent。
 // 级别筛选标签:左侧色点 + 文本 + 计数。色点颜色对应级别,选中时整块填该级别色(见 .sev-seg CSS),
@@ -39,6 +45,19 @@ interface FindingTableProps {
 
 export function FindingTable({ findings, startedAt, detectors, onSelect }: FindingTableProps) {
   const { t } = useTranslation()
+  // Task 12:从 store 读 agents 列表,构建 agent_id → 稳定色映射(与 RiskTrendChart 同色板)。
+  // FindingTable 在 Findings 页和 History 详情页都用,两处都已加载 agents,不引入新 prop。
+  const agents = useStore((s) => s.agents)
+  const agentColor = (id?: string): string => {
+    if (!id) return 'default'
+    const list = agents?.agents ?? []
+    const idx = list.findIndex((a) => a.id === id)
+    if (idx >= 0) return AGENT_COLORS[idx % AGENT_COLORS.length]
+    // 未知 agent(扫描后新增/删除):用 id 哈希到色板,保证同 id 在多次渲染间稳定。
+    let h = 0
+    for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) | 0
+    return AGENT_COLORS[Math.abs(h) % AGENT_COLORS.length]
+  }
   const [filter, setFilter] = useState<Severity | 'all'>('all')
   const [supprFilter, setSupprFilter] = useState<SupprFilter>('all')
   const counts: Record<string, number> = { all: findings.length }
@@ -91,6 +110,12 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
       ),
     },
     { title: t('findingTable.colSeverity'), width: 80, render: (_: unknown, f: Finding) => <SevBadge tone={`sev-${f.severity}` as BadgeTone}>{t(SEVERITY_LABEL_KEY[f.severity])}</SevBadge> },
+    {
+      // Task 12:Agent 列(Severity 之后)。聚合视图下每条 finding 带 agent_id;
+      // 单 agent / 旧记录缺省 → '-'。Tag 色按 agents 列表稳定映射(与 RiskTrendChart 同色板)。
+      title: t('findingTable.colAgent'), dataIndex: 'agent_id', width: 120,
+      render: (id?: string) => id ? <Tag color={agentColor(id)}>{agentMetaById(id).label}</Tag> : '-',
+    },
     {
       title: t('findingTable.colDetector'), width: 120, render: (_: unknown, f: Finding) => (
         <Typography.Text style={{ fontSize: 12 }}>{detName(f.detector_id)}</Typography.Text>

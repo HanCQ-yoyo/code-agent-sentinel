@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { apiGet, apiPost, apiPut, apiDelete, AuthError } from '../api/client'
-import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, ScheduleStatus, TreeNode, Project, PinnedProject, DirTagsResponse, RawFile, PreviewResult, EditResult, SuppressionItem, BaselineResult, DetectorsConfig, DashboardData, AgentScanResult, Agent } from '../types'
+import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, ScheduleStatus, TreeNode, Project, PinnedProject, DirTagsResponse, RawFile, PreviewResult, EditResult, SuppressionItem, BaselineResult, DetectorsConfig, DashboardData, AgentScanResult, Agent, Finding } from '../types'
 import { type DirTag, type DirTagsMap } from '../lib/dirTags'
 import i18n from '../i18n'
 
@@ -54,6 +54,11 @@ interface State {
   fetchHistory: () => Promise<void>
   fetchDashboard: () => Promise<void>
   fetchHistoryDetail: (id: string) => Promise<ScanRecord | undefined>
+  // Task 12:Findings 页多 agent 视图的数据源。/api/findings 支持 ?agent=all 聚合(Task 8)
+  // 也支持 ?agent=<id> 单 agent。agentID 显式传入(Assets/History 详情)优先;否则用 agentQuery()。
+  // 全选 → ?agent=all 聚合(返回拼接 []Finding,每条带 agent_id);多选 → ?agent=id1,id2。
+  findings: Finding[]
+  fetchFindings: (agentID?: string) => Promise<void>
   deleteHistory: (id: string) => Promise<void>
   fetchAgents: () => Promise<void>
   // Task 9:替换 setSelectedAgent。空数组=全选聚合;[id]=单选;[id1,id2]=多选。
@@ -134,6 +139,7 @@ export const useStore = create<State>((set, get) => ({
   assets: null, scan: null, dashboard: null, detectors: [], detectorConfig: null, history: [], loading: false, error: null, authError: false,
   agents: null, selectedAgents: [], scanEnabledAgents: [], schedules: [], tree: null, projects: [], activeProjectTab: { kind: 'global' },
   dirTagsDefaults: {}, dirTagsOverrides: {}, selectedTagFilter: null,
+  findings: [],
   favorites: [],
   pinnedProjects: [],
   language: '',
@@ -242,6 +248,13 @@ export const useStore = create<State>((set, get) => ({
   },
   fetchHistoryDetail: async (id) => {
     return wrap(() => apiGet<ScanRecord>(`/api/history/${id}`), set)
+  },
+  // Task 12:Findings 页多 agent 数据源。/api/findings 支持 ?agent=all 聚合(Task 8),
+  // 返回拼接 []Finding(每条带 agent_id)。agentID 显式传入(详情页)优先;否则用 agentQuery()。
+  fetchFindings: async (agentID?: string) => {
+    const q = agentID != null ? `?agent=${encodeURIComponent(agentID)}` : get().agentQuery()
+    const res = await wrap(() => apiGet<Finding[]>(`/api/findings${q}`), set)
+    if (res) set({ findings: res })
   },
   deleteHistory: async (id) => {
     await wrap(() => apiDelete(`/api/history/${id}`), set)

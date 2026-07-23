@@ -13,6 +13,9 @@ export interface Inventory { assets: Asset[]; projects?: Project[]; duplicates?:
 export interface Finding {
   id?: string; detector_id: string; rule_id: string; severity: Severity
   asset_id: string; asset_type: string; asset_name: string; message: string; evidence: string; remediation: string
+  // Task 2:Finding 归属 agent(/api/findings 聚合模式下每条带 agent_id)。
+  // 缺省(单 agent 视图/旧记录)→ 渲染为 '-'。
+  agent_id?: string
   // 规则指纹(仅 RulesDetector 填充);抑制按钮依赖此字段,空则无法按指纹抑制。
   fingerprint?: string
   // 抑制状态:suppressed=true 表示已被 baseline/inline 豁免,不计入健康分。
@@ -54,6 +57,10 @@ export interface ScanRecord extends ScanResult {
   duration?: number
   inventory?: Inventory
   projects?: Project[]
+  // Task 2/3:后端 ScanRecord 带 agent_id(扫描的 code agent)与 batch_id(同次重扫共享)。
+  // 前端 Task 12 batch 详情用 agent_id 标注每个圆圈所属 agent。
+  agent_id?: string
+  batch_id?: string
 }
 
 // agent 抽象(对应后端 configengine.Agent)
