@@ -2485,3 +2485,30 @@ rules:
         - { field: allow, op: regex_match, value: "\\b(?:gradle|gradlew)\\s+.*\\bpublish\\b" }
     metadata: { source: dcg, domain: package_managers, dcg_rule_id: "package_managers.gradle-publish" }
     remediation: "Always preview: gradle publish --dry-run. Verify build.gradle publishing config."
+
+# ============================================================================
+# 规则统计(Stage R1,Task 12 实测 grep -c):
+#   git:            12 dest + 5 post_exclude(checkout-discard / checkout-ref-discard /
+#                   restore-worktree / restore-worktree-explicit / clean-force)
+#   filesystem:     26 dest + 20 post_exclude(rm/find/unlink/truncate/shred/tar/dd/mv 各 2)
+#   database:       112 dest + 3 post_exclude
+#                     mongodb 6+0 / mysql 11+1 / postgresql 8+0 / redis 14+1 /
+#                     snowflake 50+0 / sqlite 5+0 / supabase 18+1
+#   containers:     21 dest + 0 post_exclude(正则自带 --dry-run 负向先行断言)
+#                     docker 9 / podman 8 / compose 4
+#   package_managers: 18 dest + 0 post_exclude(正则自带 --dry-run 负向先行断言)
+#   合计:189 dest + 28 post_exclude = 217 条规则(含 safe→post_exclude 映射)
+#
+# safe_pattern 说明:
+#   - dcg safe_pattern 中有对应 dest 规则的,映射为该 dest 规则的 post_exclude(28 条)。
+#   - 无对应 dest 规则的 safe_pattern(如 pg-dump-no-clean / sqlite-explain)不转 post_exclude:
+#     destructive 正则本身只匹配破坏性 SQL 关键字,安全形态不会命中,无需排除。
+#   - containers / package_managers 的 safe_pattern 多为 --dry-run,dest 正则自带
+#     (?!.*--dry-run(?!\\s*=\\s*(?:false|0|no))) 负向先行断言,不需 post_exclude。
+#
+# 语义解析器(Go 重写,Task 8-10):git / filesystem(rm) / snowflake(SQL lexer)。
+#   - 关卡 1(正则前):Deny → 跳过该域正则,语义 finding 用 semantic.<dcg_rule_id>;
+#     Safe → 跳过该规则(防误报,如 git commit -m "rm -rf /" 数据区字面量)。
+#   - 关卡 2(正则后):Safe 复核丢弃正则误报。
+#   - 其余 2 域(containers / package_managers / database.mongodb 等)纯正则 fallback。
+# ============================================================================
