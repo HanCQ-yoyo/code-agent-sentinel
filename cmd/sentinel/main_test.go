@@ -197,3 +197,57 @@ func TestLogPathFlagRegistered(t *testing.T) {
 		t.Errorf("--log-path 默认应空(stderr),got %q", f.DefValue)
 	}
 }
+
+// TestDaemonFlagParsed 验证 Task 15:--daemon flag 已注册并可解析。
+// service install 生成的单元可带 --daemon 让 sentinel 脱离终端后台运行。
+func TestDaemonFlagParsed(t *testing.T) {
+	cmd := newRootCmd()
+	if err := cmd.Flags().Parse([]string{"--daemon", "--no-browser", "--log-path", "/dev/null"}); err != nil {
+		t.Fatalf("flag parse err: %v", err)
+	}
+	if !cmd.Flags().Changed("daemon") {
+		t.Error("--daemon flag 应被识别")
+	}
+}
+
+// TestDaemonFlagRegistered 验证 --daemon flag 已注册,默认 false。
+func TestDaemonFlagRegistered(t *testing.T) {
+	cmd := newRootCmd()
+	f := cmd.Flags().Lookup("daemon")
+	if f == nil {
+		t.Fatal("--daemon flag 未注册")
+	}
+	if f.DefValue != "false" {
+		t.Errorf("--daemon 默认应 false,got %q", f.DefValue)
+	}
+}
+
+// TestDaemonChildFlagHidden 验证 --daemon-child 是 hidden flag(内部防重复 fork 标记,
+// 不对用户暴露)。cobra 仍接受它(避免 unknown flag 错误),但 --help 不显示。
+func TestDaemonChildFlagHidden(t *testing.T) {
+	cmd := newRootCmd()
+	f := cmd.Flags().Lookup("daemon-child")
+	if f == nil {
+		t.Fatal("--daemon-child flag 未注册(应 hidden 注册以让 cobra 接受)")
+	}
+	if !f.Hidden {
+		t.Error("--daemon-child 应 MarkHidden(不对用户暴露)")
+	}
+}
+
+// TestDaemonizeChild 验证 Task 15:--daemon-child 在 os.Args 中时,daemonize() 返回
+// (true, nil)——当前进程是子进程,不再 fork(防递归)。只测 guard 路径,
+// 不测真实 fork(真实 fork 会启动 sentinel 服务,属集成测试范畴)。
+// 注意:此测试 mutate os.Args,不 t.Parallel();defer 恢复。
+func TestDaemonizeChild(t *testing.T) {
+	origArgs := os.Args
+	defer func() { os.Args = origArgs }()
+	os.Args = append(os.Args, "--daemon-child")
+	child, err := daemonize()
+	if err != nil {
+		t.Fatalf("daemonize err: %v", err)
+	}
+	if !child {
+		t.Error("--daemon-child 存在时应返回 child=true(当前进程是子进程,不再 fork)")
+	}
+}

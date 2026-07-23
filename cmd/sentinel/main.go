@@ -45,12 +45,14 @@ func newRootCmd() *cobra.Command {
 		tokenFlag     string
 		claudeDirFlag string
 		logPathFlag   string
+		daemonFlag    bool
+		daemonChild   bool
 	)
 	cmd := &cobra.Command{
 		Use:   "sentinel",
 		Short: "Claude Code 配置安全态势看板(P1 只读)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context(), cfgPath, bindFlag, portFlag, noBrowser, risky, homeFlag, tokenFlag, claudeDirFlag, logPathFlag)
+			return run(cmd.Context(), cfgPath, bindFlag, portFlag, noBrowser, risky, homeFlag, tokenFlag, claudeDirFlag, logPathFlag, daemonFlag)
 		},
 	}
 	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.claude-sentinel/config.yaml)")
@@ -66,6 +68,16 @@ func newRootCmd() *cobra.Command {
 	// Task 14:--log-path 覆盖 cfg.LogPath;空走配置/默认 stderr。
 	// service install 生成的单元文件带此 flag 指向 sentinel.log。
 	cmd.Flags().StringVar(&logPathFlag, "log-path", "", "日志文件路径(默认 stderr)")
+	// Task 15:--daemon 后台启动(脱离终端)。父进程 fork 子进程后立即退出,
+	// 子进程继续服务(--daemon-child 标记,防重复 fork)。
+	cmd.Flags().BoolVar(&daemonFlag, "daemon", false, "后台启动(脱离终端)")
+	// --daemon-child 是内部标记(daemonize() 检查 os.Args),不对用户暴露。
+	// 必须 hidden 注册,否则 cobra 解析 --daemon-child 时报 unknown flag。
+	cmd.Flags().BoolVar(&daemonChild, "daemon-child", false, "内部标记:已是 daemon 子进程")
+	if err := cmd.Flags().MarkHidden("daemon-child"); err != nil {
+		// MarkHidden 仅在 flag 不存在时报错;此处刚注册,不会失败。
+		log.Fatal(err)
+	}
 	// Task 15:baseline / rules 子命令
 	cmd.AddCommand(newBaselineCmd())
 	cmd.AddCommand(newRulesCmd())
@@ -80,7 +92,21 @@ func newRootCmd() *cobra.Command {
 	return cmd
 }
 
-func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser, risky bool, homeFlag, tokenFlag, claudeDirFlag, logPathFlag string) error {
+func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser, risky bool, homeFlag, tokenFlag, claudeDirFlag, logPathFlag string, daemonFlag bool) error {
+	// Task 15:--daemon 后台启动。daemonize() 在 run 最前面执行,保证父进程在
+	// 打开日志文件 / 加载 cfg / 启动 server 之前就 fork+退出——日志文件由子进程打开,
+	// 父进程不残留文件句柄。子进程继续往下跑(daemon 模式强制 noBrowser)。
+	if daemonFlag {
+		isChild, err := daemonize()
+		if err != nil {
+			return fmt.Errorf("后台启动失败: %w", err)
+		}
+		if !isChild {
+			return nil // 父进程 fork 成功后退出
+		}
+		// 子进程继续:daemon 模式不开浏览器(无终端可开)
+		noBrowser = true
+	}
 	if cfgPath == "" {
 		p, err := config.DefaultPath()
 		if err != nil {
