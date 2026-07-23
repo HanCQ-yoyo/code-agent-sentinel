@@ -1071,3 +1071,71 @@ rules:
         - { field: allow, op: regex_match, value: "(?i)\\bCONFIG\\s+REWRITE\\b" }
     metadata: { source: dcg, domain: database, dcg_rule_id: "redis.config-rewrite" }
     remediation: "Review current runtime changes first: CONFIG GET *. Ensure no dangerous CONFIG SET changes are pending."
+
+  # ===== database.sqlite 域(源 dcg database/sqlite.rs,5 dest + 4 safe)=====
+  # severity 直接映射 dcg 枚举(drop-table/delete-without-where=Critical;
+  # sqlite3-stdin=High;vacuum-into=Medium;stdin-unverified=High)。
+  # dcg safe_pattern(4 条:select-query/sqlite3-dot-command/dot-command-standalone/
+  # explain)无需 post_exclude:destructive 正则只匹配破坏性 SQL 关键字,
+  # read 操作(SELECT/EXPLAIN/.schema/.tables/.dump/.backup)不匹配。
+  # delete-without-where 正则比 mysql/pg 简单(无引号标识符),忠实 dcg sqlite 源。
+
+  - id: destructive.database.sqlite.stdin-unverified
+    severity: high
+    asset_type: hook
+    description: "sqlite3 receives indirect input that dcg cannot statically verify."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?!)" }
+        - { field: content, op: regex_match, value: "(?!)" }
+        - { field: allow, op: regex_match, value: "(?!)" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "sqlite.stdin-unverified" }
+    remediation: "Materialize and review the exact SQL before piping or redirecting it into sqlite3."
+
+  - id: destructive.database.sqlite.drop-table
+    severity: critical
+    asset_type: hook
+    description: "DROP TABLE permanently deletes the table (even with IF EXISTS). Verify it is intended."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bDROP\\s+TABLE\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bDROP\\s+TABLE\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bDROP\\s+TABLE\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "sqlite.drop-table" }
+    remediation: "View structure first: .schema tablename. Backup: .dump tablename or .backup before dropping."
+
+  - id: destructive.database.sqlite.delete-without-where
+    severity: critical
+    asset_type: hook
+    description: "DELETE without WHERE deletes ALL rows. Add a WHERE clause."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)DELETE\\s+FROM\\s+[a-zA-Z_][a-zA-Z0-9_]*\\s*(?:;|$)" }
+        - { field: content, op: regex_match, value: "(?i)DELETE\\s+FROM\\s+[a-zA-Z_][a-zA-Z0-9_]*\\s*(?:;|$)" }
+        - { field: allow, op: regex_match, value: "(?i)DELETE\\s+FROM\\s+[a-zA-Z_][a-zA-Z0-9_]*\\s*(?:;|$)" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "sqlite.delete-without-where" }
+    remediation: "Check row count first: SELECT COUNT(*) FROM table. Add WHERE clause or use transactions: BEGIN; DELETE ...; verify; COMMIT/ROLLBACK."
+
+  - id: destructive.database.sqlite.vacuum-into
+    severity: medium
+    asset_type: hook
+    description: "VACUUM INTO overwrites the target file if it exists."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)VACUUM\\s+INTO\\s+" }
+        - { field: content, op: regex_match, value: "(?i)VACUUM\\s+INTO\\s+" }
+        - { field: allow, op: regex_match, value: "(?i)VACUUM\\s+INTO\\s+" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "sqlite.vacuum-into" }
+    remediation: "Check if target file exists before running. Use a unique filename with timestamp."
+
+  - id: destructive.database.sqlite.sqlite3-stdin
+    severity: high
+    asset_type: hook
+    description: "Running SQL from file could contain destructive commands. Review the file first."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "sqlite3\\s+[^\\s]+\\s+<\\s+" }
+        - { field: content, op: regex_match, value: "sqlite3\\s+[^\\s]+\\s+<\\s+" }
+        - { field: allow, op: regex_match, value: "sqlite3\\s+[^\\s]+\\s+<\\s+" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "sqlite.sqlite3-stdin" }
+    remediation: "Review the SQL file contents first. Use .backup before running. Wrap file contents in BEGIN/COMMIT."

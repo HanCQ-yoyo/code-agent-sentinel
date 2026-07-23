@@ -198,6 +198,11 @@ func TestDestructive_DatabaseDomain(t *testing.T) {
 		{"redis-config-set-save", "redis-cli CONFIG SET save ''", "command", "destructive.database.redis.config-set-save"},
 		{"redis-config-set-appendonly", "redis-cli CONFIG SET appendonly no", "command", "destructive.database.redis.config-set-appendonly"},
 		{"redis-config-rewrite", "redis-cli CONFIG REWRITE", "command", "destructive.database.redis.config-rewrite"},
+		// ===== sqlite(5 dest + 4 safe)=====
+		{"sqlite-drop-table", "sqlite3 mydb 'DROP TABLE users'", "command", "destructive.database.sqlite.drop-table"},
+		{"sqlite-delete-without-where", "sqlite3 mydb 'DELETE FROM users;'", "command", "destructive.database.sqlite.delete-without-where"},
+		{"sqlite-vacuum-into", "sqlite3 mydb 'VACUUM INTO \"backup.db\"'", "command", "destructive.database.sqlite.vacuum-into"},
+		{"sqlite3-stdin", "sqlite3 mydb < init.sql", "command", "destructive.database.sqlite.sqlite3-stdin"},
 	}
 	for _, c := range hitCases {
 		t.Run(c.name, func(t *testing.T) {
@@ -235,6 +240,11 @@ func TestDestructive_DatabaseDomain(t *testing.T) {
 		{"redis-keys-safe", "redis-cli KEYS '*'", "command"},
 		{"redis-dbsize-safe", "redis-cli DBSIZE", "command"},
 		{"redis-config-get-safe", "redis-cli CONFIG GET maxmemory", "command"},
+		// sqlite safe
+		{"sqlite-select-safe", "sqlite3 mydb 'SELECT * FROM users'", "command"},
+		{"sqlite-explain-safe", "sqlite3 mydb 'EXPLAIN SELECT * FROM users'", "command"},
+		{"sqlite-dot-command-safe", "sqlite3 mydb '.schema users'", "command"},
+		{"sqlite-delete-with-where-safe", "sqlite3 mydb 'DELETE FROM users WHERE id = 1'", "command"},
 	}
 	for _, c := range safeCases {
 		t.Run(c.name, func(t *testing.T) {
