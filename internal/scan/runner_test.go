@@ -280,6 +280,44 @@ func TestRunScanAssetScopeScansSiblings(t *testing.T) {
 	}
 }
 
+func TestRunScanBackfillsAgentID(t *testing.T) {
+	// Runner fixture: tmp dir history + 双 agent,空 Orchestrator(0 findings)。
+	// 验证 Finding.AgentID 回填 + history record AgentID 正确。
+	home := t.TempDir()
+	agents := []configengine.Agent{
+		{ID: "agent-a", Name: "A", RootDir: filepath.Join(home, ".claude"), ClaudeJSON: filepath.Join(home, ".claude.json"), HomeDir: home},
+		{ID: "agent-b", Name: "B", RootDir: filepath.Join(home, ".claude"), ClaudeJSON: filepath.Join(home, ".claude.json"), HomeDir: home},
+	}
+	histDir := t.TempDir()
+	hist := history.NewStore(histDir)
+	emptyReg := security.NewRegistry()
+	orch := &security.Orchestrator{Registry: emptyReg}
+	r := NewRunner(agents, orch, hist)
+
+	// 扫 agent-b
+	res, err := r.RunScan(context.Background(), "agent-b", ScanScope{}, nil)
+	if err != nil {
+		t.Fatalf("RunScan err: %v", err)
+	}
+	// 结果中所有 finding(如果有)应带 AgentID
+	for _, f := range res.Findings {
+		if f.AgentID != "agent-b" {
+			t.Errorf("Finding.AgentID = %q, want agent-b", f.AgentID)
+		}
+	}
+	// history record 也应 agentID=agent-b
+	latest, err := hist.LatestForAgent("agent-b")
+	if err != nil {
+		t.Fatalf("LatestForAgent err: %v", err)
+	}
+	if latest == nil {
+		t.Fatal("history LatestForAgent(agent-b) 不应 nil")
+	}
+	if latest.AgentID != "agent-b" {
+		t.Errorf("history AgentID = %q, want agent-b", latest.AgentID)
+	}
+}
+
 // findingKeyTest 生成 finding 去重键,与 handlers_edit.go 的 findingKey 一致:
 // (DetectorID, RuleID, AssetID, Evidence)。供测试比较 scope 过滤结果用。
 func findingKeyTest(f security.Finding) string {

@@ -113,6 +113,10 @@ func (r *Runner) RunScan(ctx context.Context, agentID string, scope ScanScope, d
 	if err != nil {
 		return nil, fmt.Errorf("扫描失败: %w", err)
 	}
+	// 回填 Finding.AgentID:Orchestrator 不感知 agent,此处统一注入。
+	for i := range res.Findings {
+		res.Findings[i].AgentID = recordAgentID
+	}
 	r.saveHistory(recordAgentID, scope, res, &inv)
 	return res, nil
 }

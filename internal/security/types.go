@@ -27,6 +27,7 @@ type Finding struct {
 	AssetID     string                 `json:"asset_id"`
 	AssetType   configengine.AssetType `json:"asset_type"`
 	AssetName   string                 `json:"asset_name"`
+	AgentID     string                 `json:"agent_id,omitempty"` // 所属 code agent(由 Runner 层回填)
 	Message     string                 `json:"message"`
 	Evidence    string                 `json:"evidence"`
 	Remediation string                 `json:"remediation"`
