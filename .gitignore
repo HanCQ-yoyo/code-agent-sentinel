@@ -20,6 +20,10 @@ shot-*.png
 docs/
 references/
 CLAUDE.md
+# hallmark 设计工具产物(vendored skill + 本地路径锁文件 + 生成的设计系统文档)
+.agents/
+skills-lock.json
+design.md
 
 # 编辑器 / 系统
 .DS_Store
