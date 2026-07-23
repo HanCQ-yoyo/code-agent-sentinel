@@ -1,25 +1,26 @@
 import { useState, useEffect } from 'react'
-import { Modal, Radio, Select, Checkbox, Space, Typography } from 'antd'
+import { Modal, Radio, Select, Checkbox, Space, Typography, Table, Tag } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
 import { AgentIcon } from './AgentIcon'
+import type { Agent } from '../types'
 
 const { Text } = Typography
 
 interface Props {
   open: boolean
   onClose: () => void
-  initialScope?: { type: string; path?: string } // 页面级入口预填
+  initialScope?: { type: string; path?: string } // 页面级入口预填(project 右键菜单)
 }
 
 export function RescanModal({ open, onClose, initialScope }: Props) {
   const { t } = useTranslation()
   const { agents, scanEnabledAgents, projects, detectors, runScan, loading } = useStore()
-  const { assets } = useStore()
   const [scopeType, setScopeType] = useState('global')
   const [scopePath, setScopePath] = useState<string | undefined>(undefined)
-  // Task 13:本地多选 agent 状态(非全局 selectedAgents 筛选器)。默认 = scanEnabledAgents。
-  // 空 = 不传 ?agents=,后端回退到所有 scan_enabled agent。
+  // 本地多选 agent 状态(非全局 selectedAgents 筛选器)。默认 = scanEnabledAgents。
+  // 关闭的 agent(scan_enabled===false)在 Table 行选择中 disabled,不可勾 → 安全检测只扫已开启的。
   const [agentIDs, setAgentIDs] = useState<string[]>([])
   const [detIDs, setDetIDs] = useState<string[]>([])
 
@@ -35,46 +36,59 @@ export function RescanModal({ open, onClose, initialScope }: Props) {
 
   const availDetectors = (detectors ?? []).map(d => ({ label: d.name ?? d.id, value: d.id, disabled: d.available === false }))
 
-  // agent 多选 options:所有 agents(含扫描关闭的),label 带开关状态。
-  // 允许选已关闭的 agent(强制扫一次),故不 disable。label 用 AgentIcon 品牌图标 + 名 + 开关标记。
-  const agentOptions = (agents?.agents ?? []).map(a => ({
-    value: a.id,
-    label: <span style={{ whiteSpace: 'nowrap' }}><AgentIcon id={a.id} /> {a.name}{a.scan_enabled ? '' : t('rescan.scanOff')}</span>,
-  }))
+  // 目标 Agent 列:名称(AgentIcon + name)、ID、状态(只读 Tag)。
+  // 行选择关闭的 agent disabled(只扫已开启的)。状态只读——改状态仍去 Settings。
+  const columns: ColumnsType<Agent> = [
+    {
+      title: t('rescan.colName'), dataIndex: 'name', key: 'name',
+      render: (name: string, r: Agent) => (
+        <span style={{ whiteSpace: 'nowrap' }}><AgentIcon id={r.id} /> {name}</span>
+      ),
+    },
+    { title: t('rescan.colID'), dataIndex: 'id', key: 'id',
+      render: (id: string) => <Text type="secondary" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{id}</Text> },
+    { title: t('rescan.colStatus'), dataIndex: 'scan_enabled', key: 'status', width: 80,
+      render: (on: boolean) => on
+        ? <Tag color="green">{t('rescan.statusOn')}</Tag>
+        : <Tag>{t('rescan.statusOff')}</Tag> },
+  ]
 
   const start = async () => {
-    // 全选=不传(后端全量);否则传逗号分隔的 id 列表。
+    // 全选检测器=不传(后端全量);否则传逗号分隔 id 列表。
     const det = detIDs.length === (detectors ?? []).length ? undefined : detIDs.join(',')
-    // Task 13:runScan 接收 agentIDs 数组(空 → 后端回退全部 scan_enabled)。
+    // agentIDs 已排除关闭的(Table 行选择 disabled),空 → 后端回退全部 scan_enabled。
     await runScan(agentIDs, det, { type: scopeType, path: scopePath })
     onClose()
   }
 
   return (
-    <Modal open={open} title={t('rescan.title')} onCancel={onClose} onOk={start} okText={t('rescan.start')} confirmLoading={loading} cancelText={t('common.cancel')}>
+    <Modal open={open} title={t('rescan.title')} onCancel={onClose} onOk={start} okText={t('rescan.start')} confirmLoading={loading} cancelText={t('common.cancel')} width={560}>
       <Space direction="vertical" size={12} style={{ width: '100%' }}>
         <div>
           <Text strong>{t('rescan.scope')}</Text>
           <Radio.Group value={scopeType} onChange={(e) => setScopeType(e.target.value)} style={{ marginLeft: 8 }}>
-            <Radio value="global">{t('rescan.scopeGlobal')}</Radio>
+            <Radio value="global">{t('rescan.scopeAll')}</Radio>
+            <Radio value="user">{t('rescan.scopeUser')}</Radio>
             <Radio value="project">{t('rescan.scopeProject')}</Radio>
-            <Radio value="asset">{t('rescan.scopeAsset')}</Radio>
           </Radio.Group>
         </div>
         {scopeType === 'project' ? (
           <Select style={{ width: '100%' }} placeholder={t('rescan.selectProject')} value={scopePath}
             options={(projects ?? []).map(p => ({ value: p.path, label: p.name }))} onChange={setScopePath} />
         ) : null}
-        {scopeType === 'asset' ? (
-          <Select style={{ width: '100%' }} placeholder={t('rescan.selectAsset')} value={scopePath}
-            options={(assets?.assets ?? []).map(a => ({ value: a.source_path, label: a.source_path }))}
-            showSearch onChange={setScopePath} />
-        ) : null}
         <div>
           <Text strong>{t('rescan.agent')}</Text>
-          <Select mode="multiple" style={{ width: '100%', marginTop: 4 }} value={agentIDs}
-            options={agentOptions} onChange={setAgentIDs}
-            placeholder={t('rescan.agent')} />
+          <Table<Agent>
+            size="small" rowKey="id" pagination={false} scroll={{ y: 200 }}
+            dataSource={agents?.agents ?? []} columns={columns}
+            style={{ marginTop: 4 }}
+            rowSelection={{
+              selectedRowKeys: agentIDs,
+              onChange: (keys) => setAgentIDs(keys as string[]),
+              // 关闭的 agent 不可勾(只扫已开启的);状态列只读展示其开关。
+              getCheckboxProps: (r: Agent) => ({ disabled: !r.scan_enabled }),
+            }}
+          />
         </div>
         <div>
           <Text strong>{t('rescan.detectors')}</Text>
