@@ -15,16 +15,27 @@ type SQLToken struct {
 // SQLScan 是 SQL 扫描结果。
 type SQLScan struct {
 	Tokens            []SQLToken
-	DestructiveTokens []SQLToken // 只含破坏性 keyword(DROP/TRUNCATE/DELETE/ALTER...),已排除注释/字符串内
+	DestructiveTokens []SQLToken // 只含破坏性 keyword(DROP/TRUNCATE/DELETE/UPDATE/ALTER/GRANT/REVOKE/REMOVE/OVERWRITE/EXECUTE),已排除注释/字符串内
+	// HasComment 在输入含任意注释(行注释 -- 或块注释 /*)时为 true。
+	// 仅标志"出现过注释",不区分注释类型/数量;规则层可据此决定是否降级信任。
+	HasComment bool
 }
 
-// destructiveKeywords 是破坏性 SQL keyword(对齐 snowflake 50 条规则覆盖的操作)。
+// destructiveKeywords 是破坏性 SQL keyword,对齐 dcg snowflake 包 keyword 列表
+// (references/destructive_command_guard/src/packs/database/snowflake.rs:335-359,共 10 个):
+// DROP/TRUNCATE/DELETE/UPDATE/ALTER/GRANT/REVOKE/REMOVE/OVERWRITE/EXECUTE。
 // 复合 keyword(DROP TABLE)不在 lexer 层拼装;Task 11 在 RulesDetector 里按相邻 keyword token 判定。
 var destructiveKeywords = map[string]bool{
-	"DROP":     true,
-	"TRUNCATE": true,
-	"DELETE":   true,
-	"ALTER":    true,
+	"DROP":      true,
+	"TRUNCATE":  true,
+	"DELETE":    true,
+	"UPDATE":    true,
+	"ALTER":     true,
+	"GRANT":     true,
+	"REVOKE":    true,
+	"REMOVE":    true,
+	"OVERWRITE": true,
+	"EXECUTE":   true,
 }
 
 // lexerState 是 SQL lexer 状态机状态(对照 dcg snowflake.rs scan_sql / lex_statements)。
@@ -85,11 +96,13 @@ func ScanSQL(payload string) *SQLScan {
 			case c == '-' && i+1 < n && bytes[i+1] == '-':
 				flush()
 				state = stateLineComment
+				scan.HasComment = true
 				i++ // 消费第二个 '-'
 			case c == '/' && i+1 < n && bytes[i+1] == '*':
 				flush()
 				state = stateBlockComment
 				blockDepth = 1
+				scan.HasComment = true
 				i++ // 消费 '*'
 			case c == '\'':
 				flush()

@@ -175,12 +175,99 @@ func TestScanSQL_CaseInsensitive(t *testing.T) {
 }
 
 // TestScanSQL_EmptyAndNoDestructive 验证空输入和无破坏性 keyword 返回空列表。
+// 注:UPDATE/GRANT/REVOKE/REMOVE/OVERWRITE/EXECUTE 都是破坏性 keyword(对齐 dcg snowflake),
+// 不在此用例的"无破坏性"集合里。
 func TestScanSQL_EmptyAndNoDestructive(t *testing.T) {
-	for _, input := range []string{"", "SELECT 1", "INSERT INTO t VALUES (1)", "UPDATE t SET x=1"} {
+	for _, input := range []string{"", "SELECT 1", "INSERT INTO t VALUES (1)"} {
 		s := ScanSQL(input)
 		if len(s.DestructiveTokens) != 0 {
 			t.Errorf("input %q: expected 0 destructive tokens, got %d (%v)",
 				input, len(s.DestructiveTokens), s.DestructiveTokens)
+		}
+	}
+}
+
+// TestScanSQL_AdditionalDestructiveKeywords 验证 dcg snowflake keyword 列表(snowflake.rs:335-359)
+// 中除 DROP/TRUNCATE/DELETE/ALTER 外的 6 个破坏性 keyword 都命中 DestructiveToken:
+// UPDATE/GRANT/REVOKE/REMOVE/OVERWRITE/EXECUTE。
+// lexer 是 pre-filter,WHERE 子句检查是规则层(Task 11)的职责,故任何 UPDATE keyword 都应命中。
+func TestScanSQL_AdditionalDestructiveKeywords(t *testing.T) {
+	cases := []struct {
+		input string
+		want  string
+	}{
+		{"UPDATE x SET y=1", "UPDATE"},
+		{"UPDATE x SET y=1 WHERE z=2", "UPDATE"}, // 带 WHERE 也是破坏性 keyword(pre-filter)
+		{"GRANT SELECT ON t TO r1", "GRANT"},
+		{"REVOKE SELECT ON t FROM r1", "REVOKE"},
+		{"REMOVE @stage/path", "REMOVE"},
+		{"COPY INTO t FROM @s OVERWRITE", "OVERWRITE"},
+		{"EXECUTE TASK t1", "EXECUTE"},
+		{"execute task t1", "EXECUTE"},   // 大小写不敏感
+		{"overwrite into t", "OVERWRITE"}, // 大小写不敏感
+	}
+	for _, c := range cases {
+		s := ScanSQL(c.input)
+		found := false
+		for _, tk := range s.DestructiveTokens {
+			if tk.Text == c.want {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("input %q: expected destructive keyword %s, got %v", c.input, c.want, s.DestructiveTokens)
+		}
+	}
+}
+
+// TestScanSQL_AllTenDestructiveKeywords 验证 dcg snowflake 的全部 10 个破坏性 keyword
+// (snowflake.rs:335-359) 在一条 SQL 里都命中。
+func TestScanSQL_AllTenDestructiveKeywords(t *testing.T) {
+	s := ScanSQL("DROP TABLE a; TRUNCATE TABLE b; DELETE FROM c; UPDATE d SET x=1; " +
+		"ALTER TABLE e; GRANT SELECT ON f TO r; REVOKE SELECT ON g FROM r; " +
+		"REMOVE @h; COPY INTO i FROM @j OVERWRITE; EXECUTE TASK k")
+	want := map[string]bool{
+		"DROP": true, "TRUNCATE": true, "DELETE": true, "UPDATE": true, "ALTER": true,
+		"GRANT": true, "REVOKE": true, "REMOVE": true, "OVERWRITE": true, "EXECUTE": true,
+	}
+	got := map[string]bool{}
+	for _, tk := range s.DestructiveTokens {
+		got[tk.Text] = true
+	}
+	for kw := range want {
+		if !got[kw] {
+			t.Errorf("expected destructive keyword %s in results, got %v", kw, got)
+		}
+	}
+}
+
+// TestScanSQL_HasComment 验证 HasComment 字段在有注释时为 true,无注释时为 false。
+// 行注释 -- 与块注释 /* 都应触发 true。
+func TestScanSQL_HasComment(t *testing.T) {
+	// 有注释的用例。
+	for _, input := range []string{
+		"-- line comment\nSELECT 1",
+		"/* block comment */ SELECT 1",
+		"SELECT 1 /* trailing block */",
+		"SELECT 1 -- trailing line",
+		"/* nested /* comment */ still */ SELECT 1",
+	} {
+		s := ScanSQL(input)
+		if !s.HasComment {
+			t.Errorf("input %q: expected HasComment=true", input)
+		}
+	}
+	// 无注释的用例。
+	for _, input := range []string{
+		"",
+		"SELECT 1",
+		"DROP TABLE x",
+		"SELECT 'a -- b'", // 字符串里的 -- 不算注释
+		"SELECT 'a /* b'",  // 字符串里的 /* 不算注释
+	} {
+		s := ScanSQL(input)
+		if s.HasComment {
+			t.Errorf("input %q: expected HasComment=false", input)
 		}
 	}
 }
