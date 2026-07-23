@@ -154,9 +154,9 @@ func TestRulesDetectorMeta(t *testing.T) {
 	if len(m.Engines) != 1 || m.Engines[0].Kind != "embedded" || !m.Engines[0].Available {
 		t.Errorf("Engines = %+v", m.Engines)
 	}
-	// 11 baseline + 46 injection + 6 skill (Task 14) = 63 条内置规则
-	if len(m.Rules) != 63 {
-		t.Errorf("Rules 数 = %d, want 63 (11 baseline + 46 injection + 6 skill)", len(m.Rules))
+	// 11 baseline + 46 injection + 6 skill + 1 destructive sample (Task 3) = 64 条内置规则
+	if len(m.Rules) != 64 {
+		t.Errorf("Rules 数 = %d, want 64 (11 baseline + 46 injection + 6 skill + 1 destructive sample)", len(m.Rules))
 	}
 	if m.Covers != nil {
 		t.Errorf("Covers 应为 nil, got %v", m.Covers)

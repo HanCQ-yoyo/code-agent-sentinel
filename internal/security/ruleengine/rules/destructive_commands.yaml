@@ -1,0 +1,27 @@
+# destructive_commands.yaml —— 危险命令检测规则
+#
+# 规则源自 destructive_command_guard(dcg,MIT License with OpenAI/Anthropic Rider),
+# 经机械转写为 sentinel 声明式 YAML。
+# dcg copyright (c) 2026 Jeffrey Emanuel(见 references/destructive_command_guard/LICENSE)。
+# 转写保留原规则语义(name/severity/reason/suggestion),正则按 sentinel RE2+regexp2 引擎适配。
+#
+# 命名空间:destructive.<domain>.<pattern>
+# severity 对齐 dcg 枚举:critical/high/medium/low(健康分系数见 health.go:23)
+# safe_pattern(白名单)映射为对应 dest 规则的 post_exclude(命中后排除安全子模式)。
+# 含 lookahead/lookbehind 的正则走 regexp2(Task 1 分流)。
+#
+# 资产路由:asset_type 覆盖 hook(command)/script|skill|command|agent|memory(content)/
+# mcp_server(command+args)/permissions(allow)。同一规则对多 asset_type 用 or 树。
+# 因 RulesDetector.Covers() 返回 nil(全资产路由),规则按 asset_type 字段自动路由。
+
+rules:
+  # 样例规则(验证管线;Task 4 起追加真实 git 域规则)
+  - id: destructive.sample.should-exist
+    severity: high
+    asset_type: hook
+    description: "样例规则,验证 destructive_commands.yaml 加载"
+    match: { field: command, op: regex_match, value: "rm\\s+-rf\\s+/" }
+    metadata:
+      source: dcg
+      domain: sample
+    remediation: "审查命令,移除破坏性操作"
