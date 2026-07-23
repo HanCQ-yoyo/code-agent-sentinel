@@ -1,10 +1,12 @@
 package main
 
 import (
+	"log"
 	"net"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -138,5 +140,60 @@ func TestServeHTTPGracefulShutdown(t *testing.T) {
 	}
 	if atomic.LoadInt32(&stopCalled) != 1 {
 		t.Error("stop(mgr.Stop) 应被调用")
+	}
+}
+
+// TestLogPathFlag 验证 --log-path 标准库烟雾测试:OpenFile + log.SetOutput + 写入 + 读回。
+// 不调用 run()(run 会起真实 HTTP server 阻塞);此处只校验 log.SetOutput 路径可写。
+func TestLogPathFlag(t *testing.T) {
+	dir := t.TempDir()
+	logPath := filepath.Join(dir, "test.log")
+	// 模拟 --log-path flag 落地后的 run() 逻辑片段
+	f, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	log.SetOutput(f)
+	log.Println("test log entry")
+	f.Close()
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("日志文件未创建: %v", err)
+	}
+	if !strings.Contains(string(data), "test log entry") {
+		t.Error("日志文件应包含写入内容")
+	}
+	// 恢复
+	log.SetOutput(os.Stderr)
+}
+
+// TestLogPathConfigFallback 验证 config.yaml 的 log_path 字段能被 Load 读到 cfg.LogPath。
+// --log-path flag > cfg.LogPath > 默认 stderr,run() 里用 cfg.LogPath 兜底。
+func TestLogPathConfigFallback(t *testing.T) {
+	dir := t.TempDir()
+	cfgPath := filepath.Join(dir, "config.yaml")
+	// 写带 log_path 的 config(路径任意,不要求文件存在;Load 不校验)
+	if err := os.WriteFile(cfgPath, []byte("log_path: /tmp/sentinel-test.log\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.LogPath != "/tmp/sentinel-test.log" {
+		t.Errorf("LogPath 应从 config 读取: got %q", cfg.LogPath)
+	}
+}
+
+// TestLogPathFlagRegistered 验证 --log-path flag 已注册,默认空(stderr)。
+// service install 生成的单元会传 --log-path 指向日志文件;flag 缺失会令服务退回 stderr。
+func TestLogPathFlagRegistered(t *testing.T) {
+	cmd := newRootCmd()
+	f := cmd.Flags().Lookup("log-path")
+	if f == nil {
+		t.Fatal("--log-path flag 未注册")
+	}
+	if f.DefValue != "" {
+		t.Errorf("--log-path 默认应空(stderr),got %q", f.DefValue)
 	}
 }

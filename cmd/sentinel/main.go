@@ -44,12 +44,13 @@ func newRootCmd() *cobra.Command {
 		homeFlag      string
 		tokenFlag     string
 		claudeDirFlag string
+		logPathFlag   string
 	)
 	cmd := &cobra.Command{
 		Use:   "sentinel",
 		Short: "Claude Code 配置安全态势看板(P1 只读)",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			return run(cmd.Context(), cfgPath, bindFlag, portFlag, noBrowser, risky, homeFlag, tokenFlag, claudeDirFlag)
+			return run(cmd.Context(), cfgPath, bindFlag, portFlag, noBrowser, risky, homeFlag, tokenFlag, claudeDirFlag, logPathFlag)
 		},
 	}
 	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.claude-sentinel/config.yaml)")
@@ -62,6 +63,9 @@ func newRootCmd() *cobra.Command {
 	cmd.Flags().StringVar(&tokenFlag, "token", "", "覆盖随机生成的 token(调试/测试用,生产场景留空)")
 	// Task 3:--claude-dir 覆盖 cfg.ResolveClaudeDir(home);空走配置/默认回退。
 	cmd.Flags().StringVar(&claudeDirFlag, "claude-dir", "", ".claude 目录绝对路径(默认 home/.claude)")
+	// Task 14:--log-path 覆盖 cfg.LogPath;空走配置/默认 stderr。
+	// service install 生成的单元文件带此 flag 指向 sentinel.log。
+	cmd.Flags().StringVar(&logPathFlag, "log-path", "", "日志文件路径(默认 stderr)")
 	// Task 15:baseline / rules 子命令
 	cmd.AddCommand(newBaselineCmd())
 	cmd.AddCommand(newRulesCmd())
@@ -76,7 +80,7 @@ func newRootCmd() *cobra.Command {
 	return cmd
 }
 
-func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser, risky bool, homeFlag, tokenFlag, claudeDirFlag string) error {
+func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser, risky bool, homeFlag, tokenFlag, claudeDirFlag, logPathFlag string) error {
 	if cfgPath == "" {
 		p, err := config.DefaultPath()
 		if err != nil {
@@ -114,6 +118,23 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	// ResolveAgents/shouldPromptSetup 直接读 cfg.ClaudeDir,无需保留本地 claudeDir 变量。
 	if claudeDirFlag != "" {
 		cfg.ClaudeDir = claudeDirFlag
+	}
+
+	// Task 14:日志路径解析 --log-path > cfg.LogPath > 默认 stderr(空)。
+	// OpenFile 失败(目录不存在/无权限)直接报错退出——日志是运维命脉,不静默降级。
+	// defer f.Close() 在 run() 返回时关闭(即进程 shutdown):serveHTTP 阻塞期间文件保持打开,
+	// 所有 log.Printf(含 api/server 的请求日志)都写入此文件。
+	lp := logPathFlag
+	if lp == "" {
+		lp = cfg.LogPath
+	}
+	if lp != "" {
+		f, err := os.OpenFile(lp, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
+		if err != nil {
+			return fmt.Errorf("打开日志文件失败: %w", err)
+		}
+		defer f.Close()
+		log.SetOutput(f)
 	}
 
 	cfg.EnsureDetectors() // 确保 Detectors 非 nil,检测器持其指针,API 写原地生效

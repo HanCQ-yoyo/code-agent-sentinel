@@ -50,6 +50,11 @@ type Config struct {
 	// Token 是服务模式预置的访问 token。空=前台交互场景随机生成(见 main.go)。
 	// service install 写入,使后台进程无需经 banner 展示即可拼接 #token= URL。
 	Token string `yaml:"token"`
+	// Task 14:日志文件路径。空=stderr(默认,前台交互场景)。
+	// --log-path flag > config.LogPath > 默认 stderr,run() 里统一解析。
+	// service install 生成的单元文件带 --log-path 指向 <home>/.claude-sentinel/sentinel.log,
+	// 亦允许用户在此显式配置自定义路径覆盖单元默认。
+	LogPath string `yaml:"log_path" json:"log_path"`
 	// #4:置顶项目列表
 	PinnedProjects []PinnedProject `yaml:"pinned_projects"`
 	// 多 agent 配置(setup 写入)。空 → ResolveAgents 回退到 ClaudeDir。
