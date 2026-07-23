@@ -3,7 +3,6 @@ package ruleengine
 import (
 	"errors"
 	"fmt"
-	"regexp"
 
 	"code-agent-sentinel/internal/configengine"
 )
@@ -29,15 +28,11 @@ func validAssetType(s string) bool {
 	return false
 }
 
-// compileRegexPattern 按 全局约束注入前缀后编译正则。
-// 返回编译好的 Regexp 或编译错误。
-func compileRegexPattern(pattern string, dotall bool) (*regexp.Regexp, error) {
-	full := "(?i)(?m)"
-	if dotall {
-		full += "(?s)"
-	}
-	full += pattern
-	return regexp.Compile(full)
+// compileRegexPattern 委托给 CompilePattern(含 regexp2 分流)。
+// 保留旧名避免改所有调用点;返回类型改为 CompiledRegex 接口(统一 RE2 与 regexp2)。
+// dotall 透传:RE2 用 (?s) 前缀;regexp2 用 Singleline flag。
+func compileRegexPattern(pattern string, dotall bool) (CompiledRegex, error) {
+	return CompilePattern(pattern, dotall)
 }
 
 // Validate 对一批规则做 schema 校验 + 正则编译 + match 树递归校验。
@@ -221,7 +216,7 @@ func validateLeaf(raw map[string]any, r *Rule) error {
 			return fmt.Errorf("regex compile failed (op=%s field=%s): %v", opStr, fieldStr, err)
 		}
 		if r.regexes == nil {
-			r.regexes = make(map[string]*regexp.Regexp)
+			r.regexes = make(map[string]CompiledRegex)
 		}
 		// key = op:field:value,Task 4 求值器按同样规则构造 key 读取。
 		// 含 value 避免同 op+field 不同 pattern 的叶子互相覆盖。

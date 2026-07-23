@@ -39,18 +39,43 @@ func TestValidateBadRegexFails(t *testing.T) {
 	}
 }
 
-// TestValidateRejectsRE2Incompatible 验证规则 value 用了 RE2 不支持的正则特性时,
+// TestValidateRejectsRE2Incompatible 验证规则 value 用了 regexp2 也不支持的正则特性时,
 // Validate 返回 RuleLoadError(而非 panic 或静默接受)。
-// Finding #4:RE2 子集约束(无前瞻/后瞻/反向引用/\u)只在 TestValidateBadRegexFails 里
-// 用 `(?P<bad`(未闭合命名捕获)覆盖,特性级拒绝缺测试 —— 未来重构 compileRegexPattern
-// 可能静默回退到 panic 或接受。本测试锁定现有正确行为。
 //
-// 实测 Go regexp(RE2)对下列全部报错:
-//   - 前瞻 (?=...)/(?!...) → "unsupported Perl syntax"
-//   - 后瞻 (?<=...)/(?<!...) → Go 把 (?< 解析为命名捕获开头,故报 "invalid named capture"
-//   - 反向引用 \1 → "invalid escape sequence: `\\1`"
-//   - Unicode 转义 \u → "invalid escape sequence: `\\u`"(Go regexp 用 \x{NNNN},不支持 \u)
+// Task 1 (regexp2 分流) 行为变更:lookahead/lookbehind(?=/?!/?<=/?<!)
+// 现由 CompilePattern 分流到 regexp2 编译,不再被拒绝(见 TestValidateAcceptsLookbehind)。
+// 以下特性 regexp2 也不支持(或 regexp2.Compile 默认模式报错),仍应被拒绝:
+//   - 反向引用 \1 → regexp2 在默认模式下不支持 backreference(需 RE2 兼容模式)
+//   - Unicode 转义 \u → regexp2 用 \x{NNNN} 或 \uNNNN(后者需 ECMAScript 模式,默认不支持)
 func TestValidateRejectsRE2Incompatible(t *testing.T) {
+	cases := []struct {
+		name  string
+		value string
+	}{
+		{"backreference", `(foo)\1`},
+		{"unicode_escape_u", "\\u0041"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rules := []Rule{{ID: "x", Severity: "high", AssetType: "skill",
+				Match: MatchNode{raw: map[string]any{"field": "content", "op": "regex_match", "value": c.value}}}}
+			// 不应 panic:不支持特性经 CompilePattern 报错 → Validate 转 RuleLoadError
+			valid, errs := Validate(rules)
+			if len(errs) == 0 {
+				t.Fatalf("不支持特性 %s (value=%q) 应被拒绝为 RuleLoadError,但被静默接受(valid=%d)", c.name, c.value, len(valid))
+			}
+			if len(valid) != 0 {
+				t.Fatalf("不支持特性 %s 不应进 valid, got %d", c.name, len(valid))
+			}
+		})
+	}
+}
+
+// TestValidateAcceptsLookbehind 验证 Task 1 引入 regexp2 分流后,
+// lookahead/lookbehind(?=/?!/?<=/?<!)规则能被 Validate 接受(不再报 RuleLoadError)。
+// 这些特性 RE2 不支持,但 regexp2 支持;CompilePattern 自动分流。
+// 锁定"lookahead/lookbehind 合法"这一行为变更,防止未来回退到纯 RE2 拒绝。
+func TestValidateAcceptsLookbehind(t *testing.T) {
 	cases := []struct {
 		name  string
 		value string
@@ -59,20 +84,17 @@ func TestValidateRejectsRE2Incompatible(t *testing.T) {
 		{"negative_lookahead", `foo(?!bar)`},
 		{"lookbehind", `(?<=foo)bar`},
 		{"negative_lookbehind", `(?<!foo)bar`},
-		{"backreference", `(foo)\1`},
-		{"unicode_escape_u", "\\u0041"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			rules := []Rule{{ID: "x", Severity: "high", AssetType: "skill",
 				Match: MatchNode{raw: map[string]any{"field": "content", "op": "regex_match", "value": c.value}}}}
-			// 不应 panic:RE2 不兼容特性经 compileRegexPattern 报错 → Validate 转 RuleLoadError
 			valid, errs := Validate(rules)
-			if len(errs) == 0 {
-				t.Fatalf("RE2 不兼容特性 %s (value=%q) 应被拒绝为 RuleLoadError,但被静默接受(valid=%d)", c.name, c.value, len(valid))
+			if len(errs) != 0 {
+				t.Fatalf("lookahead/lookbehind %s (value=%q) 应被接受(Task 1 regexp2 分流),但报错: %v", c.name, c.value, errs)
 			}
-			if len(valid) != 0 {
-				t.Fatalf("RE2 不兼容特性 %s 不应进 valid, got %d", c.name, len(valid))
+			if len(valid) != 1 {
+				t.Fatalf("lookahead/lookbehind %s 应进 valid, got %d", c.name, len(valid))
 			}
 		})
 	}

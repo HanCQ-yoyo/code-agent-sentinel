@@ -3,8 +3,6 @@
 package ruleengine
 
 import (
-	"regexp"
-
 	"code-agent-sentinel/internal/configengine"
 	"gopkg.in/yaml.v3"
 )
@@ -58,7 +56,7 @@ type Rule struct {
 	ProjectPath string `yaml:"-"`
 	// 编译态(校验时填,不序列化)
 	assetType configengine.AssetType
-	regexes   map[string]*regexp.Regexp // key=op:field:value,规则级正则编译缓存
+	regexes   map[string]CompiledRegex // key=op:field:value,规则级正则编译缓存(含 regexp2)
 }
 
 // MatchNode 保留 YAML 原始结构:叶子是 map{field,op,value},

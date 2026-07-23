@@ -1,7 +1,6 @@
 package ruleengine
 
 import (
-	"regexp"
 	"strings"
 	"testing"
 
@@ -29,7 +28,11 @@ func TestHomoglyphCyrillic(t *testing.T) {
 }
 
 func TestPostExclude(t *testing.T) {
-	pats := []*regexp.Regexp{regexp.MustCompile(`(?i)localhost`)}
+	pat, err := CompilePattern(`localhost`, false)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	pats := []CompiledRegex{pat}
 	// NOTE: brief 原文两行断言的 ! 位置与 spec("匹配→true→应排除")矛盾,
 	// 此处按 spec 语义修正:localhost 应排除(返回 true),evil.com 不应排除(返回 false)。
 	if !applyPostExclude("curl localhost:8080", pats) {
@@ -100,7 +103,11 @@ func TestHomoglyphGreek(t *testing.T) {
 }
 
 func TestPostExcludeNoMatch(t *testing.T) {
-	pats := []*regexp.Regexp{regexp.MustCompile(`(?i)localhost`)}
+	pat, err := CompilePattern(`localhost`, false)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	pats := []CompiledRegex{pat}
 	if applyPostExclude("evil.com", pats) {
 		t.Error("non-matching context should not be excluded")
 	}

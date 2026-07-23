@@ -3,7 +3,6 @@ package ruleengine
 import (
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
 
 	"code-agent-sentinel/internal/configengine"
@@ -249,7 +248,7 @@ func evalRegexMatch(field string, fieldVal any, value any, rule *Rule, op string
 	text := stringify(fieldVal)
 
 	// post_exclude 编译(若规则有 post_exclude 模式)
-	var excludePats []*regexp.Regexp
+	var excludePats []CompiledRegex
 	if len(rule.PostExclude) > 0 {
 		excludePats = compilePostExcludePatterns(rule)
 	}
@@ -290,10 +289,10 @@ func evalRegexMatch(field string, fieldVal any, value any, rule *Rule, op string
 // Finding #1:旧实现只取最左匹配(FindString),若被 post_exclude 排除就放弃 → 漏报后续匹配。
 // 现遍历 FindAllStringIndex 的所有匹配,收集未排除的命中区间;首个未排除的作为 first。
 // post_exclude 缺省时 excludePats 为空 → applyPostExclude 恒 false → 首个匹配命中,与旧行为一致。
-func firstNonExcludedHit(re *regexp.Regexp, text string, excludePats []*regexp.Regexp) (string, [][2]int, bool) {
+func firstNonExcludedHit(re CompiledRegex, text string, excludePats []CompiledRegex) (string, [][2]int, bool) {
 	var first string
 	var indices [][2]int
-	for _, idx := range re.FindAllStringIndex(text, -1) {
+	for _, idx := range re.FindAllStringIndex(text) {
 		hit := text[idx[0]:idx[1]]
 		if applyPostExclude(hit, excludePats) {
 			continue
@@ -399,7 +398,7 @@ func evalWithin(fieldVal any, value any) (bool, string) {
 
 // lookupRegex 按 op:field:value 键从 rule.regexes 取编译好的正则;
 // 若未命中(规则未经 Validate),惰性编译并缓存。
-func lookupRegex(rule *Rule, op, field, pattern string) *regexp.Regexp {
+func lookupRegex(rule *Rule, op, field, pattern string) CompiledRegex {
 	key := op + ":" + field + ":" + pattern
 	if rule.regexes != nil {
 		if re, ok := rule.regexes[key]; ok {
@@ -412,7 +411,7 @@ func lookupRegex(rule *Rule, op, field, pattern string) *regexp.Regexp {
 		return nil
 	}
 	if rule.regexes == nil {
-		rule.regexes = make(map[string]*regexp.Regexp)
+		rule.regexes = make(map[string]CompiledRegex)
 	}
 	rule.regexes[key] = re
 	return re

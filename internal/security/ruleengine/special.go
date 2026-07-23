@@ -5,7 +5,6 @@ package ruleengine
 
 import (
 	"fmt"
-	"regexp"
 	"strings"
 
 	"code-agent-sentinel/internal/configengine"
@@ -181,7 +180,7 @@ func evalHomoglyphCheck(content string) (bool, string) {
 // hitCtx 匹配任一 pattern → 返回 true(应排除/降级)。
 // 在 evalRegexMatch 中,regex 命中后若 rule.PostExclude 非空,
 // 取命中片段(FindString 结果)作为 hitCtx 跑此函数;true 则降级为不报。
-func applyPostExclude(hitCtx string, patterns []*regexp.Regexp) bool {
+func applyPostExclude(hitCtx string, patterns []CompiledRegex) bool {
 	for _, re := range patterns {
 		if re.MatchString(hitCtx) {
 			return true
@@ -191,10 +190,11 @@ func applyPostExclude(hitCtx string, patterns []*regexp.Regexp) bool {
 }
 
 // compilePostExcludePatterns 将 rule.PostExclude 字符串列表编译为正则列表。
-// 使用 compileRegexPattern(与 validate.go 一致),注入 (?i)(?m) 前缀 + 可选 (?s)。
+// 使用 CompilePattern(含 regexp2 分流):post_exclude 来源于 dcg safe_pattern,
+// 可能含 lookahead/lookbehind,故不能用纯 RE2 编译。
 // 校验时已验证过,此处重建(Task 3 约定:post_exclude 不缓存)。
-func compilePostExcludePatterns(rule *Rule) []*regexp.Regexp {
-	pats := make([]*regexp.Regexp, 0, len(rule.PostExclude))
+func compilePostExcludePatterns(rule *Rule) []CompiledRegex {
+	pats := make([]CompiledRegex, 0, len(rule.PostExclude))
 	for _, pat := range rule.PostExclude {
 		re, err := compileRegexPattern(pat, rule.Dotall)
 		if err != nil {
