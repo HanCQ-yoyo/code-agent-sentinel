@@ -564,3 +564,83 @@ rules:
         - { field: allow, op: regex_match, value: "(?<![<>])(?:&>|>&|\\*>|(?:[0-9]+|\\{[A-Za-z_][A-Za-z0-9_]*\\})?>\\|?)\\s*(?:[^|;&\\s]*[\\\\$`]|~[A-Za-z_][^|;&\\s]*|(?!(?:/tmp|/var/tmp)(?:/|(?=[\\s|;&]|$)))/[^|;&\\s]*['\"?*\\[][^|;&\\s]*|[%!][^|;&\\s]*|\\^(?!(?:/tmp|/var/tmp)(?:/|(?=[\\s|;&]|$)))[^|;&\\s]+)" }
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.redirect-truncate-dynamic-path" }
     remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  # ===== database.mongodb 域(源 dcg database/mongodb.rs,6 dest + 5 safe)=====
+  # severity 直接映射 dcg 枚举(drop-database=Critical;drop-collection/delete-all/
+  # mongorestore-drop/collection-drop=High;stdin-unverified=High)。
+  # dcg safe_pattern(5 条)针对整条命令做 ^-anchored 负向 lookahead,确保含破坏性方法
+  # 时不放行 read 操作。sentinel 中 destructive 正则只匹配破坏性方法本身(.dropDatabase()
+  # / .drop() / .deleteMany({}) 等),read 操作(find/count/aggregate/explain)不匹配,
+  # 故无 false-positive 风险;post_exclude 不适用(hitCtx 子串不含全命令上下文)。
+
+  - id: destructive.database.mongodb.stdin-unverified
+    severity: high
+    asset_type: hook
+    description: "mongosh receives indirect input that dcg cannot statically verify."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?!)" }
+        - { field: content, op: regex_match, value: "(?!)" }
+        - { field: allow, op: regex_match, value: "(?!)" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "mongodb.stdin-unverified" }
+    remediation: "Materialize and review the exact JavaScript before piping or redirecting it into mongosh."
+
+  - id: destructive.database.mongodb.drop-database
+    severity: critical
+    asset_type: hook
+    description: "dropDatabase permanently deletes the entire database."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\.dropDatabase\\s*\\(" }
+        - { field: content, op: regex_match, value: "\\.dropDatabase\\s*\\(" }
+        - { field: allow, op: regex_match, value: "\\.dropDatabase\\s*\\(" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "mongodb.drop-database" }
+    remediation: "dropDatabase() removes the current database completely. Backup first: mongodump --db=dbname --out=/path/to/backup"
+
+  - id: destructive.database.mongodb.drop-collection
+    severity: high
+    asset_type: hook
+    description: "drop/dropCollection permanently deletes the collection."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\.drop\\s*\\(\\s*\\)|\\.dropCollection\\s*\\(" }
+        - { field: content, op: regex_match, value: "\\.drop\\s*\\(\\s*\\)|\\.dropCollection\\s*\\(" }
+        - { field: allow, op: regex_match, value: "\\.drop\\s*\\(\\s*\\)|\\.dropCollection\\s*\\(" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "mongodb.drop-collection" }
+    remediation: "drop() removes the entire collection. Backup first: mongodump --db=dbname --collection=collname"
+
+  - id: destructive.database.mongodb.delete-all
+    severity: high
+    asset_type: hook
+    description: "remove({}) or deleteMany({}) deletes ALL documents. Add filter criteria."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\.(?:remove|deleteMany)\\s*\\(\\s*\\{\\s*\\}\\s*\\)" }
+        - { field: content, op: regex_match, value: "\\.(?:remove|deleteMany)\\s*\\(\\s*\\{\\s*\\}\\s*\\)" }
+        - { field: allow, op: regex_match, value: "\\.(?:remove|deleteMany)\\s*\\(\\s*\\{\\s*\\}\\s*\\)" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "mongodb.delete-all" }
+    remediation: "An empty filter {} matches ALL documents. Add filter criteria: db.collection.deleteMany({ status: 'expired' })"
+
+  - id: destructive.database.mongodb.mongorestore-drop
+    severity: high
+    asset_type: hook
+    description: "mongorestore --drop deletes existing data before restoring."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "mongorestore\\s+.*--drop" }
+        - { field: content, op: regex_match, value: "mongorestore\\s+.*--drop" }
+        - { field: allow, op: regex_match, value: "mongorestore\\s+.*--drop" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "mongodb.mongorestore-drop" }
+    remediation: "mongorestore --drop drops collections before restoring them. Restore to a different database first or remove --drop."
+
+  - id: destructive.database.mongodb.collection-drop
+    severity: high
+    asset_type: hook
+    description: "collection.drop() permanently deletes the collection."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "db\\.[a-zA-Z_][a-zA-Z0-9_]*\\.drop\\s*\\(" }
+        - { field: content, op: regex_match, value: "db\\.[a-zA-Z_][a-zA-Z0-9_]*\\.drop\\s*\\(" }
+        - { field: allow, op: regex_match, value: "db\\.[a-zA-Z_][a-zA-Z0-9_]*\\.drop\\s*\\(" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "mongodb.collection-drop" }
+    remediation: "db.<collection>.drop() deletes the collection and all documents. Backup first and check stats."

@@ -112,6 +112,44 @@ func TestDestructive_GitDomain(t *testing.T) {
 	}
 }
 
+// TestDestructive_DatabaseDomain — Task 6:database 域 7 子域规则(112 dest + 57 safe→post_exclude)。
+// 增量构建:每转写完一个子域就追加该子域的测试用例并提交。
+// 规则名对齐 dcg database/<sub>.rs 的 pattern name。
+func TestDestructive_DatabaseDomain(t *testing.T) {
+	rules, errs := LoadBuiltin()
+	if len(errs) > 0 {
+		t.Fatalf("LoadBuiltin errors: %v", errs)
+	}
+	dbRules := filterRulesByDomain(rules, "database")
+
+	cases := []struct {
+		name   string
+		cmd    string
+		field  string
+		wantID string
+	}{
+		// ===== mongodb(6 dest + 5 safe→post_exclude)=====
+		{"mongo-drop-database", "db.dropDatabase()", "command", "destructive.database.mongodb.drop-database"},
+		{"mongo-drop-collection", "db.users.drop()", "command", "destructive.database.mongodb.drop-collection"},
+		{"mongo-delete-all", "db.users.deleteMany({})", "command", "destructive.database.mongodb.delete-all"},
+		{"mongo-mongorestore-drop", "mongorestore --drop /backup", "command", "destructive.database.mongodb.mongorestore-drop"},
+		// safe 不误报(find/count/aggregate/explain 含 destructive 时不被 post_exclude 排除)
+		{"mongo-find-safe", "db.users.find({status: 'active'})", "command", ""},
+		{"mongo-count-safe", "db.users.countDocuments({})", "command", ""},
+		{"mongo-aggregate-safe", "db.users.aggregate([{$match: {x: 1}}])", "command", ""},
+		{"mongo-explain-safe", "db.users.find({}).explain()", "command", ""},
+		{"mongo-mongodump-no-drop-safe", "mongodump --out=/backup", "command", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			hitID := evalRulesForCommand(t, dbRules, c.field, c.cmd)
+			if hitID != c.wantID {
+				t.Errorf("cmd=%q field=%s: got %q want %q", c.cmd, c.field, hitID, c.wantID)
+			}
+		})
+	}
+}
+
 // TestDestructive_FilesystemDomain — Task 5:filesystem 域 26 条 dest 规则 + safe→post_exclude。
 // 覆盖:rm-rf /、rm -rf ~、find / -delete、unlink /etc/passwd 等 dest 命中;
 // safe 不误报:rm -i file(无 -rf 标志不匹配)、rm /tmp/foo(post_exclude 排除 tmp 路径)。
