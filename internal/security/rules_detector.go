@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 
 	"code-agent-sentinel/internal/config"
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/security/ruleengine"
+	"code-agent-sentinel/internal/security/ruleengine/semantics"
 	"code-agent-sentinel/internal/security/suppression"
 )
 
@@ -148,6 +150,43 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 
 	var out []Finding
 	for _, a := range assets {
+		// 提取命令文本(语义解析器输入):hook/mcp_server 用 command 字段,
+		// script/skill/command/agent/memory 用 content 字段,permissions 无命令文本(跳过语义)。
+		cmdText, _ := commandTextFromAsset(a)
+
+		// 语义缓存:对该 asset 的命令文本跑一次 DispatchCommand(优先级分发),
+		// 所有规则复用。nil = 尚未计算或不可计算(无命令文本/permissions 资产);
+		// 非 nil = 已缓存(含 Unknown,表示语义层无法判定)。
+		// 用 DispatchCommand(优先级分发 git > filesystem > database)而非 Dispatch(domain, ...):
+		// 解决 `git commit -m "rm -rf /"` 跨域冲突 —— filesystem 解析器不识别 git
+		// 数据区边界会误判 Deny;优先级分发让 git Safe 先返回,正确抑制误报。
+		var semResult *semantics.SemanticResult
+		if cmdText != "" && a.Type != configengine.AssetPermissions {
+			res := semantics.DispatchCommand(cmdText)
+			semResult = &res
+		}
+		// semDenyDomain 记录语义 Deny 来源域(从 RuleID 第一段提取,如 "filesystem"/"git"/"snowflake")。
+		// 仅对该域规则跳过正则(语义已判破坏,正则不必再跑)。
+		// 注意:snowflake 域 RuleID 是 "snowflake.drop",域段 = "snowflake",
+		// 但 sentinel 规则域是 "database" —— 需特殊映射(见下方 semDenyRuleDomain)。
+		semDenyDomain := ""
+		// semDenyRuleDomain 映射到 sentinel 规则的 domain Metadata:
+		//   git → git, filesystem → filesystem, snowflake → database
+		semDenyRuleDomain := ""
+		if semResult != nil && semResult.Decision == semantics.Deny && semResult.RuleID != "" {
+			semDenyDomain = strings.SplitN(semResult.RuleID, ".", 2)[0]
+			switch semDenyDomain {
+			case "git":
+				semDenyRuleDomain = "git"
+			case "filesystem":
+				semDenyRuleDomain = "filesystem"
+			case "snowflake":
+				semDenyRuleDomain = "database"
+			}
+		}
+		// semFindingEmitted 标记语义 finding 是否已构造(去重:一个 asset 一条语义 finding)。
+		semFindingEmitted := false
+
 		for _, r := range allRules {
 			// 规则按 asset_type 路由(Covers=nil → 全资产传入,内部按类型分发)
 			if string(r.AssetType) != string(a.Type) {
@@ -157,10 +196,55 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 			if r.ProjectPath != "" && !pathInProject(a.SourcePath, r.ProjectPath) {
 				continue
 			}
+
+			// 语义两道关卡(仅对有命令文本 + 有语义解析器的域 + 非 permissions 资产触发)。
+			// domain 来自规则 Metadata["domain"](destructive.<domain>.<pattern>)。
+			domain, _ := r.Metadata["domain"].(string)
+			semActive := semResult != nil && semantics.HasParser(domain)
+
+			if semActive {
+				// 关卡 1:正则前语义判定。
+				//   Deny + 规则域 == 语义来源域(mapped)→ 该域所有规则跳过正则(语义已判破坏);
+				//     对首条匹配规则构造一次语义 finding(去重:semFindingEmitted 标记)。
+				//   Safe → 跳过该规则(防误报,如 git commit -m 数据区内的 rm 字面量)。
+				//     Safe 来自优先级最高的解析器(如 git),对所有有解析器的域规则生效 ——
+				//     若 git 判 Safe(commit -m 数据区),filesystem 规则也不应报(避免误报)。
+				//   Unknown → 走正则
+				switch semResult.Decision {
+				case semantics.Deny:
+					if domain == semDenyRuleDomain {
+						// 对首条匹配规则构造语义 finding(去重)。
+						// 优先用 dcg_rule_id == sem.RuleID 的规则(精确匹配,继承正确 severity/remediation);
+						// 若无精确匹配(snowflake.drop 是通用语义 RuleID,无对应 dcg_rule_id),
+						// 用该域首条规则做载体(severity 取规则自己的,但 RuleID 用 semantic.* 覆盖)。
+						if !semFindingEmitted {
+							f := makeSemanticFinding(d, r, a, *semResult)
+							fp := ruleengine.Fingerprint(r, a.ID)
+							applySuppression(&f, fp, d.baseline, d.supprs)
+							out = append(out, f)
+							semFindingEmitted = true
+						}
+						continue // 该域所有规则跳过正则(语义已判破坏)
+					}
+				case semantics.Safe:
+					continue // 跳过该规则(语义判安全,防误报)
+				}
+			}
+
 			res := ruleengine.Eval(r, a)
 			if !res.Matched {
 				continue
 			}
+
+			// 关卡 2:正则后语义 Safe 复核(防误报)。
+			// 正则命中,但若语义判 Safe,丢弃 finding(如正则对 git commit -m 数据区
+			// 内 rm 字面量误报,语义 Safe 复核抑制)。
+			// Deny 在关卡 1 已处理(不会走到这里,semDenyRuleDomain 域规则已 continue);
+			// Unknown 不复核(正则命中即报)。
+			if semActive && semResult.Decision == semantics.Safe {
+				continue // 丢弃正则误报
+			}
+
 			fp := ruleengine.Fingerprint(r, a.ID)
 			f := Finding{
 				DetectorID:  d.ID(),
@@ -244,4 +328,59 @@ func startsWithDotDot(rel string) bool {
 // 非导出方法,不进公开 API。
 func (d *RulesDetector) rulesForTest() []ruleengine.Rule {
 	return d.baseRules
+}
+
+// commandTextFromAsset 从资产提取命令文本 + 字段名(语义解析器输入)。
+//   - hook/mcp_server:取 Fields["command"](命令行文本),field="command"
+//   - script/skill/command/agent/memory:取 Content(脚本/markdown 正文),field="content"
+//   - permissions(allow 字段)及其他:返回 ("","")(权限声明非命令,语义层跳过)
+//
+// 字段缺失(如 hook 无 command)返回 ("",""),语义关卡短路。
+func commandTextFromAsset(a configengine.Asset) (text string, field string) {
+	switch a.Type {
+	case configengine.AssetHook, configengine.AssetMCPServer:
+		if v, ok := a.Fields["command"].(string); ok {
+			return v, "command"
+		}
+		return "", ""
+	case configengine.AssetScript, configengine.AssetSkill, configengine.AssetCommand,
+		configengine.AssetAgent, configengine.AssetMemory:
+		return a.Content, "content"
+	}
+	return "", ""
+}
+
+// makeSemanticFinding 构造语义 Deny finding(关卡 1 用)。
+//
+// 与正则 finding 的区别:
+//   - RuleID:用 `semantic.<dcg_rule_id>`(如 semantic.filesystem.rm-rf-root-home),
+//     与正则规则 ID(destructive.filesystem.rm-rf-root-home)区分,便于 UI/审计追溯来源。
+//   - Evidence:用 sem.Reason(语义解析器的判定理由,如 "rm -rf /(递归强制删根/home)")
+//   - Severity/Locations:语义解析器不产位置信息,Locations 留空;Severity 复用规则的 severity
+//     (规则是 destructive.filesystem.rm-rf-root-home → critical,语义 finding 继承)
+//
+// RuleID 映射:sem.RuleID 是 dcg 风格(如 "filesystem.rm-rf-root-home" / "git.reset-hard"),
+// 加 "semantic." 前缀避免与正则规则 ID 冲突(正则规则用 "destructive." 前缀)。
+// 不查找匹配的 sentinel 规则取其 ID —— 简化实现,且语义 finding 与正则 finding
+// 可同时出现(若用户想区分来源)。Fingerprint 仍用规则 r 算(稳定锚定规则意图,
+// 不受 Evidence 文本变化影响)。
+func makeSemanticFinding(d *RulesDetector, r ruleengine.Rule, a configengine.Asset,
+	sem semantics.SemanticResult) Finding {
+	ruleID := "semantic." + sem.RuleID
+	if sem.RuleID == "" {
+		// 语义解析器未填 RuleID(理论上不会发生,Deny 必填 RuleID),兜底用规则 ID
+		ruleID = r.ID
+	}
+	return Finding{
+		DetectorID:  d.ID(),
+		RuleID:      ruleID,
+		Severity:    Severity(r.Severity),
+		AssetID:     a.ID,
+		AssetType:   a.Type,
+		AssetName:   a.Name,
+		Message:     r.Description,
+		Evidence:    truncate(sem.Reason, 200),
+		Remediation: r.Remediation,
+		Fingerprint: ruleengine.Fingerprint(r, a.ID),
+	}
 }

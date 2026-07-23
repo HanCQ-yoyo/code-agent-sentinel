@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"code-agent-sentinel/internal/configengine"
@@ -468,5 +469,192 @@ func TestRulesFindingLocationsPropagated(t *testing.T) {
 	}
 	if out[0].Locations[0].Line != 2 {
 		t.Errorf("命中应在第 2 行, got %d", out[0].Locations[0].Line)
+	}
+}
+
+// TestRulesDetector_SemanticNoFalsePositive 验证语义 Safe 复核抑制正则误报:
+// `git commit -m "rm -rf /"` 中 rm -rf 在 -m 数据区(字面量不执行),
+// destructive.filesystem.rm-* 正则规则本会误报,语义层应判 Safe 并丢弃 finding。
+//
+// 两道关卡都会生效:
+//   - 关卡 1(正则前):filesystem 域 Dispatch 返回 Safe → 跳过 rm-* 规则(根本不跑正则)
+//   - 关卡 2(正则后):即便有规则命中,Safe 复核也会丢弃
+//
+// 本用例命令文本以 git 开头,filesystem 解析器 RmSemanticDecision 仍能从中提取 rm 子命令
+// 并判定 Safe(rm -rf 后跟 / 是 Deny,但此处 rm -rf 在引号内是 git commit 的 -m 参数,
+// 不是独立 rm 命令——这是语义解析器需要精确处理的场景)。
+//
+// 注意:本测试用 hook 资产 + Fields["command"],与 destructive 规则的 asset_type=hook 对齐。
+func TestRulesDetector_SemanticNoFalsePositive(t *testing.T) {
+	home := newRulesHome(t)
+	d := NewRulesDetector(home, nil)
+	assets := []configengine.Asset{{
+		ID:   "hook-commit",
+		Type: configengine.AssetHook,
+		Name: "hook",
+		Fields: map[string]any{
+			"command": `git commit -m "rm -rf /"`,
+		},
+	}}
+	findings, err := d.Scan(context.Background(), assets)
+	if err != nil {
+		t.Fatalf("Scan error: %v", err)
+	}
+	for _, f := range findings {
+		if strings.HasPrefix(f.RuleID, "destructive.filesystem.") {
+			t.Errorf("语义 Safe 应抑制 rm -rf 误报(在 git commit -m 数据区),但 got %s: %+v", f.RuleID, f)
+		}
+	}
+}
+
+// TestRulesDetector_SemanticCatchesSplitFlags 验证语义 Deny 兜底捕获正则漏报:
+// `rm -r -f /` 使用拆分 flag(-r -f 而非 -rf),部分正则规则只匹配 -rf 聚簇形式,
+// 可能漏报。语义层 RmSemanticDecision 做 argv 解析,识别 recursive+force 拆分 → Deny,
+// 直接构造 finding(不经正则)。
+//
+// 期望:至少一条 semantic.filesystem.* finding 命中(语义 Deny 兜底)。
+// 语义 finding 的 RuleID 用 "semantic." 前缀 + dcg rule_id(如 semantic.filesystem.rm-rf-root-home),
+// 与正则规则 ID(destructive.filesystem.*)区分,便于审计追溯来源。
+func TestRulesDetector_SemanticCatchesSplitFlags(t *testing.T) {
+	home := newRulesHome(t)
+	d := NewRulesDetector(home, nil)
+	assets := []configengine.Asset{{
+		ID:   "hook-rm-split",
+		Type: configengine.AssetHook,
+		Name: "hook",
+		Fields: map[string]any{
+			"command": "rm -r -f /",
+		},
+	}}
+	findings, err := d.Scan(context.Background(), assets)
+	if err != nil {
+		t.Fatalf("Scan error: %v", err)
+	}
+	found := false
+	for _, f := range findings {
+		if strings.HasPrefix(f.RuleID, "semantic.filesystem.") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("语义 Deny 兜底应捕获 rm -r -f /(拆分 flag),但无 semantic.filesystem.* finding: %+v", findings)
+	}
+}
+
+// TestRulesDetector_SemanticDenyGitResetHard 验证语义 Deny 对 git 域生效:
+// `git reset --hard` 语义判 Deny,应产 semantic.git.reset-hard finding。
+// 同时验证正则规则本身也能命中(两者不冲突,语义 Deny 优先构造 finding 并 continue)。
+func TestRulesDetector_SemanticDenyGitResetHard(t *testing.T) {
+	home := newRulesHome(t)
+	d := NewRulesDetector(home, nil)
+	assets := []configengine.Asset{{
+		ID:   "hook-reset",
+		Type: configengine.AssetHook,
+		Name: "hook",
+		Fields: map[string]any{
+			"command": "git reset --hard",
+		},
+	}}
+	findings, err := d.Scan(context.Background(), assets)
+	if err != nil {
+		t.Fatalf("Scan error: %v", err)
+	}
+	found := false
+	for _, f := range findings {
+		if f.RuleID == "semantic.git.reset-hard" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("应检出 semantic.git.reset-hard: %+v", findings)
+	}
+}
+
+// TestRulesDetector_SemanticSnowflakeDropTable 验证 database 域语义解析:
+// `snow sql --query 'DROP TABLE x'` 含破坏性 SQL keyword,语义 Deny 应产 finding。
+func TestRulesDetector_SemanticSnowflakeDropTable(t *testing.T) {
+	home := newRulesHome(t)
+	d := NewRulesDetector(home, nil)
+	assets := []configengine.Asset{{
+		ID:   "hook-snow",
+		Type: configengine.AssetHook,
+		Name: "hook",
+		Fields: map[string]any{
+			"command": "snow sql --query 'DROP TABLE x'",
+		},
+	}}
+	findings, err := d.Scan(context.Background(), assets)
+	if err != nil {
+		t.Fatalf("Scan error: %v", err)
+	}
+	found := false
+	for _, f := range findings {
+		if strings.HasPrefix(f.RuleID, "semantic.") && strings.Contains(strings.ToLower(f.Evidence), "drop") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("snow sql DROP TABLE 应被语义层 Deny(semantic.* finding 含 DROP): %+v", findings)
+	}
+}
+
+// TestRulesDetector_SemanticPermissionsSkipped 验证 permissions 资产不跑语义:
+// 语义解析器只处理命令文本(hook/mcp_server/script/skill/command/agent/memory),
+// permissions(allow 字段)是权限声明非命令,语义层应跳过,纯正则求值。
+// Bash(rm -rf /) 是权限声明,正则规则会命中(baseline.wildcard-bash 或 destructive.* 规则),
+// 但语义层不应介入(不构造 semantic finding,不抑制正则)。
+func TestRulesDetector_SemanticPermissionsSkipped(t *testing.T) {
+	home := newRulesHome(t)
+	d := NewRulesDetector(home, nil)
+	assets := []configengine.Asset{{
+		ID:   "perm-rm",
+		Type: configengine.AssetPermissions,
+		Name: "permissions",
+		Fields: map[string]any{
+			"allow": []any{"Bash(rm -rf /)"},
+		},
+	}}
+	findings, err := d.Scan(context.Background(), assets)
+	if err != nil {
+		t.Fatalf("Scan error: %v", err)
+	}
+	// permissions 资产不应有 semantic.* finding(语义层跳过)
+	for _, f := range findings {
+		if strings.HasPrefix(f.RuleID, "semantic.") {
+			t.Errorf("permissions 资产不应跑语义,但 got %s: %+v", f.RuleID, f)
+		}
+	}
+}
+
+// TestRulesDetector_SemanticNoRegressionOnContainers 验证无语义解析器的域(containers)
+// 不受影响:语义层返回 Unknown,纯正则求值,既不 Deny 兜底也不 Safe 抑制。
+// docker rm -f x 应被 destructive.containers.docker.rm-force 正则规则命中。
+func TestRulesDetector_SemanticNoRegressionOnContainers(t *testing.T) {
+	home := newRulesHome(t)
+	d := NewRulesDetector(home, nil)
+	assets := []configengine.Asset{{
+		ID:   "hook-docker",
+		Type: configengine.AssetHook,
+		Name: "hook",
+		Fields: map[string]any{
+			"command": "docker rm -f x",
+		},
+	}}
+	findings, err := d.Scan(context.Background(), assets)
+	if err != nil {
+		t.Fatalf("Scan error: %v", err)
+	}
+	found := false
+	for _, f := range findings {
+		if f.RuleID == "destructive.containers.docker.rm-force" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("containers 域无语义解析器,正则应正常命中 destructive.containers.docker.rm-force: %+v", findings)
 	}
 }
