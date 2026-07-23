@@ -45,6 +45,51 @@ func TestCompilePattern_FindAllStringIndex(t *testing.T) {
 	}
 }
 
+// TestCompilePattern_FindAllStringIndex_MultiByte 验证 regexp2 路径在多字节 UTF-8
+// 输入下返回的是字节偏移(而非 rune 偏移)。lookahead (?!-b\b) 强制走 regexp2Wrapper;
+// 前导中文字符(每字 3 字节)使 rune 偏移与字节偏移不一致 —— 若 runeOffsetToByte
+// 实现错误,text[start:end] 会切到错误位置(如切到中文字符中间)或越界。
+//
+// 覆盖 review Important #1(字节偏移正确性)+ Minor #2(locationsFromOffsets 端到端)。
+func TestCompilePattern_FindAllStringIndex_MultiByte(t *testing.T) {
+	// 字节布局:中(0-2) 文(3-5) 空格(6) g(7) i(8) t(9) 空格(10) c(11)...n(23) 空格(24) 文(25-27) 本(28-30)
+	text := "中文 git checkout main 文本"
+	// lookahead (?!-b\b) 强制走 regexp2Wrapper(非 RE2)
+	re, err := CompilePattern(`git\s+checkout\s+(?!-b\b)\S+`, false)
+	if err != nil {
+		t.Fatalf("compile: %v", err)
+	}
+	idxs := re.FindAllStringIndex(text)
+	if len(idxs) != 1 {
+		t.Fatalf("expected 1 match, got %d", len(idxs))
+	}
+	start, end := idxs[0][0], idxs[0][1]
+	// 期望字节区间 [7, 24):"git checkout main"(前导中文占 6 字节 + 空格 1 字节 = 7)
+	if start != 7 || end != 24 {
+		t.Errorf("byte offsets = [%d, %d), want [7, 24)", start, end)
+	}
+	// 关键断言:字节偏移切出的子串必须等于实际匹配文本。
+	// 若实现错误返回 rune 偏移(start=3),text[3:20]="文 git checkout " ≠ 匹配文本。
+	if got := text[start:end]; got != "git checkout main" {
+		t.Errorf("text[%d:%d] = %q, want %q", start, end, got, "git checkout main")
+	}
+
+	// Minor #2:端到端 Location 验证(多字节 + lookahead 经 locationsFromOffsets)。
+	// 验证字节偏移传入 locationsFromOffsets 后得到正确的 1-based 行列。
+	locs := locationsFromOffsets(text, idxs)
+	if len(locs) != 1 {
+		t.Fatalf("expected 1 location, got %d", len(locs))
+	}
+	// 单行文本,第 1 行。startCol = byte 7 → 列 8(1-based:7-0+1)。
+	// endCol:末字节 23 → 列 24,半开区间再 +1 = 25。
+	if locs[0].Line != 1 {
+		t.Errorf("Line = %d, want 1", locs[0].Line)
+	}
+	if locs[0].StartCol != 8 || locs[0].EndCol != 25 {
+		t.Errorf("col = [%d, %d), want [8, 25)", locs[0].StartCol, locs[0].EndCol)
+	}
+}
+
 func TestCompilePattern_Dotall(t *testing.T) {
 	// dotall 透传:RE2 用 (?s),regexp2 用 Singleline flag。
 	// . 匹配换行 → 跨行命中。

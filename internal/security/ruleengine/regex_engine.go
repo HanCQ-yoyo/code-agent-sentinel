@@ -154,8 +154,10 @@ func (w *regexp2Wrapper) FindAllStringIndex(s string) [][2]int {
 		start := runeOffsetToByte(s, m.Index)
 		matchText := m.String()
 		end := start + len(matchText)
-		if start < 0 || start > len(s) || end > len(s) {
-			// 容错:rune→字节转换异常时跳过此匹配,不破坏循环
+		// 容错:rune→字节转换异常时跳过此匹配,不破坏循环。
+		// start 不可能 < 0(runeOffsetToByte 只返回 0 / len(text) / 正 byteOff),
+		// 故仅校验越界上界。
+		if start > len(s) || end > len(s) {
 			m, err = w.re.FindNextMatch(m)
 			if err != nil {
 				break
