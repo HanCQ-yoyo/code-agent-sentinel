@@ -111,3 +111,70 @@ func TestDestructive_GitDomain(t *testing.T) {
 		})
 	}
 }
+
+// TestDestructive_FilesystemDomain — Task 5:filesystem 域 26 条 dest 规则 + safe→post_exclude。
+// 覆盖:rm-rf /、rm -rf ~、find / -delete、unlink /etc/passwd 等 dest 命中;
+// safe 不误报:rm -i file(无 -rf 标志不匹配)、rm /tmp/foo(post_exclude 排除 tmp 路径)。
+//
+// 规则名对齐 dcg core/filesystem.rs 的 pattern name(如 rm-rf-root-home 而非 rm-root-absolute)。
+func TestDestructive_FilesystemDomain(t *testing.T) {
+	rules, errs := LoadBuiltin()
+	if len(errs) > 0 {
+		t.Fatalf("LoadBuiltin errors: %v", errs)
+	}
+	fsRules := filterRulesByDomain(rules, "filesystem")
+	if len(fsRules) < 26 {
+		t.Fatalf("expected ≥26 filesystem rules, got %d", len(fsRules))
+	}
+
+	cases := []struct {
+		name   string
+		cmd    string
+		field  string
+		wantID string
+	}{
+		// dest 命中(Critical:root/home/system 目标)
+		{"rm-rf-root", "rm -rf /", "command", "destructive.filesystem.rm-rf-root-home"},
+		{"rm-rf-home", "rm -rf ~", "command", "destructive.filesystem.rm-rf-root-home"},
+		{"rm-r-f-separate-root", "rm -r -f /", "command", "destructive.filesystem.rm-r-f-separate-root-home"},
+		{"rm-recursive-force-root", "rm --recursive --force /", "command", "destructive.filesystem.rm-recursive-force-root-home"},
+		{"find-delete-root", "find / -delete", "command", "destructive.filesystem.find-delete-root-home"},
+		{"find-delete-etc", "find /etc -delete", "command", "destructive.filesystem.find-delete-root-home"},
+		{"unlink-etc", "unlink /etc/passwd", "command", "destructive.filesystem.unlink-root-home"},
+		{"truncate-zero-etc", "truncate -s 0 /etc/passwd", "command", "destructive.filesystem.truncate-zero-root-home"},
+		{"shred-etc", "shred /etc/passwd", "command", "destructive.filesystem.shred-root-home"},
+		{"tar-remove-files-etc", "tar --remove-files -cf out.tar /etc", "command", "destructive.filesystem.tar-remove-files-root-home"},
+		{"dd-of-etc", "dd if=/dev/zero of=/etc/passwd", "command", "destructive.filesystem.dd-overwrite-root-home"},
+		{"mv-etc", "mv /etc /tmp/x", "command", "destructive.filesystem.mv-sensitive-source-root-home"},
+		{"redirect-truncate-etc", "echo data > /etc/passwd", "command", "destructive.filesystem.redirect-truncate-root-home"},
+		// dest 命中(High:非 root/home 目标)
+		{"rm-rf-general", "rm -rf ./build", "command", "destructive.filesystem.rm-rf-general"},
+		{"find-delete-general", "find . -delete", "command", "destructive.filesystem.find-delete-general"},
+		{"unlink-general", "unlink ./scratch", "command", "destructive.filesystem.unlink-general"},
+		{"truncate-zero-general", "truncate -s 0 ./file", "command", "destructive.filesystem.truncate-zero-general"},
+		{"shred-general", "shred ./file", "command", "destructive.filesystem.shred-general"},
+		{"tar-remove-files-general", "tar --remove-files -cf out.tar ./src", "command", "destructive.filesystem.tar-remove-files-general"},
+		{"dd-overwrite-general", "dd of=./file", "command", "destructive.filesystem.dd-overwrite-general"},
+		{"mv-dynamic-path", "mv $VAR /tmp/x", "command", "destructive.filesystem.mv-dynamic-path"},
+		// 传播链(Critical:跨段敏感路径传播后强制删除)
+		{"cp-sensitive-then-delete", "cp -a /etc /tmp/x && rm -rf /tmp/x", "command", "destructive.filesystem.cp-sensitive-then-delete"},
+		{"ln-symlink-sensitive-then-delete", "ln -s /etc /tmp/x && rm -rf /tmp/x", "command", "destructive.filesystem.ln-symlink-sensitive-then-delete"},
+		{"rsync-sensitive-then-delete", "rsync -a /etc/ /tmp/dest/ && rm -rf /tmp/dest", "command", "destructive.filesystem.rsync-sensitive-then-delete"},
+		// safe 不误报(post_exclude 排除 tmp 路径 / 非破坏形态)
+		{"rm-rf-tmp-safe", "rm -rf /tmp/foo", "command", ""},                 // post_exclude: rm-rf-tmp
+		{"rm-recursive-force-tmp-safe", "rm --recursive --force /tmp/foo", "command", ""}, // post_exclude: rm-recursive-force-tmp
+		{"find-delete-tmp-safe", "find /tmp/foo -delete", "command", ""},     // post_exclude: find-delete-tmp
+		{"unlink-tmp-safe", "unlink /tmp/scratch", "command", ""},            // post_exclude: unlink-tmp
+		{"rm-interactive-safe", "rm -i file", "command", ""},                 // -i 无 -rf,不匹配
+		{"chmod-normal", "chmod 644 file", "command", ""},                    // 无 chmod 规则(filesystem 域)
+		{"rm-help-safe", "rm --help", "command", ""},                         // 无 -rf,不匹配
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			hitID := evalRulesForCommand(t, fsRules, c.field, c.cmd)
+			if hitID != c.wantID {
+				t.Errorf("cmd=%q field=%s: got %q want %q", c.cmd, c.field, hitID, c.wantID)
+			}
+		})
+	}
+}

@@ -178,3 +178,389 @@ rules:
         - { field: allow, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*stash\\s+clear\\b" }
     metadata: { source: dcg, domain: git, dcg_rule_id: "git.stash-clear" }
     remediation: "改用 git stash drop stash@{n} 逐条删除,先 git stash list 检查"
+  # ===== filesystem 域(源 dcg core/filesystem.rs,26 dest + 32 safe→post_exclude)=====
+  # severity 直接映射 dcg 枚举(见各规则注释)。
+  # 正则适配:dcg 原始 regex 经 sentinel 适配——root-home 规则扩展 [^|;&\s]* 消费路径 token,
+  # 使 hitCtx 包含完整路径,从而 post_exclude 可区分 /tmp(安全)与 /etc(危险)。
+  # safe_pattern(32 条)映射为对应 dest 规则的 post_exclude,正则适配为 hitCtx 子串匹配。
+  # lookahead/lookbehind 走 regexp2(Task 1 分流)。YAML 双引号内 \ 双写、" 转义。
+
+  - id: destructive.filesystem.sed-exec-unverified
+    severity: high
+    asset_type: hook
+    description: "GNU sed executes shell input that dcg cannot statically verify."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?!)" }
+        - { field: content, op: regex_match, value: "(?!)" }
+        - { field: allow, op: regex_match, value: "(?!)" }
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.sed-exec-unverified" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.cp-sensitive-then-delete
+    severity: critical
+    asset_type: hook
+    description: "archive copy of a sensitive path into temp followed by forced recursive deletion is a cross-segment data-loss bypass. EXTREMELY DANGEROUS."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\bcp\\b[^|;&]*(?:\\s(?:-[A-Za-z]*a[A-Za-z]*|--archive)\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)[^|;&\\s'\"]*[^|;&]*(?:&&|;|\\|\\|)[^|;&]*\\brm\\b[^|;&]*\\s(?:-[A-Za-z]*[rR][A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*[rR][A-Za-z]*|-[rR]\\s+-f|-f\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)" }
+        - { field: content, op: regex_match, value: "\\bcp\\b[^|;&]*(?:\\s(?:-[A-Za-z]*a[A-Za-z]*|--archive)\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)[^|;&\\s'\"]*[^|;&]*(?:&&|;|\\|\\|)[^|;&]*\\brm\\b[^|;&]*\\s(?:-[A-Za-z]*[rR][A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*[rR][A-Za-z]*|-[rR]\\s+-f|-f\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)" }
+        - { field: allow, op: regex_match, value: "\\bcp\\b[^|;&]*(?:\\s(?:-[A-Za-z]*a[A-Za-z]*|--archive)\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)[^|;&\\s'\"]*[^|;&]*(?:&&|;|\\|\\|)[^|;&]*\\brm\\b[^|;&]*\\s(?:-[A-Za-z]*[rR][A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*[rR][A-Za-z]*|-[rR]\\s+-f|-f\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)" }
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.cp-sensitive-then-delete" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.ln-symlink-sensitive-then-delete
+    severity: critical
+    asset_type: hook
+    description: "symlink from a sensitive path into temp followed by forced recursive deletion can traverse and destroy the target. EXTREMELY DANGEROUS."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\bln\\b[^|;&]*\\s-[A-Za-z]*s[A-Za-z]*[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)[^|;&\\s'\"]*[^|;&]*(?:&&|;|\\|\\|)[^|;&]*\\brm\\b[^|;&]*\\s(?:-[A-Za-z]*[rR][A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*[rR][A-Za-z]*|-[rR]\\s+-f|-f\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)" }
+        - { field: content, op: regex_match, value: "\\bln\\b[^|;&]*\\s-[A-Za-z]*s[A-Za-z]*[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)[^|;&\\s'\"]*[^|;&]*(?:&&|;|\\|\\|)[^|;&]*\\brm\\b[^|;&]*\\s(?:-[A-Za-z]*[rR][A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*[rR][A-Za-z]*|-[rR]\\s+-f|-f\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)" }
+        - { field: allow, op: regex_match, value: "\\bln\\b[^|;&]*\\s-[A-Za-z]*s[A-Za-z]*[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)[^|;&\\s'\"]*[^|;&]*(?:&&|;|\\|\\|)[^|;&]*\\brm\\b[^|;&]*\\s(?:-[A-Za-z]*[rR][A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*[rR][A-Za-z]*|-[rR]\\s+-f|-f\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)" }
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.ln-symlink-sensitive-then-delete" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.rsync-sensitive-then-delete
+    severity: critical
+    asset_type: hook
+    description: "rsync archive of a sensitive path into temp followed by forced recursive deletion is a cross-segment data-loss bypass. EXTREMELY DANGEROUS."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\brsync\\b[^|;&]*(?:\\s(?:-[A-Za-z]*a[A-Za-z]*|--archive)\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)[^|;&\\s'\"]*[^|;&]*(?:&&|;|\\|\\|)[^|;&]*\\brm\\b[^|;&]*\\s(?:-[A-Za-z]*[rR][A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*[rR][A-Za-z]*|-[rR]\\s+-f|-f\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)" }
+        - { field: content, op: regex_match, value: "\\brsync\\b[^|;&]*(?:\\s(?:-[A-Za-z]*a[A-Za-z]*|--archive)\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)[^|;&\\s'\"]*[^|;&]*(?:&&|;|\\|\\|)[^|;&]*\\brm\\b[^|;&]*\\s(?:-[A-Za-z]*[rR][A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*[rR][A-Za-z]*|-[rR]\\s+-f|-f\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)" }
+        - { field: allow, op: regex_match, value: "\\brsync\\b[^|;&]*(?:\\s(?:-[A-Za-z]*a[A-Za-z]*|--archive)\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)[^|;&\\s'\"]*[^|;&]*(?:&&|;|\\|\\|)[^|;&]*\\brm\\b[^|;&]*\\s(?:-[A-Za-z]*[rR][A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*[rR][A-Za-z]*|-[rR]\\s+-f|-f\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)" }
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rsync-sensitive-then-delete" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.rm-rf-root-home
+    severity: critical
+    asset_type: hook
+    description: "rm -rf on root or home paths is EXTREMELY DANGEROUS. This command will NOT be executed. Ask the user to run it manually if truly needed."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "rm\\s+-[a-zA-Z]*[rR][a-zA-Z]*f[a-zA-Z]*\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*|rm\\s+-[a-zA-Z]*f[a-zA-Z]*[rR][a-zA-Z]*\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*" }
+        - { field: content, op: regex_match, value: "rm\\s+-[a-zA-Z]*[rR][a-zA-Z]*f[a-zA-Z]*\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*|rm\\s+-[a-zA-Z]*f[a-zA-Z]*[rR][a-zA-Z]*\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*" }
+        - { field: allow, op: regex_match, value: "rm\\s+-[a-zA-Z]*[rR][a-zA-Z]*f[a-zA-Z]*\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*|rm\\s+-[a-zA-Z]*f[a-zA-Z]*[rR][a-zA-Z]*\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*" }
+    post_exclude:
+      - "rm\\s+-[a-zA-Z]*[rR][a-zA-Z]*f[a-zA-Z]*\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
+      - "rm\\s+-[a-zA-Z]*f[a-zA-Z]*[rR][a-zA-Z]*\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rm-rf-root-home" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.rm-r-f-separate-root-home
+    severity: critical
+    asset_type: hook
+    description: "rm with separate -r -f flags targeting root or home is EXTREMELY DANGEROUS."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "rm\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+(-[a-zA-Z]+\\s+)*-f\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*|rm\\s+(-[a-zA-Z]+\\s+)*-f\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*" }
+        - { field: content, op: regex_match, value: "rm\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+(-[a-zA-Z]+\\s+)*-f\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*|rm\\s+(-[a-zA-Z]+\\s+)*-f\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*" }
+        - { field: allow, op: regex_match, value: "rm\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+(-[a-zA-Z]+\\s+)*-f\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*|rm\\s+(-[a-zA-Z]+\\s+)*-f\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*" }
+    post_exclude:
+      - "rm\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+(-[a-zA-Z]+\\s+)*-f\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
+      - "rm\\s+(-[a-zA-Z]+\\s+)*-f\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rm-r-f-separate-root-home" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.rm-recursive-force-root-home
+    severity: critical
+    asset_type: hook
+    description: "rm --recursive --force targeting root or home is EXTREMELY DANGEROUS."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "rm\\s+.*--recursive.*--force\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*|rm\\s+.*--force.*--recursive\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*" }
+        - { field: content, op: regex_match, value: "rm\\s+.*--recursive.*--force\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*|rm\\s+.*--force.*--recursive\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*" }
+        - { field: allow, op: regex_match, value: "rm\\s+.*--recursive.*--force\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*|rm\\s+.*--force.*--recursive\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*" }
+    post_exclude:
+      - "rm\\s+.*--recursive.*--force\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
+      - "rm\\s+.*--force.*--recursive\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rm-recursive-force-root-home" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.rm-rf-general
+    severity: high
+    asset_type: hook
+    description: "rm -rf is destructive and requires human approval. Explain what you want to delete and why, then ask the user to run the command manually."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "rm\\s+-[a-zA-Z]*[rR][a-zA-Z]*f[a-zA-Z]*(?:\\s+[^|;&\\s]+)?|rm\\s+-[a-zA-Z]*f[a-zA-Z]*[rR][a-zA-Z]*(?:\\s+[^|;&\\s]+)?" }
+        - { field: content, op: regex_match, value: "rm\\s+-[a-zA-Z]*[rR][a-zA-Z]*f[a-zA-Z]*(?:\\s+[^|;&\\s]+)?|rm\\s+-[a-zA-Z]*f[a-zA-Z]*[rR][a-zA-Z]*(?:\\s+[^|;&\\s]+)?" }
+        - { field: allow, op: regex_match, value: "rm\\s+-[a-zA-Z]*[rR][a-zA-Z]*f[a-zA-Z]*(?:\\s+[^|;&\\s]+)?|rm\\s+-[a-zA-Z]*f[a-zA-Z]*[rR][a-zA-Z]*(?:\\s+[^|;&\\s]+)?" }
+    post_exclude:
+      - "rm\\s+-[a-zA-Z]*[rR][a-zA-Z]*f[a-zA-Z]*\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
+      - "rm\\s+-[a-zA-Z]*f[a-zA-Z]*[rR][a-zA-Z]*\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rm-rf-general" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.rm-r-f-separate
+    severity: high
+    asset_type: hook
+    description: "rm with separate -r -f flags is destructive and requires human approval."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "rm\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+(-[a-zA-Z]+\\s+)*-f(?:\\s+[^|;&\\s]+)?|rm\\s+(-[a-zA-Z]+\\s+)*-f\\s+(-[a-zA-Z]+\\s+)*-[rR](?:\\s+[^|;&\\s]+)?" }
+        - { field: content, op: regex_match, value: "rm\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+(-[a-zA-Z]+\\s+)*-f(?:\\s+[^|;&\\s]+)?|rm\\s+(-[a-zA-Z]+\\s+)*-f\\s+(-[a-zA-Z]+\\s+)*-[rR](?:\\s+[^|;&\\s]+)?" }
+        - { field: allow, op: regex_match, value: "rm\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+(-[a-zA-Z]+\\s+)*-f(?:\\s+[^|;&\\s]+)?|rm\\s+(-[a-zA-Z]+\\s+)*-f\\s+(-[a-zA-Z]+\\s+)*-[rR](?:\\s+[^|;&\\s]+)?" }
+    post_exclude:
+      - "rm\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+(-[a-zA-Z]+\\s+)*-f\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
+      - "rm\\s+(-[a-zA-Z]+\\s+)*-f\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rm-r-f-separate" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.rm-recursive-force-long
+    severity: high
+    asset_type: hook
+    description: "rm --recursive --force is destructive and requires human approval."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "rm\\s+.*--recursive.*--force(?:\\s+[^|;&\\s]+)?|rm\\s+.*--force.*--recursive(?:\\s+[^|;&\\s]+)?" }
+        - { field: content, op: regex_match, value: "rm\\s+.*--recursive.*--force(?:\\s+[^|;&\\s]+)?|rm\\s+.*--force.*--recursive(?:\\s+[^|;&\\s]+)?" }
+        - { field: allow, op: regex_match, value: "rm\\s+.*--recursive.*--force(?:\\s+[^|;&\\s]+)?|rm\\s+.*--force.*--recursive(?:\\s+[^|;&\\s]+)?" }
+    post_exclude:
+      - "rm\\s+.*--recursive.*--force\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
+      - "rm\\s+.*--force.*--recursive\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rm-recursive-force-long" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.find-delete-root-home
+    severity: critical
+    asset_type: hook
+    description: "find <sensitive-path> -delete is bytewise-equivalent to rm -rf on root/home and is EXTREMELY DANGEROUS. This command will NOT be executed."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\bfind\\b[^|;&]*?(?:\\s|=)['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&]*?\\s-delete(?:\\s|$|[;&|)\\n])" }
+        - { field: content, op: regex_match, value: "\\bfind\\b[^|;&]*?(?:\\s|=)['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&]*?\\s-delete(?:\\s|$|[;&|)\\n])" }
+        - { field: allow, op: regex_match, value: "\\bfind\\b[^|;&]*?(?:\\s|=)['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&]*?\\s-delete(?:\\s|$|[;&|)\\n])" }
+    post_exclude:
+      - "\\bfind\\b\\s+/tmp/"
+      - "\\bfind\\b\\s+/var/tmp/"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.find-delete-root-home" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.find-delete-general
+    severity: high
+    asset_type: hook
+    description: "find ... -delete is destructive (bytewise-equivalent to rm -rf on the matched tree) and requires human approval."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\bfind\\b[^|;&]*\\s-delete(?:\\s|$|[;&|)\\n])" }
+        - { field: content, op: regex_match, value: "\\bfind\\b[^|;&]*\\s-delete(?:\\s|$|[;&|)\\n])" }
+        - { field: allow, op: regex_match, value: "\\bfind\\b[^|;&]*\\s-delete(?:\\s|$|[;&|)\\n])" }
+    post_exclude:
+      - "\\bfind\\b\\s+/tmp/"
+      - "\\bfind\\b\\s+/var/tmp/"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.find-delete-general" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.unlink-root-home
+    severity: critical
+    asset_type: hook
+    description: "unlink on a sensitive system or home path is one-shot data destruction with no recovery. EXTREMELY DANGEROUS."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\bunlink\\s+['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&\\s]*" }
+        - { field: content, op: regex_match, value: "\\bunlink\\s+['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&\\s]*" }
+        - { field: allow, op: regex_match, value: "\\bunlink\\s+['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&\\s]*" }
+    post_exclude:
+      - "\\bunlink\\s+/tmp/"
+      - "\\bunlink\\s+/var/tmp/"
+      - "\\bunlink\\s+(?:--help|--version)\\b"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.unlink-root-home" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.unlink-general
+    severity: high
+    asset_type: hook
+    description: "unlink is destructive (POSIX equivalent of rm on a single file) and requires human approval."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\bunlink\\s+\\S+" }
+        - { field: content, op: regex_match, value: "\\bunlink\\s+\\S+" }
+        - { field: allow, op: regex_match, value: "\\bunlink\\s+\\S+" }
+    post_exclude:
+      - "\\bunlink\\s+/tmp/"
+      - "\\bunlink\\s+/var/tmp/"
+      - "\\bunlink\\s+(?:--help|--version)\\b"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.unlink-general" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.truncate-zero-root-home
+    severity: critical
+    asset_type: hook
+    description: "truncate with a potentially shrinking size on a sensitive system or home path destroys data. EXTREMELY DANGEROUS."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\btruncate\\b[^|;&]*?(?:\\s-s\\s+(?!\\+)\\S+|\\s--size=(?!\\+)\\S+)[^|;&]*?\\s+['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&\\s]*" }
+        - { field: content, op: regex_match, value: "\\btruncate\\b[^|;&]*?(?:\\s-s\\s+(?!\\+)\\S+|\\s--size=(?!\\+)\\S+)[^|;&]*?\\s+['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&\\s]*" }
+        - { field: allow, op: regex_match, value: "\\btruncate\\b[^|;&]*?(?:\\s-s\\s+(?!\\+)\\S+|\\s--size=(?!\\+)\\S+)[^|;&]*?\\s+['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&\\s]*" }
+    post_exclude:
+      - "\\btruncate\\b[^|;&]*?\\s+/tmp/"
+      - "\\btruncate\\b[^|;&]*?\\s+/var/tmp/"
+      - "\\btruncate\\s+(?:-s\\s+\\+\\S+|--size=\\+\\S+)\\b"
+      - "\\btruncate\\s+(?:--help|--version)\\b"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.truncate-zero-root-home" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.truncate-zero-general
+    severity: high
+    asset_type: hook
+    description: "truncate with an absolute or shrinking size can destroy file content and requires human approval."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\btruncate\\b[^|;&]*?(?:\\s-s\\s+(?!\\+)\\S+|\\s--size=(?!\\+)\\S+)(?:\\s+[^|;&\\s]+)?" }
+        - { field: content, op: regex_match, value: "\\btruncate\\b[^|;&]*?(?:\\s-s\\s+(?!\\+)\\S+|\\s--size=(?!\\+)\\S+)(?:\\s+[^|;&\\s]+)?" }
+        - { field: allow, op: regex_match, value: "\\btruncate\\b[^|;&]*?(?:\\s-s\\s+(?!\\+)\\S+|\\s--size=(?!\\+)\\S+)(?:\\s+[^|;&\\s]+)?" }
+    post_exclude:
+      - "\\btruncate\\b[^|;&]*?\\s+/tmp/"
+      - "\\btruncate\\b[^|;&]*?\\s+/var/tmp/"
+      - "\\btruncate\\s+(?:-s\\s+\\+\\S+|--size=\\+\\S+)\\b"
+      - "\\btruncate\\s+(?:--help|--version)\\b"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.truncate-zero-general" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.shred-root-home
+    severity: critical
+    asset_type: hook
+    description: "shred on a sensitive system or home path destroys data beyond forensic recovery. EXTREMELY DANGEROUS."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\bshred\\b[^|;&]*?\\s+['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&\\s]*" }
+        - { field: content, op: regex_match, value: "\\bshred\\b[^|;&]*?\\s+['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&\\s]*" }
+        - { field: allow, op: regex_match, value: "\\bshred\\b[^|;&]*?\\s+['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&\\s]*" }
+    post_exclude:
+      - "\\bshred\\b[^|;&]*?\\s+/tmp/"
+      - "\\bshred\\b[^|;&]*?\\s+/var/tmp/"
+      - "\\bshred\\s+(?:--help|--version)\\b"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.shred-root-home" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.shred-general
+    severity: high
+    asset_type: hook
+    description: "shred destroys file content beyond recovery and requires human approval."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\bshred\\s+(?:-[a-zA-Z]+\\s+|--[a-z\\-]+\\s+|--[a-z\\-]+=\\S+\\s+)*\\S" }
+        - { field: content, op: regex_match, value: "\\bshred\\s+(?:-[a-zA-Z]+\\s+|--[a-z\\-]+\\s+|--[a-z\\-]+=\\S+\\s+)*\\S" }
+        - { field: allow, op: regex_match, value: "\\bshred\\s+(?:-[a-zA-Z]+\\s+|--[a-z\\-]+\\s+|--[a-z\\-]+=\\S+\\s+)*\\S" }
+    post_exclude:
+      - "\\bshred\\b[^|;&]*?\\s+/tmp/"
+      - "\\bshred\\b[^|;&]*?\\s+/var/tmp/"
+      - "\\bshred\\s+(?:--help|--version)\\b"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.shred-general" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.tar-remove-files-root-home
+    severity: critical
+    asset_type: hook
+    description: "tar --remove-files on a sensitive system or home path is recursive deletion masquerading as an archive operation. EXTREMELY DANGEROUS."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\btar\\b[^|;&]*?\\s--remove-files\\b[^|;&]*?(?:\\s|=)['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)|\\btar\\b[^|;&]*?(?:\\s|=)['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?\\s--remove-files\\b" }
+        - { field: content, op: regex_match, value: "\\btar\\b[^|;&]*?\\s--remove-files\\b[^|;&]*?(?:\\s|=)['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)|\\btar\\b[^|;&]*?(?:\\s|=)['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?\\s--remove-files\\b" }
+        - { field: allow, op: regex_match, value: "\\btar\\b[^|;&]*?\\s--remove-files\\b[^|;&]*?(?:\\s|=)['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)|\\btar\\b[^|;&]*?(?:\\s|=)['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?\\s--remove-files\\b" }
+    post_exclude:
+      - "\\btar\\b[^|;&]*?\\s+/tmp/"
+      - "\\btar\\b[^|;&]*?\\s+/var/tmp/"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.tar-remove-files-root-home" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.tar-remove-files-general
+    severity: high
+    asset_type: hook
+    description: "tar --remove-files deletes source paths after archiving and requires human approval."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\btar\\b[^|;&]*?\\s--remove-files\\b[^|;&]*" }
+        - { field: content, op: regex_match, value: "\\btar\\b[^|;&]*?\\s--remove-files\\b[^|;&]*" }
+        - { field: allow, op: regex_match, value: "\\btar\\b[^|;&]*?\\s--remove-files\\b[^|;&]*" }
+    post_exclude:
+      - "\\btar\\b[^|;&]*?\\s+/tmp/"
+      - "\\btar\\b[^|;&]*?\\s+/var/tmp/"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.tar-remove-files-general" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.dd-overwrite-root-home
+    severity: critical
+    asset_type: hook
+    description: "dd of=<sensitive-path> overwrites file contents in place. EXTREMELY DANGEROUS on a system or home file."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\bdd\\b[^|;&]*?\\bof=['\"\\\\]?(?!/dev/)(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&\\s]*" }
+        - { field: content, op: regex_match, value: "\\bdd\\b[^|;&]*?\\bof=['\"\\\\]?(?!/dev/)(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&\\s]*" }
+        - { field: allow, op: regex_match, value: "\\bdd\\b[^|;&]*?\\bof=['\"\\\\]?(?!/dev/)(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&\\s]*" }
+    post_exclude:
+      - "\\bof=['\\\"\\\\]?(?:/tmp/|/var/tmp/)"
+      - "\\bdd\\s+(?:--help|--version)\\b"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.dd-overwrite-root-home" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.dd-overwrite-general
+    severity: high
+    asset_type: hook
+    description: "dd with of=<file> overwrites file contents and requires human approval."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\bdd\\b[^|;&]*?\\bof=['\"\\\\]?(?!/dev/)\\S" }
+        - { field: content, op: regex_match, value: "\\bdd\\b[^|;&]*?\\bof=['\"\\\\]?(?!/dev/)\\S" }
+        - { field: allow, op: regex_match, value: "\\bdd\\b[^|;&]*?\\bof=['\"\\\\]?(?!/dev/)\\S" }
+    post_exclude:
+      - "\\bof=['\\\"\\\\]?(?:/tmp/|/var/tmp/)"
+      - "\\bdd\\s+(?:--help|--version)\\b"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.dd-overwrite-general" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.mv-sensitive-source-root-home
+    severity: critical
+    asset_type: hook
+    description: "mv touching a sensitive system or home path is the cross-segment recursive-force-delete bypass. EXTREMELY DANGEROUS."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\bmv\\b[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&\\s]*" }
+        - { field: content, op: regex_match, value: "\\bmv\\b[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&\\s]*" }
+        - { field: allow, op: regex_match, value: "\\bmv\\b[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&\\s]*" }
+    post_exclude:
+      - "\\bmv\\b[^|;&]*?\\s+/tmp/"
+      - "\\bmv\\b[^|;&]*?\\s+/var/tmp/"
+      - "\\bmv\\s+(?:--help|--version)\\b"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.mv-sensitive-source-root-home" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.mv-dynamic-path
+    severity: high
+    asset_type: hook
+    description: "mv with a shell-expanded or escaped path cannot be verified before execution."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\bmv\\b[^|;&]*[\\\\$`]" }
+        - { field: content, op: regex_match, value: "\\bmv\\b[^|;&]*[\\\\$`]" }
+        - { field: allow, op: regex_match, value: "\\bmv\\b[^|;&]*[\\\\$`]" }
+    post_exclude:
+      - "\\bmv\\s+(?:--help|--version)\\b"
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.mv-dynamic-path" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.redirect-truncate-root-home
+    severity: critical
+    asset_type: hook
+    description: "shell truncating redirect (including arbitrary numeric, named, and PowerShell all-stream forms) to a sensitive system or home path destroys the previous file contents. EXTREMELY DANGEROUS."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?<![<>])(?:&>|>&|\\*>|(?:[0-9]+|\\{[A-Za-z_][A-Za-z0-9_]*\\})?>\\|?)\\s*(?:['\"\\\\]|\\$['\"])?(?!/dev/(?:null|zero|full)\\b)(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&\\s]*" }
+        - { field: content, op: regex_match, value: "(?<![<>])(?:&>|>&|\\*>|(?:[0-9]+|\\{[A-Za-z_][A-Za-z0-9_]*\\})?>\\|?)\\s*(?:['\"\\\\]|\\$['\"])?(?!/dev/(?:null|zero|full)\\b)(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&\\s]*" }
+        - { field: allow, op: regex_match, value: "(?<![<>])(?:&>|>&|\\*>|(?:[0-9]+|\\{[A-Za-z_][A-Za-z0-9_]*\\})?>\\|?)\\s*(?:['\"\\\\]|\\$['\"])?(?!/dev/(?:null|zero|full)\\b)(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&\\s]*" }
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.redirect-truncate-root-home" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+
+  - id: destructive.filesystem.redirect-truncate-dynamic-path
+    severity: high
+    asset_type: hook
+    description: "shell redirect to a dynamic or escaped path may truncate a sensitive file and requires human approval."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?<![<>])(?:&>|>&|\\*>|(?:[0-9]+|\\{[A-Za-z_][A-Za-z0-9_]*\\})?>\\|?)\\s*(?:[^|;&\\s]*[\\\\$`]|~[A-Za-z_][^|;&\\s]*|(?!(?:/tmp|/var/tmp)(?:/|(?=[\\s|;&]|$)))/[^|;&\\s]*['\"?*\\[][^|;&\\s]*|[%!][^|;&\\s]*|\\^(?!(?:/tmp|/var/tmp)(?:/|(?=[\\s|;&]|$)))[^|;&\\s]+)" }
+        - { field: content, op: regex_match, value: "(?<![<>])(?:&>|>&|\\*>|(?:[0-9]+|\\{[A-Za-z_][A-Za-z0-9_]*\\})?>\\|?)\\s*(?:[^|;&\\s]*[\\\\$`]|~[A-Za-z_][^|;&\\s]*|(?!(?:/tmp|/var/tmp)(?:/|(?=[\\s|;&]|$)))/[^|;&\\s]*['\"?*\\[][^|;&\\s]*|[%!][^|;&\\s]*|\\^(?!(?:/tmp|/var/tmp)(?:/|(?=[\\s|;&]|$)))[^|;&\\s]+)" }
+        - { field: allow, op: regex_match, value: "(?<![<>])(?:&>|>&|\\*>|(?:[0-9]+|\\{[A-Za-z_][A-Za-z0-9_]*\\})?>\\|?)\\s*(?:[^|;&\\s]*[\\\\$`]|~[A-Za-z_][^|;&\\s]*|(?!(?:/tmp|/var/tmp)(?:/|(?=[\\s|;&]|$)))/[^|;&\\s]*['\"?*\\[][^|;&\\s]*|[%!][^|;&\\s]*|\\^(?!(?:/tmp|/var/tmp)(?:/|(?=[\\s|;&]|$)))[^|;&\\s]+)" }
+    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.redirect-truncate-dynamic-path" }
+    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
