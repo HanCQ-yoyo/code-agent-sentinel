@@ -786,3 +786,107 @@ rules:
         - { field: allow, op: regex_match, value: "(?i)\\bRESET\\s+MASTER\\b" }
     metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.reset-master" }
     remediation: "Use PURGE BINARY LOGS BEFORE 'date' for selective cleanup. Check replicas first: SHOW SLAVE STATUS."
+
+  # ===== database.postgresql 域(源 dcg database/postgresql.rs,8 dest + 2 safe)=====
+  # severity 直接映射 dcg 枚举(drop-database/drop-schema/dropdb-cli=Critical;
+  # drop-table/truncate-table/delete-without-where/pg-dump-clean=High;
+  # stdin-unverified=High)。
+  # dcg safe_pattern(2 条:pg-dump-no-clean/select-query)无需 post_exclude:
+  # destructive 正则只匹配破坏性 SQL 关键字或 --clean/-c 标志,read 操作不匹配。
+  # delete-without-where 正则支持 PostgreSQL 双引号标识符("Users"),忠实 dcg。
+
+  - id: destructive.database.postgresql.stdin-unverified
+    severity: high
+    asset_type: hook
+    description: "psql receives indirect input that dcg cannot statically verify."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?!)" }
+        - { field: content, op: regex_match, value: "(?!)" }
+        - { field: allow, op: regex_match, value: "(?!)" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "postgresql.stdin-unverified" }
+    remediation: "Materialize and review the exact SQL before piping or redirecting it into psql."
+
+  - id: destructive.database.postgresql.drop-database
+    severity: critical
+    asset_type: hook
+    description: "DROP DATABASE permanently deletes the entire database (even with IF EXISTS). Verify and back up first."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bDROP\\s+DATABASE\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bDROP\\s+DATABASE\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bDROP\\s+DATABASE\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "postgresql.drop-database" }
+    remediation: "Backup first: pg_dump -h host -U user dbname > backup.sql. Verify: psql -c '\\l' | grep dbname."
+
+  - id: destructive.database.postgresql.drop-table
+    severity: high
+    asset_type: hook
+    description: "DROP TABLE permanently deletes the table (even with IF EXISTS). Verify and back up first."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bDROP\\s+TABLE\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bDROP\\s+TABLE\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bDROP\\s+TABLE\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "postgresql.drop-table" }
+    remediation: "Backup table first: pg_dump -t tablename dbname > table_backup.sql. Preview: SELECT COUNT(*) FROM tablename."
+
+  - id: destructive.database.postgresql.drop-schema
+    severity: critical
+    asset_type: hook
+    description: "DROP SCHEMA permanently deletes the schema and all its objects (even with IF EXISTS)."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bDROP\\s+SCHEMA\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bDROP\\s+SCHEMA\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bDROP\\s+SCHEMA\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "postgresql.drop-schema" }
+    remediation: "List schema contents first. Backup: pg_dump -n schema_name dbname > schema_backup.sql. Use RESTRICT to fail if not empty."
+
+  - id: destructive.database.postgresql.truncate-table
+    severity: high
+    asset_type: hook
+    description: "TRUNCATE permanently deletes all rows without logging individual deletions."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bTRUNCATE\\s+(?:TABLE\\s+)?[a-zA-Z_]" }
+        - { field: content, op: regex_match, value: "(?i)\\bTRUNCATE\\s+(?:TABLE\\s+)?[a-zA-Z_]" }
+        - { field: allow, op: regex_match, value: "(?i)\\bTRUNCATE\\s+(?:TABLE\\s+)?[a-zA-Z_]" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "postgresql.truncate-table" }
+    remediation: "Wrap in transaction: BEGIN; TRUNCATE tablename; -- verify, then COMMIT or ROLLBACK."
+
+  - id: destructive.database.postgresql.delete-without-where
+    severity: high
+    asset_type: hook
+    description: "DELETE without WHERE clause deletes ALL rows. Add a WHERE clause or use TRUNCATE intentionally."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)DELETE\\s+FROM\\s+(?:(?:[a-zA-Z_][a-zA-Z0-9_]*|\"[^\"]+\")(?:\\.(?:[a-zA-Z_][a-zA-Z0-9_]*|\"[^\"]+\"))?)\\s*(?:;|$)" }
+        - { field: content, op: regex_match, value: "(?i)DELETE\\s+FROM\\s+(?:(?:[a-zA-Z_][a-zA-Z0-9_]*|\"[^\"]+\")(?:\\.(?:[a-zA-Z_][a-zA-Z0-9_]*|\"[^\"]+\"))?)\\s*(?:;|$)" }
+        - { field: allow, op: regex_match, value: "(?i)DELETE\\s+FROM\\s+(?:(?:[a-zA-Z_][a-zA-Z0-9_]*|\"[^\"]+\")(?:\\.(?:[a-zA-Z_][a-zA-Z0-9_]*|\"[^\"]+\"))?)\\s*(?:;|$)" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "postgresql.delete-without-where" }
+    remediation: "Add a WHERE clause: DELETE FROM tablename WHERE condition. Preview: SELECT COUNT(*) FROM tablename."
+
+  - id: destructive.database.postgresql.dropdb-cli
+    severity: critical
+    asset_type: hook
+    description: "dropdb permanently deletes the entire database. Verify the database name carefully."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\bdropdb\\s+" }
+        - { field: content, op: regex_match, value: "\\bdropdb\\s+" }
+        - { field: allow, op: regex_match, value: "\\bdropdb\\s+" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "postgresql.dropdb-cli" }
+    remediation: "dropdb is CLI equivalent of DROP DATABASE. Backup first: pg_dump dbname > backup.sql. List: psql -c '\\l'."
+
+  - id: destructive.database.postgresql.pg-dump-clean
+    severity: high
+    asset_type: hook
+    description: "pg_dump --clean drops objects before creating them. This can be destructive on restore."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "pg_dump\\s+.*(?:--clean|-c\\b)" }
+        - { field: content, op: regex_match, value: "pg_dump\\s+.*(?:--clean|-c\\b)" }
+        - { field: allow, op: regex_match, value: "pg_dump\\s+.*(?:--clean|-c\\b)" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "postgresql.pg-dump-clean" }
+    remediation: "Restore to a new database first. Without --clean: pg_dump dbname > backup.sql."

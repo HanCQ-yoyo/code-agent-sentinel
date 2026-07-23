@@ -67,6 +67,32 @@ func evalRulesForCommand(t *testing.T, rules []Rule, field, cmd string) string {
 	return ""
 }
 
+// evalAllRulesForCommand 合成 Asset 对 cmd 跑规则,返回所有命中规则 id。
+// 用于跨子域重叠 SQL(如 DROP DATABASE 同时命中 mysql 和 postgresql)的验证。
+func evalAllRulesForCommand(t *testing.T, rules []Rule, field, cmd string) []string {
+	t.Helper()
+	asset := makeAssetWithField(field, cmd)
+	var hits []string
+	for _, r := range rules {
+		matched, _ := evalRuleMatch(r, asset)
+		if matched {
+			hits = append(hits, r.ID)
+		}
+	}
+	return hits
+}
+
+// wantAnyHit 检查 wantID 是否在 hits 中(用于跨子域重叠规则的测试)。
+func wantAnyHit(t *testing.T, name, cmd string, hits []string, wantID string) {
+	t.Helper()
+	for _, h := range hits {
+		if h == wantID {
+			return
+		}
+	}
+	t.Errorf("cmd=%q: got %v, want any hit to contain %q", cmd, hits, wantID)
+}
+
 // TestDestructive_GitDomain — Task 4:git 域 12 条 dest 规则 + safe post_exclude。
 // 覆盖:5 条 dest 命中 + 3 条 safe 不误报(含 git commit -m "rm -rf /" 数据区隔)。
 func TestDestructive_GitDomain(t *testing.T) {
@@ -115,6 +141,10 @@ func TestDestructive_GitDomain(t *testing.T) {
 // TestDestructive_DatabaseDomain — Task 6:database 域 7 子域规则(112 dest + 57 safe→post_exclude)。
 // 增量构建:每转写完一个子域就追加该子域的测试用例并提交。
 // 规则名对齐 dcg database/<sub>.rs 的 pattern name。
+//
+// 注意跨子域重叠:SQL 关键字(DROP DATABASE/TABLE/TRUNCATE/DELETE FROM)同时
+// 命中 mysql 和 postgresql 规则。使用 anyHit 验证期望规则在命中集中;safe 用例
+// 期望空命中集。
 func TestDestructive_DatabaseDomain(t *testing.T) {
 	rules, errs := LoadBuiltin()
 	if len(errs) > 0 {
@@ -122,7 +152,8 @@ func TestDestructive_DatabaseDomain(t *testing.T) {
 	}
 	dbRules := filterRulesByDomain(rules, "database")
 
-	cases := []struct {
+	// hitCases:期望 wantID 至少在命中集中出现(可能同时命中其他子域的重叠规则)。
+	hitCases := []struct {
 		name   string
 		cmd    string
 		field  string
@@ -133,12 +164,6 @@ func TestDestructive_DatabaseDomain(t *testing.T) {
 		{"mongo-drop-collection", "db.users.drop()", "command", "destructive.database.mongodb.drop-collection"},
 		{"mongo-delete-all", "db.users.deleteMany({})", "command", "destructive.database.mongodb.delete-all"},
 		{"mongo-mongorestore-drop", "mongorestore --drop /backup", "command", "destructive.database.mongodb.mongorestore-drop"},
-		// safe 不误报(find/count/aggregate/explain 含 destructive 时不被 post_exclude 排除)
-		{"mongo-find-safe", "db.users.find({status: 'active'})", "command", ""},
-		{"mongo-count-safe", "db.users.countDocuments({})", "command", ""},
-		{"mongo-aggregate-safe", "db.users.aggregate([{$match: {x: 1}}])", "command", ""},
-		{"mongo-explain-safe", "db.users.find({}).explain()", "command", ""},
-		{"mongo-mongodump-no-drop-safe", "mongodump --out=/backup", "command", ""},
 		// ===== mysql(11 dest + 5 safe)=====
 		{"mysql-drop-database", "mysql -e 'DROP DATABASE prod'", "command", "destructive.database.mysql.drop-database"},
 		{"mysql-drop-table", "mysql -e 'DROP TABLE users'", "command", "destructive.database.mysql.drop-table"},
@@ -150,18 +175,51 @@ func TestDestructive_DatabaseDomain(t *testing.T) {
 		{"mysql-grant-all", "mysql -e \"GRANT ALL ON *.* TO 'user'@'host'\"", "command", "destructive.database.mysql.grant-all"},
 		{"mysql-drop-user", "mysql -e 'DROP USER admin'", "command", "destructive.database.mysql.drop-user"},
 		{"mysql-reset-master", "mysql -e 'RESET MASTER'", "command", "destructive.database.mysql.reset-master"},
-		// safe 不误报
-		{"mysql-select-safe", "mysql -e 'SELECT 1'", "command", ""},
-		{"mysql-show-safe", "mysql -e 'SHOW DATABASES'", "command", ""},
-		{"mysql-describe-safe", "mysql -e 'DESCRIBE users'", "command", ""},
-		{"mysql-mysqldump-no-drop-safe", "mysqldump mydb > backup.sql", "command", ""},
-		{"mysql-delete-with-where-safe", "mysql -e 'DELETE FROM users WHERE id = 1'", "command", ""},
+		// ===== postgresql(8 dest + 2 safe)=====
+		{"pg-drop-database", "psql -c 'DROP DATABASE mydb'", "command", "destructive.database.postgresql.drop-database"},
+		{"pg-drop-table", "psql -c 'DROP TABLE users'", "command", "destructive.database.postgresql.drop-table"},
+		{"pg-drop-schema", "psql -c 'DROP SCHEMA public CASCADE'", "command", "destructive.database.postgresql.drop-schema"},
+		{"pg-truncate-table", "psql -c 'TRUNCATE TABLE users'", "command", "destructive.database.postgresql.truncate-table"},
+		{"pg-delete-without-where", "psql -c 'DELETE FROM users;'", "command", "destructive.database.postgresql.delete-without-where"},
+		{"pg-dropdb-cli", "dropdb mydb", "command", "destructive.database.postgresql.dropdb-cli"},
+		{"pg-dump-clean", "pg_dump --clean mydb", "command", "destructive.database.postgresql.pg-dump-clean"},
+		{"pg-dump-clean-short", "pg_dump -c mydb", "command", "destructive.database.postgresql.pg-dump-clean"},
 	}
-	for _, c := range cases {
+	for _, c := range hitCases {
 		t.Run(c.name, func(t *testing.T) {
-			hitID := evalRulesForCommand(t, dbRules, c.field, c.cmd)
-			if hitID != c.wantID {
-				t.Errorf("cmd=%q field=%s: got %q want %q", c.cmd, c.field, hitID, c.wantID)
+			hits := evalAllRulesForCommand(t, dbRules, c.field, c.cmd)
+			wantAnyHit(t, c.name, c.cmd, hits, c.wantID)
+		})
+	}
+
+	// safeCases:期望不命中任何 database 规则。
+	safeCases := []struct {
+		name  string
+		cmd   string
+		field string
+	}{
+		// mongodb safe
+		{"mongo-find-safe", "db.users.find({status: 'active'})", "command"},
+		{"mongo-count-safe", "db.users.countDocuments({})", "command"},
+		{"mongo-aggregate-safe", "db.users.aggregate([{$match: {x: 1}}])", "command"},
+		{"mongo-explain-safe", "db.users.find({}).explain()", "command"},
+		{"mongo-mongodump-no-drop-safe", "mongodump --out=/backup", "command"},
+		// mysql safe
+		{"mysql-select-safe", "mysql -e 'SELECT 1'", "command"},
+		{"mysql-show-safe", "mysql -e 'SHOW DATABASES'", "command"},
+		{"mysql-describe-safe", "mysql -e 'DESCRIBE users'", "command"},
+		{"mysql-mysqldump-no-drop-safe", "mysqldump mydb > backup.sql", "command"},
+		{"mysql-delete-with-where-safe", "mysql -e 'DELETE FROM users WHERE id = 1'", "command"},
+		// postgresql safe
+		{"pg-select-safe", "psql -c 'SELECT * FROM users'", "command"},
+		{"pg-dump-no-clean-safe", "pg_dump mydb > backup.sql", "command"},
+		{"pg-delete-with-where-safe", "psql -c 'DELETE FROM users WHERE id = 1'", "command"},
+	}
+	for _, c := range safeCases {
+		t.Run(c.name, func(t *testing.T) {
+			hits := evalAllRulesForCommand(t, dbRules, c.field, c.cmd)
+			if len(hits) > 0 {
+				t.Errorf("cmd=%q field=%s: expected no hits, got %v", c.cmd, c.field, hits)
 			}
 		})
 	}
