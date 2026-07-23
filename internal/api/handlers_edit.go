@@ -136,7 +136,7 @@ func (s *Server) partialRescan(agentID string, updated configengine.Asset) (fres
 	// RunScan 内部:EngineFor(agentID) → Discover → scopeAssets(asset, updated.SourcePath)
 	//   → 扫同 source_path 的全部 sibling(settings + permissions + per-hook)→ saveHistory。
 	// scopeAssets 的 asset 分支与旧 affected 过滤同为 a.SourcePath == path,行为一致。
-	res, err := s.Runner.RunScan(ctx, agentID, scan.ScanScope{Type: "asset", Path: updated.SourcePath}, []string{"rules"})
+	res, err := s.Runner.RunScan(ctx, agentID, scan.ScanScope{Type: "asset", Path: updated.SourcePath}, []string{"rules"}, "") // batchID 占位
 	if err != nil || res == nil {
 		msg := "partial rescan failed: scan returned nil"
 		if err != nil {

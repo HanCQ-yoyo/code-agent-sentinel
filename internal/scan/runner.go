@@ -97,7 +97,7 @@ func (r *Runner) EngineFor(agentID string) *configengine.Engine {
 // agentID 归一化:空串在 EngineFor 内部回退首 agent,saveHistory 也须记录归一化后的
 // agent ID(而非空串),否则 latestScan(agentID) 在 partialRescan dedup 时按真实
 // agent ID 查不到空串记录 → prior 空 → 误报新增(多 agent 场景的跨 agent 误报根因)。
-func (r *Runner) RunScan(ctx context.Context, agentID string, scope ScanScope, detectorIDs []string) (*security.ScanResult, error) {
+func (r *Runner) RunScan(ctx context.Context, agentID string, scope ScanScope, detectorIDs []string, batchID string) (*security.ScanResult, error) {
 	eng := r.EngineFor(agentID)
 	// 归一化 agentID 供 saveHistory 记录:与 EngineFor 的回退逻辑一致(空 → 首 agent ID)。
 	recordAgentID := agentID
@@ -117,13 +117,13 @@ func (r *Runner) RunScan(ctx context.Context, agentID string, scope ScanScope, d
 	for i := range res.Findings {
 		res.Findings[i].AgentID = recordAgentID
 	}
-	r.saveHistory(recordAgentID, scope, res, &inv)
+	r.saveHistory(recordAgentID, scope, res, &inv, batchID)
 	return res, nil
 }
 
 // saveHistory 把扫描结果落盘。ID = StartedAt 时间戳 + 8hex 随机后缀(防同秒冲突)。
 // scope 写入记录;空 scope.Type 归一化为 "global"。
-func (r *Runner) saveHistory(agentID string, scope ScanScope, res *security.ScanResult, inv *configengine.Inventory) {
+func (r *Runner) saveHistory(agentID string, scope ScanScope, res *security.ScanResult, inv *configengine.Inventory, batchID string) {
 	if r.History == nil {
 		return
 	}
@@ -136,6 +136,7 @@ func (r *Runner) saveHistory(agentID string, scope ScanScope, res *security.Scan
 	rec := history.ScanRecord{
 		ID:          res.StartedAt.Format("2006-01-02-15-04-05") + "-" + hex.EncodeToString(b),
 		AgentID:     agentID,
+		BatchID:     batchID,
 		StartedAt:   res.StartedAt,
 		Duration:    res.Duration,
 		Findings:    res.Findings,

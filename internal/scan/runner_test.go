@@ -49,7 +49,7 @@ func TestRunnerRunScanWritesHistory(t *testing.T) {
 	hist := history.NewStore(filepath.Join(dir, "history"))
 	runner := NewRunner(agents, orch, hist)
 
-	res, err := runner.RunScan(context.Background(), "", ScanScope{Type: "global"}, nil)
+	res, err := runner.RunScan(context.Background(), "", ScanScope{Type: "global"}, nil, "")
 	if err != nil {
 		t.Fatalf("RunScan: %v", err)
 	}
@@ -76,7 +76,7 @@ func TestRunnerNilHistoryNoPanic(t *testing.T) {
 	r.Register(security.NewRulesDetector(dir, nil))
 	orch := &security.Orchestrator{Registry: r}
 	runner := NewRunner(agents, orch, nil) // History nil
-	res, err := runner.RunScan(context.Background(), "", ScanScope{Type: "global"}, nil)
+	res, err := runner.RunScan(context.Background(), "", ScanScope{Type: "global"}, nil, "")
 	if err != nil {
 		t.Fatalf("RunScan: %v", err)
 	}
@@ -144,12 +144,12 @@ func TestRunScanProjectScopeFiltersAssets(t *testing.T) {
 	r := newTestRunner(t, dir)
 
 	// global scope:全量(含全局 + 项目资产)
-	resGlobal, err := r.RunScan(context.Background(), "claude-code", ScanScope{Type: "global"}, nil)
+	resGlobal, err := r.RunScan(context.Background(), "claude-code", ScanScope{Type: "global"}, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// project scope:仅 myproj 下资产
-	resProj, err := r.RunScan(context.Background(), "claude-code", ScanScope{Type: "project", Path: proj}, nil)
+	resProj, err := r.RunScan(context.Background(), "claude-code", ScanScope{Type: "project", Path: proj}, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -207,12 +207,12 @@ func TestRunScanAssetScopeScansSiblings(t *testing.T) {
 	r := newTestRunner(t, dir)
 
 	// global scope:应检出两个 Bash(*) finding(全局 + 项目,AssetID 不同)
-	resGlobal, err := r.RunScan(context.Background(), "claude-code", ScanScope{Type: "global"}, nil)
+	resGlobal, err := r.RunScan(context.Background(), "claude-code", ScanScope{Type: "global"}, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	// asset scope:只扫 source_path == src(全局 settings)
-	res, err := r.RunScan(context.Background(), "claude-code", ScanScope{Type: "asset", Path: src}, []string{"rules"})
+	res, err := r.RunScan(context.Background(), "claude-code", ScanScope{Type: "asset", Path: src}, []string{"rules"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -295,7 +295,7 @@ func TestRunScanBackfillsAgentID(t *testing.T) {
 	r := NewRunner(agents, orch, hist)
 
 	// 扫 agent-b
-	res, err := r.RunScan(context.Background(), "agent-b", ScanScope{}, nil)
+	res, err := r.RunScan(context.Background(), "agent-b", ScanScope{}, nil, "")
 	if err != nil {
 		t.Fatalf("RunScan err: %v", err)
 	}
@@ -315,6 +315,25 @@ func TestRunScanBackfillsAgentID(t *testing.T) {
 	}
 	if latest.AgentID != "agent-b" {
 		t.Errorf("history AgentID = %q, want agent-b", latest.AgentID)
+	}
+}
+
+func TestRunScanWritesBatchID(t *testing.T) {
+	home := t.TempDir()
+	agents := []configengine.Agent{
+		{ID: "a1", Name: "A1", RootDir: filepath.Join(home, ".claude"), ClaudeJSON: filepath.Join(home, ".claude.json"), HomeDir: home},
+	}
+	histDir := t.TempDir()
+	hist := history.NewStore(histDir)
+	orch := &security.Orchestrator{Registry: security.NewRegistry()}
+	r := NewRunner(agents, orch, hist)
+	_, err := r.RunScan(context.Background(), "a1", ScanScope{}, nil, "batch-xyz")
+	if err != nil {
+		t.Fatalf("RunScan err: %v", err)
+	}
+	rec, _ := hist.LatestForAgent("a1")
+	if rec == nil || rec.BatchID != "batch-xyz" {
+		t.Errorf("BatchID roundtrip: got %q", rec.BatchID)
 	}
 }
 

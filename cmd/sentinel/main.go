@@ -163,7 +163,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	mgr := scheduler.NewManager(func(agentID string) func(context.Context) error {
 		return func(ctx context.Context) error {
 			// 调度器始终跑 global scope 扫描(Task 14+ 可能按 schedule 配置细化)。
-			_, err := srv.Runner.RunScan(ctx, agentID, scan.ScanScope{Type: "global"}, nil)
+			_, err := srv.Runner.RunScan(ctx, agentID, scan.ScanScope{Type: "global"}, nil, "")
 			return err
 		}
 	})

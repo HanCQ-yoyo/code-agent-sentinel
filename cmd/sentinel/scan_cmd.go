@@ -78,7 +78,7 @@ func runScanCmd(cmd *cobra.Command, cfgPath, detectorsFlag, agentFlag string) er
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 	// CLI sentinel scan 始终是 global scope(全量发现+扫描)。
-	res, err := runner.RunScan(ctx, agentFlag, scan.ScanScope{Type: "global"}, ids)
+	res, err := runner.RunScan(ctx, agentFlag, scan.ScanScope{Type: "global"}, ids, "")
 	if err != nil {
 		return fmt.Errorf("扫描失败: %w", err)
 	}

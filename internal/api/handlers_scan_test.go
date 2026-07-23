@@ -54,11 +54,13 @@ func TestPostScanPassesAgentQuery(t *testing.T) {
 type spyRunner struct {
 	lastAgentID string
 	lastScope   scan.ScanScope
+	lastBatchID string
 }
 
-func (s *spyRunner) RunScan(ctx context.Context, agentID string, scope scan.ScanScope, detectorIDs []string) (*security.ScanResult, error) {
+func (s *spyRunner) RunScan(ctx context.Context, agentID string, scope scan.ScanScope, detectorIDs []string, batchID string) (*security.ScanResult, error) {
 	s.lastAgentID = agentID
 	s.lastScope = scope
+	s.lastBatchID = batchID
 	return &security.ScanResult{}, nil
 }
 

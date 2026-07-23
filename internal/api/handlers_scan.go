@@ -38,7 +38,7 @@ func (s *Server) postScan(c *gin.Context) {
 	scope := scan.ScanScope{Type: scopeType, Path: scopePath}
 	ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
 	defer cancel()
-	res, err := s.Runner.RunScan(ctx, agentID, scope, ids)
+	res, err := s.Runner.RunScan(ctx, agentID, scope, ids, "") // batchID 占位,Task 6 改
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, errorBody("scan_failed", err.Error()))
 		return

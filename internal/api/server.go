@@ -36,7 +36,7 @@ type Server struct {
 // ScanRunner 抽象 *scan.Runner 的公共方法面,让 Server.Runner 可在测试中替换为 spy。
 // *scan.Runner 已满足该接口(见 internal/scan/runner.go RunScan/EngineFor)。
 type ScanRunner interface {
-	RunScan(ctx context.Context, agentID string, scope scan.ScanScope, detectorIDs []string) (*security.ScanResult, error)
+	RunScan(ctx context.Context, agentID string, scope scan.ScanScope, detectorIDs []string, batchID string) (*security.ScanResult, error)
 	EngineFor(agentID string) *configengine.Engine
 }
 

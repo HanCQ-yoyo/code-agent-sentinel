@@ -409,7 +409,7 @@ type errorRunner struct {
 	inner ScanRunner
 }
 
-func (e *errorRunner) RunScan(ctx context.Context, agentID string, scope scan.ScanScope, detectorIDs []string) (*security.ScanResult, error) {
+func (e *errorRunner) RunScan(ctx context.Context, agentID string, scope scan.ScanScope, detectorIDs []string, batchID string) (*security.ScanResult, error) {
 	return nil, errors.New("simulated scan failure")
 }
 
