@@ -168,3 +168,36 @@ func TestRmSemantic_PipeSpaceBeforeOnly(t *testing.T) {
 		t.Errorf("echo y |rm -i: got %v want Deny(管道后无空格也应识别 pipe stdin)", r.Decision)
 	}
 }
+
+// --- --interactive=VALUE 三值覆盖(review Important #1 回归)---
+// GNU rm: --interactive=never ≡ -f(永不提示 = 强制);once/always 仍提示 = interactive。
+// 原实现把任何 --interactive= 都设 interactive,致 rm --interactive=never -r / 被误判 Safe
+// (危险方向 false-negative:破坏性递归删根漏报)。修正后 never 设 force。
+
+// TestRmSemantic_InteractiveNeverForce: rm --interactive=never -r / → Deny。
+// --interactive=never 等价 -f,不再逐个确认;+ -r + / = 破坏性递归删根。
+// 回归 guard:原实现误判 Safe。
+func TestRmSemantic_InteractiveNeverForce(t *testing.T) {
+	r := RmSemanticDecision("rm --interactive=never -r /")
+	if r.Decision != Deny {
+		t.Errorf("rm --interactive=never -r /: got %v want Deny(--interactive=never ≡ -f,递归删根)", r.Decision)
+	}
+}
+
+// TestRmSemantic_InteractiveAlwaysSafe: rm --interactive=always file → Safe。
+// --interactive=always 仍逐个提示确认,interactive 安全。
+func TestRmSemantic_InteractiveAlwaysSafe(t *testing.T) {
+	r := RmSemanticDecision("rm --interactive=always file")
+	if r.Decision != Safe {
+		t.Errorf("rm --interactive=always: got %v want Safe(=interactive 提示确认)", r.Decision)
+	}
+}
+
+// TestRmSemantic_InteractiveOnceSafe: rm --interactive=once file → Safe。
+// --interactive=once 是 GNU 默认行为,逐个提示确认,interactive 安全。
+func TestRmSemantic_InteractiveOnceSafe(t *testing.T) {
+	r := RmSemanticDecision("rm --interactive=once file")
+	if r.Decision != Safe {
+		t.Errorf("rm --interactive=once: got %v want Safe(=interactive 提示确认)", r.Decision)
+	}
+}

@@ -62,14 +62,30 @@ func RmSemanticDecision(command string) SemanticResult {
 		// 长 flag:--recursive / --force / --interactive(整体匹配,不逐字符扫描)。
 		// brief 原实现把 --recursive 当短聚簇逐字符扫描,'r' 误设 recursive、'i' 误设 interactive
 		// (致命 false-positive:rm --recursive 被误判为 interactive 安全)。修正:长选项整体比较。
+		//
+		// --interactive 的值区分(review Important #1):
+		//   - --interactive=never → 永不提示 ≡ -f(force 语义,不是 interactive)
+		//     GNU rm: --interactive=never 等价 -f,不再逐个确认,危险方向。
+		//     原实现把任何 --interactive= 都设 interactive,致 rm --interactive=never -r /
+		//     被误判 Safe(漏报破坏性递归删根)。修正:never 设 force,once/always 设 interactive。
+		//   - --interactive(无 =) → once(GNU 默认),设 interactive。
+		//   - --interactive=once / =always → 仍逐个确认,设 interactive。
 		if strings.HasPrefix(a, "--") && len(a) > 2 {
 			switch {
 			case a == "--recursive":
 				recursive = true
 			case a == "--force":
 				force = true
-			case a == "--interactive" || strings.HasPrefix(a, "--interactive="):
+			case a == "--interactive":
 				interactive = true
+			case strings.HasPrefix(a, "--interactive="):
+				val := strings.TrimPrefix(a, "--interactive=")
+				if val == "never" {
+					force = true // --interactive=never ≡ -f(永不提示 = 强制)
+				} else {
+					// once / always / 其他值均按 interactive 处理(提示确认)。
+					interactive = true
+				}
 			}
 			continue
 		}
