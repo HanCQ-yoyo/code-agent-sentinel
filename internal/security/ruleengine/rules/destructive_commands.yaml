@@ -890,3 +890,184 @@ rules:
         - { field: allow, op: regex_match, value: "pg_dump\\s+.*(?:--clean|-c\\b)" }
     metadata: { source: dcg, domain: database, dcg_rule_id: "postgresql.pg-dump-clean" }
     remediation: "Restore to a new database first. Without --clean: pg_dump dbname > backup.sql."
+
+  # ===== database.redis 域(源 dcg database/redis.rs,14 dest + 6 safe)=====
+  # severity 直接映射 dcg 枚举(flushall/debug-crash/config-dangerous/
+  # config-set-maxmemory/config-set-maxmemory-policy=Critical;
+  # flushdb/debug-sleep/shutdown/config-set-save/config-set-appendonly/
+  # config-rewrite/mass-delete-pipeline=High;config-resetstat=Medium;
+  # stdin-unverified=High)。
+  # dcg safe_pattern(6 条:get/scan/info/keys/dbsize/config-get)含 ^-anchored 负向
+  # lookahead,确保含破坏性关键字时不放行 read 操作。sentinel 中 destructive 正则
+  # 只匹配破坏性命令(FLUSHALL/FLUSHDB/DEBUG SEGFAULT/CONFIG SET 等),
+  # read 操作(GET/SCAN/INFO/KEYS/DBSIZE/CONFIG GET)不匹配,故无 false-positive。
+  # 正则完全按 dcg 源(无 redis-cli 前缀锚定),忠实 dcg keyword gate 语义:
+  # dcg 关键字含 FLUSHALL/FLUSHDB/DEBUG 等,含这些字的命令即触发包,正则再匹配。
+
+  - id: destructive.database.redis.stdin-unverified
+    severity: high
+    asset_type: hook
+    description: "redis-cli receives indirect input that dcg cannot statically verify."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?!)" }
+        - { field: content, op: regex_match, value: "(?!)" }
+        - { field: allow, op: regex_match, value: "(?!)" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.stdin-unverified" }
+    remediation: "Materialize and review the exact Redis commands before piping or redirecting them into the client."
+
+  - id: destructive.database.redis.flushall
+    severity: critical
+    asset_type: hook
+    description: "FLUSHALL permanently deletes ALL keys in ALL databases."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bFLUSHALL\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bFLUSHALL\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bFLUSHALL\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.flushall" }
+    remediation: "Check database sizes first: INFO keyspace / DBSIZE. Consider FLUSHDB (current db only) or DEL specific keys."
+
+  - id: destructive.database.redis.flushdb
+    severity: high
+    asset_type: hook
+    description: "FLUSHDB permanently deletes ALL keys in the current database."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bFLUSHDB\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bFLUSHDB\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bFLUSHDB\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.flushdb" }
+    remediation: "Check current database and key count: CLIENT INFO / DBSIZE. Prefer audited per-key cleanup."
+
+  - id: destructive.database.redis.config-resetstat
+    severity: medium
+    asset_type: hook
+    description: "CONFIG RESETSTAT clears Redis runtime counters and can hide recent incidents."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bCONFIG\\s+RESETSTAT\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bCONFIG\\s+RESETSTAT\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bCONFIG\\s+RESETSTAT\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.config-resetstat" }
+    remediation: "Capture INFO and monitoring data first, then run this manually only when resetting counters is intentional."
+
+  - id: destructive.database.redis.mass-delete-pipeline
+    severity: high
+    asset_type: hook
+    description: "Redis KEYS/SCAN piped to DEL/UNLINK can delete many keys at once."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bredis-cli\\b.*\\b(?:KEYS\\b|--scan\\b|SCAN\\b).*\\|\\s*xargs\\s+(?:-\\S+(?:\\s+\\S+)?\\s+)*redis-cli(?:\\s+\\S+)*\\s+(?:DEL|UNLINK)\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bredis-cli\\b.*\\b(?:KEYS\\b|--scan\\b|SCAN\\b).*\\|\\s*xargs\\s+(?:-\\S+(?:\\s+\\S+)?\\s+)*redis-cli(?:\\s+\\S+)*\\s+(?:DEL|UNLINK)\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bredis-cli\\b.*\\b(?:KEYS\\b|--scan\\b|SCAN\\b).*\\|\\s*xargs\\s+(?:-\\S+(?:\\s+\\S+)?\\s+)*redis-cli(?:\\s+\\S+)*\\s+(?:DEL|UNLINK)\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.mass-delete-pipeline" }
+    remediation: "Inspect first: redis-cli --scan --pattern 'prefix:*' | head -50. Count and back up before selective deletion."
+
+  - id: destructive.database.redis.debug-crash
+    severity: critical
+    asset_type: hook
+    description: "DEBUG SEGFAULT/CRASH will crash the Redis server."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bDEBUG\\s+(?:SEGFAULT|CRASH)\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bDEBUG\\s+(?:SEGFAULT|CRASH)\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bDEBUG\\s+(?:SEGFAULT|CRASH)\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.debug-crash" }
+    remediation: "These commands should be disabled in production: CONFIG SET debug-command no."
+
+  - id: destructive.database.redis.debug-sleep
+    severity: high
+    asset_type: hook
+    description: "DEBUG SLEEP blocks the Redis server and can cause availability issues."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bDEBUG\\s+SLEEP\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bDEBUG\\s+SLEEP\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bDEBUG\\s+SLEEP\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.debug-sleep" }
+    remediation: "Disable in production: CONFIG SET debug-command no."
+
+  - id: destructive.database.redis.shutdown
+    severity: high
+    asset_type: hook
+    description: "SHUTDOWN stops the Redis server. SHUTDOWN NOSAVE risks data loss."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bSHUTDOWN\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bSHUTDOWN\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bSHUTDOWN\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.shutdown" }
+    remediation: "Check for unsaved changes: INFO persistence (rdb_changes_since_last_save). Ensure proper restart mechanism."
+
+  - id: destructive.database.redis.config-dangerous
+    severity: critical
+    asset_type: hook
+    description: "CONFIG SET for dir/dbfilename/slaveof/replicaof can be used for security attacks."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+(?:dir|dbfilename|slaveof|replicaof)\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+(?:dir|dbfilename|slaveof|replicaof)\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+(?:dir|dbfilename|slaveof|replicaof)\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.config-dangerous" }
+    remediation: "Disable in production: rename-command CONFIG \"\". Use ACLs to restrict these commands."
+
+  - id: destructive.database.redis.config-set-maxmemory
+    severity: critical
+    asset_type: hook
+    description: "CONFIG SET maxmemory can trigger immediate mass key eviction if new limit is below current usage."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+maxmemory\\b(?:\\s|$)" }
+        - { field: content, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+maxmemory\\b(?:\\s|$)" }
+        - { field: allow, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+maxmemory\\b(?:\\s|$)" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.config-set-maxmemory" }
+    remediation: "Check current usage first: INFO memory (used_memory vs maxmemory). Prefer gradual reduction."
+
+  - id: destructive.database.redis.config-set-maxmemory-policy
+    severity: critical
+    asset_type: hook
+    description: "CONFIG SET maxmemory-policy changes how Redis evicts keys, risking silent data loss."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+maxmemory-policy\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+maxmemory-policy\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+maxmemory-policy\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.config-set-maxmemory-policy" }
+    remediation: "Check current policy: CONFIG GET maxmemory-policy. Ensure application handles new eviction behavior."
+
+  - id: destructive.database.redis.config-set-save
+    severity: high
+    asset_type: hook
+    description: "CONFIG SET save can disable RDB persistence entirely, risking data loss on restart."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+save\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+save\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+save\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.config-set-save" }
+    remediation: "Check current persistence: CONFIG GET save / CONFIG GET appendonly. Ensure at least one persistence mechanism remains active."
+
+  - id: destructive.database.redis.config-set-appendonly
+    severity: high
+    asset_type: hook
+    description: "CONFIG SET appendonly can disable AOF persistence, risking data loss on restart."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+appendonly\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+appendonly\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+appendonly\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.config-set-appendonly" }
+    remediation: "Check other persistence mechanisms: CONFIG GET save. Ensure at least one remains active."
+
+  - id: destructive.database.redis.config-rewrite
+    severity: high
+    asset_type: hook
+    description: "CONFIG REWRITE persists all runtime CONFIG SET changes to redis.conf permanently."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)\\bCONFIG\\s+REWRITE\\b" }
+        - { field: content, op: regex_match, value: "(?i)\\bCONFIG\\s+REWRITE\\b" }
+        - { field: allow, op: regex_match, value: "(?i)\\bCONFIG\\s+REWRITE\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.config-rewrite" }
+    remediation: "Review current runtime changes first: CONFIG GET *. Ensure no dangerous CONFIG SET changes are pending."

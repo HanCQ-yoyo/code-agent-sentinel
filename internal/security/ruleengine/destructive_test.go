@@ -184,6 +184,20 @@ func TestDestructive_DatabaseDomain(t *testing.T) {
 		{"pg-dropdb-cli", "dropdb mydb", "command", "destructive.database.postgresql.dropdb-cli"},
 		{"pg-dump-clean", "pg_dump --clean mydb", "command", "destructive.database.postgresql.pg-dump-clean"},
 		{"pg-dump-clean-short", "pg_dump -c mydb", "command", "destructive.database.postgresql.pg-dump-clean"},
+		// ===== redis(14 dest + 6 safe)=====
+		{"redis-flushall", "redis-cli FLUSHALL", "command", "destructive.database.redis.flushall"},
+		{"redis-flushdb", "redis-cli FLUSHDB", "command", "destructive.database.redis.flushdb"},
+		{"redis-config-resetstat", "redis-cli CONFIG RESETSTAT", "command", "destructive.database.redis.config-resetstat"},
+		{"redis-mass-delete", "redis-cli KEYS '*' | xargs redis-cli DEL", "command", "destructive.database.redis.mass-delete-pipeline"},
+		{"redis-debug-crash", "redis-cli DEBUG SEGFAULT", "command", "destructive.database.redis.debug-crash"},
+		{"redis-debug-sleep", "redis-cli DEBUG SLEEP 30", "command", "destructive.database.redis.debug-sleep"},
+		{"redis-shutdown", "redis-cli SHUTDOWN", "command", "destructive.database.redis.shutdown"},
+		{"redis-config-dangerous", "redis-cli CONFIG SET dir /tmp", "command", "destructive.database.redis.config-dangerous"},
+		{"redis-config-set-maxmemory", "redis-cli CONFIG SET maxmemory 100mb", "command", "destructive.database.redis.config-set-maxmemory"},
+		{"redis-config-set-maxmemory-policy", "redis-cli CONFIG SET maxmemory-policy allkeys-lru", "command", "destructive.database.redis.config-set-maxmemory-policy"},
+		{"redis-config-set-save", "redis-cli CONFIG SET save ''", "command", "destructive.database.redis.config-set-save"},
+		{"redis-config-set-appendonly", "redis-cli CONFIG SET appendonly no", "command", "destructive.database.redis.config-set-appendonly"},
+		{"redis-config-rewrite", "redis-cli CONFIG REWRITE", "command", "destructive.database.redis.config-rewrite"},
 	}
 	for _, c := range hitCases {
 		t.Run(c.name, func(t *testing.T) {
@@ -214,6 +228,13 @@ func TestDestructive_DatabaseDomain(t *testing.T) {
 		{"pg-select-safe", "psql -c 'SELECT * FROM users'", "command"},
 		{"pg-dump-no-clean-safe", "pg_dump mydb > backup.sql", "command"},
 		{"pg-delete-with-where-safe", "psql -c 'DELETE FROM users WHERE id = 1'", "command"},
+		// redis safe
+		{"redis-get-safe", "redis-cli GET foo", "command"},
+		{"redis-scan-safe", "redis-cli -n 2 SCAN 0", "command"},
+		{"redis-info-safe", "redis-cli INFO", "command"},
+		{"redis-keys-safe", "redis-cli KEYS '*'", "command"},
+		{"redis-dbsize-safe", "redis-cli DBSIZE", "command"},
+		{"redis-config-get-safe", "redis-cli CONFIG GET maxmemory", "command"},
 	}
 	for _, c := range safeCases {
 		t.Run(c.name, func(t *testing.T) {
