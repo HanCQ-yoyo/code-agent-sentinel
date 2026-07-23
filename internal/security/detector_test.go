@@ -49,7 +49,7 @@ func TestDetectorMeta(t *testing.T) {
 		wantRules   int
 		wantCovers  int
 	}{
-		{"rules", NewRulesDetector(tmpHome, nil), "声明式规则引擎", 1, 64, 0},
+		{"rules", NewRulesDetector(tmpHome, nil), "声明式规则引擎", 1, 75, 0},
 		{"secret", NewSecretDetector(nil), "密钥检测", 1, 0, 0},
 		{"dep", NewDependencyDetector(nil), "依赖检测", 2, 0, 4},
 	}
