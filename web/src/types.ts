@@ -57,7 +57,8 @@ export interface ScanRecord extends ScanResult {
 }
 
 // agent 抽象(对应后端 configengine.Agent)
-export interface Agent { id: string; name: string; root_dir: string; claude_json: string }
+// scan_enabled:per-agent 扫描开关(后端 Task 4,nil → true 展开)。前端用 scan_enabled !== false 判定启用。
+export interface Agent { id: string; name: string; root_dir: string; claude_json: string; scan_enabled: boolean }
 
 // 目录树节点(对应后端 configengine.TreeNode)
 export interface TreeNode {
@@ -87,6 +88,8 @@ export interface RawFile {
 export interface ScanSummary {
   id: string; started_at: string; health_score: number; band: string
   finding_count: number; detector_avail: number; detector_total: number; agent_id: string
+  // Task 3:同一次 POST /api/scan?agents=a,b 的所有 agent 共享 batchID。
+  batch_id?: string
 }
 export interface AgentsResponse { agents: Agent[]; current: string }
 
@@ -156,12 +159,37 @@ export interface DetectorsConfig {
 }
 
 // GET /api/dashboard 响应。
+// 单 agent 模式(?agent=<id>):返回 last_scan/agent/agent_name。
+// 聚合模式(?agent=all 或 ?agent=a,b):返回 is_aggregate=true + agent_scans[](每项含 last_scan),
+//   无顶层 last_scan/agent/agent_name。前端按 is_aggregate 分支渲染(Task 10)。
 export interface DashboardData {
   asset_counts: Record<string, number>
   duplicates: unknown[]
   detectors: DetectorMeta[]
-  last_scan: ScanRecord | null
-  // Task 10:后端 dashboard 按 ?agent= 过滤后返回的 agent 上下文(当前选中 agent 的 id/name)。
+  last_scan: ScanRecord | null  // 单 agent 模式;聚合模式缺省 → null
+  // 单 agent 模式:当前选中 agent 的 id/name 供页面上下文显示。
   agent?: string
   agent_name?: string
+  // 聚合模式新增字段(Task 8)
+  is_aggregate?: boolean
+  agent_scans?: AgentScanEntry[]
+}
+
+// 聚合模式 dashboard.agent_scans 的单项:每 agent 最近一次扫描(可能为 null)。
+export interface AgentScanEntry {
+  agent_id: string
+  agent_name: string
+  last_scan: ScanRecord | null
+}
+
+// POST /api/scan?agents=a,b 响应:每个 agent 一项(Task 6)。
+// 成功时含 findings/health_score/finding_count;失败时 error 非空。
+// 注:跨 agent 不聚合健康分(每 agent 独立评分),前端按需自取 results[i].health_score。
+export interface AgentScanResult {
+  agent_id: string
+  scan_id?: string
+  findings?: Finding[]
+  health_score?: HealthScore
+  finding_count?: number
+  error?: string
 }

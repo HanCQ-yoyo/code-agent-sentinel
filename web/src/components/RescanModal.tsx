@@ -13,10 +13,13 @@ interface Props {
 
 export function RescanModal({ open, onClose, initialScope }: Props) {
   const { t } = useTranslation()
-  const { agents, selectedAgent, projects, detectors, runScan, loading } = useStore()
+  const { agents, selectedAgents, projects, detectors, runScan, loading } = useStore()
   const { assets } = useStore()
   const [scopeType, setScopeType] = useState('global')
   const [scopePath, setScopePath] = useState<string | undefined>(undefined)
+  // Task 9:TEMPORARY shim — selectedAgents[0] ?? '' 替换 selectedAgent。
+  // Task 13 将重建 RescanModal 支持 multi-select agent checkbox。
+  const selectedAgent = selectedAgents[0] ?? ''
   const [agent, setAgent] = useState(selectedAgent)
   const [detIDs, setDetIDs] = useState<string[]>([])
 
@@ -35,7 +38,9 @@ export function RescanModal({ open, onClose, initialScope }: Props) {
   const start = async () => {
     // 全选=不传(后端全量);否则传逗号分隔的 id 列表。
     const det = detIDs.length === (detectors ?? []).length ? undefined : detIDs.join(',')
-    await runScan(agent, det, { type: scopeType, path: scopePath })
+    // Task 9:runScan 新签名 (agentIDs[], ...)。TEMPORARY:单选 → [agent](空 → []=后端回退全部 scan_enabled)。
+    // Task 13 将加 multi-select agent checkbox,此处改传多 ID 数组。
+    await runScan(agent ? [agent] : [], det, { type: scopeType, path: scopePath })
     onClose()
   }
 

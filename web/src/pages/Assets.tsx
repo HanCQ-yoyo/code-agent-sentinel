@@ -28,7 +28,7 @@ export default function Assets() {
     favorites, fetchFavorites, saveFavorites,
     pinnedProjects, savePinnedProjects,
     detectors, fetchDetectors,
-    selectedAgent,
+    selectedAgents,
     openRescan,
   } = useStore()
   const [view, setView] = useState<View>('list')
@@ -43,6 +43,10 @@ export default function Assets() {
   // 标签编辑弹窗:点击树节点标签徽标时打开,选 配置/运行时/恢复默认。
   const [tagEdit, setTagEdit] = useState<{ relPath: string; current: DirTag | undefined } | null>(null)
 
+  // Task 9:TEMPORARY shim — selectedAgents[0] ?? '' 替换 selectedAgent。
+  // Task 11 将加 per-agent tabs + agentID override,不再用首 agent 派生。
+  const selectedAgent = selectedAgents[0] ?? ''
+
   useEffect(() => {
     fetchAssets()
     fetchProjects()
@@ -51,17 +55,17 @@ export default function Assets() {
     fetchFavorites()
     // 拉检测器元数据,供资产详情抽屉风险列表的检测器列双语名(与 Findings 页同模式)。
     fetchDetectors()
-    // Task 10:selectedAgent 变化时,资产/项目列表需按新 agent 重拉(后端按 ?agent= 过滤)。
-  }, [fetchAssets, fetchProjects, fetchAgents, fetchDirTags, fetchFavorites, fetchDetectors, selectedAgent])
+    // Task 9:selectedAgents 变化时,资产/项目列表需按新 agent 重拉(后端按 ?agent= 过滤)。
+  }, [fetchAssets, fetchProjects, fetchAgents, fetchDirTags, fetchFavorites, fetchDetectors, selectedAgents])
 
   // 切换上方标签页 → 重新拉对应项目的文件树。与上面一次性 effect 分离:
   // 原先 activeProjectTab 进了同一 effect deps,导致每次点标签页都重跑 fetchProjects,
   // 后端 map 顺序非确定时标签顺序抖动、选中标签跳到最右。现在 projects 只挂载时拉一次,
   // 切标签页只 fetchTree(树随项目变,本就该重拉)。
-  // Task 10:selectedAgent 变化时树也要重拉(后端 Task 7 按 agent 过滤,global 根随 agent root_dir 变)。
+  // Task 9:selectedAgents 变化时树也要重拉(后端 Task 7 按 agent 过滤,global 根随 agent root_dir 变)。
   useEffect(() => {
     fetchTree(activeProjectTab)
-  }, [fetchTree, activeProjectTab, selectedAgent])
+  }, [fetchTree, activeProjectTab, selectedAgents])
 
   // 一次性迁移:若后端收藏为空但旧 localStorage 有数据,并入后端后清掉本地。
   useEffect(() => {

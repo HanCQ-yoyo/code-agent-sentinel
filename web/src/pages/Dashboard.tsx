@@ -11,12 +11,13 @@ import { RiskTrendChart } from '../components/RiskTrendChart'
 
 export default function Dashboard() {
   const { t } = useTranslation()
-  const { dashboard, selectedAgent, fetchDashboard, history, fetchHistory, error, authError } = useStore()
+  const { dashboard, selectedAgents, fetchDashboard, history, fetchHistory, error, authError } = useStore()
   const [selectedDetector, setSelectedDetector] = useState<string | undefined>(undefined)
   useEffect(() => {
     fetchDashboard()
     fetchHistory()
-  }, [fetchDashboard, fetchHistory, selectedAgent])
+    // Task 9:TEMPORARY shim — selectedAgents 替换 selectedAgent。Task 10 重建 Dashboard 聚合视图。
+  }, [fetchDashboard, fetchHistory, selectedAgents])
 
   const detectors = dashboard?.detectors ?? []
   const counts = dashboard?.asset_counts ?? {}

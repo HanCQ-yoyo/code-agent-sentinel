@@ -22,9 +22,11 @@ const { Content } = Layout
 
 export default function App() {
   const { theme } = useTheme()
-  const { loading, fetchLatestScan, fetchSettings, fetchPinnedProjects, rescanOpen, rescanInitial, openRescan, closeRescan, selectedAgent } = useStore()
+  const { loading, fetchLatestScan, fetchSettings, fetchPinnedProjects, rescanOpen, rescanInitial, openRescan, closeRescan, selectedAgents } = useStore()
   const { i18n } = useTranslation()
-  useEffect(() => { fetchLatestScan() }, [fetchLatestScan, selectedAgent])
+  // Task 9:TEMPORARY shim — selectedAgents 替换 selectedAgent。Task 10+ 重建各页 proper multi-agent UI。
+  // 空数组(全选聚合)或选中变化时,重拉 latest scan(空 → 无 query 全局最新 / ?agent=id1,id2)。
+  useEffect(() => { fetchLatestScan() }, [fetchLatestScan, selectedAgents])
   useEffect(() => { fetchSettings() }, [fetchSettings])
   useEffect(() => { fetchPinnedProjects() }, [fetchPinnedProjects])
   const locale = i18n.language === 'en' ? enUS : zhCN

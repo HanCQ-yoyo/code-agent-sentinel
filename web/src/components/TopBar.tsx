@@ -5,9 +5,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useTheme } from '../theme'
 import { useStore } from '../store'
-import { agentMeta } from '../lib/agents'
 import { navLabels } from '../lib/nav'
-import type { Agent } from '../types'
 
 const { Header } = Layout
 
@@ -26,7 +24,7 @@ function leafLabel(pathname: string, t: (k: string) => string): string | null {
 export function TopBar({ onOpenRescan, loading }: Props) {
   const { theme, toggle } = useTheme()
   const { t, i18n } = useTranslation()
-  const { agents, selectedAgent, setSelectedAgent, fetchAgents, language, saveLanguage } = useStore()
+  const { agents, fetchAgents, language, saveLanguage } = useStore()
   const loc = useLocation()
 
   // 当前一级路由(用于面包屑首段)。navLabels 存 i18n key,需 t() 翻译。
@@ -34,7 +32,8 @@ export function TopBar({ onOpenRescan, loading }: Props) {
   const rootLabel = navLabels[root] ? t(navLabels[root]) : undefined
   const leaf = leafLabel(loc.pathname, t)
 
-  // agent 加载:移出 render body 防 render 中触发副作用。
+  // agent 加载:TopBar 仍是首次 agent 列表拉取入口(SettingsAgents 复用此数据)。
+  // Task 9 移除了 agent <Select>;agent 选择 UI 由各页自建(Dashboard 多选/Assets per-agent tabs)。
   useEffect(() => {
     if (!agents) fetchAgents()
   }, [agents, fetchAgents])
@@ -62,14 +61,6 @@ export function TopBar({ onOpenRescan, loading }: Props) {
     >
       <Space size="middle" style={{ flex: 1, minWidth: 0 }}>
         <Breadcrumb items={crumbItems} />
-        <Select
-          size="small"
-          style={{ width: 150 }}
-          value={selectedAgent || agents?.agents?.[0]?.id || undefined}
-          disabled={(agents?.agents?.length ?? 0) <= 1}
-          options={(agents?.agents ?? []).map((a: Agent) => ({ value: a.id, label: `${agentMeta(a).icon} ${agentMeta(a).label}` }))}
-          onChange={setSelectedAgent}
-        />
       </Space>
       <Space size="middle">
         <Select

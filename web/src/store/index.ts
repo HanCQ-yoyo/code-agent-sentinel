@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { apiGet, apiPost, apiPut, apiDelete, AuthError } from '../api/client'
-import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, ScheduleStatus, TreeNode, Project, PinnedProject, DirTagsResponse, RawFile, PreviewResult, EditResult, SuppressionItem, BaselineResult, DetectorsConfig, DashboardData } from '../types'
+import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, ScheduleStatus, TreeNode, Project, PinnedProject, DirTagsResponse, RawFile, PreviewResult, EditResult, SuppressionItem, BaselineResult, DetectorsConfig, DashboardData, AgentScanResult, Agent } from '../types'
 import { type DirTag, type DirTagsMap } from '../lib/dirTags'
 import i18n from '../i18n'
 
@@ -18,9 +18,12 @@ interface State {
   authError: boolean
   // agent
   agents: AgentsResponse | null
-  // 当前选中的 agent(纯视图状态,不持久化到后端;与后端 config.SelectedAgentID 是不同概念)。
-  // fetchAgents 在 selectedAgent 为空时回填首 agent 或 res.current。setSelectedAgent 只改本地。
-  selectedAgent: string
+  // Task 9:多 agent 选择(纯视图状态,不持久化到后端)。
+  // 空 = 全选聚合(默认,Dashboard 渲染所有 agent 的聚合视图);
+  // 非空 = 用户筛选后的 agent IDs(单选 → [id],多选 → [id1,id2])。
+  selectedAgents: string[]
+  // scan_enabled !== false 的 agent 子集(供各页可选项 + 默认扫描目标)。
+  scanEnabledAgents: Agent[]
   // 定时扫描任务列表(GET /api/schedules)
   schedules: ScheduleStatus[]
   // 目录树
@@ -36,7 +39,10 @@ interface State {
   // 选 config/runtime 时隐藏非选中)。前端 Assets 用。
   selectedTagFilter: DirTag | null
   fetchAssets: () => Promise<void>
-  runScan: (agentID?: string, detectors?: string, scope?: { type: string; path?: string }) => Promise<void>
+  // Task 9:runScan 改多 agent。agentIDs 空数组 → 后端回退到所有 scan_enabled agent。
+  // 响应为 AgentScanResult[](数组,非单个 ScanResult),含每 agent 的 findings/health_score/error。
+  // 注:新响应无整体 findings 数组(每 agent 各自有),故不再 set scan;fetchDashboard/fetchHistory 负责刷新视图。
+  runScan: (agentIDs: string[], detectors?: string, scope?: { type: string; path?: string }) => Promise<AgentScanResult[] | undefined>
   fetchDetectors: () => Promise<void>
   fetchDetectorConfig: () => Promise<void>
   saveDetectorConfig: (cfg: DetectorsConfig) => Promise<boolean>
@@ -46,7 +52,13 @@ interface State {
   fetchHistoryDetail: (id: string) => Promise<ScanRecord | undefined>
   deleteHistory: (id: string) => Promise<void>
   fetchAgents: () => Promise<void>
-  setSelectedAgent: (id: string) => void
+  // Task 9:替换 setSelectedAgent。空数组=全选聚合;[id]=单选;[id1,id2]=多选。
+  setSelectedAgents: (ids: string[]) => void
+  // Task 9:agentQuery 拼 ?agent= 查询串(全选→?agent=all;否则 ?agent=id1,id2)。
+  // fetchDashboard/fetchLatestScan 用之;fetchAssets/fetchTree/fetchProjects 暂用单 agent 派生(Task 11 改)。
+  agentQuery: () => string
+  // Task 9:per-agent 扫描开关持久化(PUT /api/agents/:id)。成功后刷新 agents + scanEnabledAgents。
+  saveAgentScanEnabled: (agentID: string, enabled: boolean) => Promise<void>
   fetchSchedules: () => Promise<void>
   createSchedule: (agent_id: string, interval: string, enabled: boolean) => Promise<boolean>
   updateSchedule: (agent_id: string, interval: string, enabled: boolean) => Promise<boolean>
@@ -115,7 +127,7 @@ const wrap = async <T>(fn: () => Promise<T>, set: (p: Partial<State>) => void): 
 
 export const useStore = create<State>((set, get) => ({
   assets: null, scan: null, dashboard: null, detectors: [], detectorConfig: null, history: [], loading: false, error: null, authError: false,
-  agents: null, selectedAgent: '', schedules: [], tree: null, projects: [], activeProjectTab: { kind: 'global' },
+  agents: null, selectedAgents: [], scanEnabledAgents: [], schedules: [], tree: null, projects: [], activeProjectTab: { kind: 'global' },
   dirTagsDefaults: {}, dirTagsOverrides: {}, selectedTagFilter: null,
   favorites: [],
   pinnedProjects: [],
@@ -126,20 +138,26 @@ export const useStore = create<State>((set, get) => ({
   suppressions: [],
   rescanOpen: false,
   rescanInitial: undefined,
+  // Task 9:agentQuery — 全选聚合(?agent=all)或逗号分隔 IDs。
+  // fetchDashboard/fetchLatestScan 用之;fetchAssets/fetchTree/fetchProjects 暂用单 agent 派生(Task 11 正式改)。
+  agentQuery: () => {
+    const ids = get().selectedAgents
+    if (ids.length === 0) return '?agent=all'
+    return `?agent=${encodeURIComponent(ids.join(','))}`
+  },
   fetchAssets: async () => {
-    // Task 10:读 action 拼 ?agent=<selectedAgent>(空则不带,后端回退首 agent)。
-    const a = get().selectedAgent
+    // TEMPORARY(Task 11 正式改):Assets 页按单 agent 派生(selectedAgents[0] ?? '' = 空 → 不带 query,
+    // 后端回退首 agent)。Task 11 将加 agentID override 参数支持 per-agent tabs。
+    const a = get().selectedAgents[0] ?? ''
     const q = a ? `?agent=${encodeURIComponent(a)}` : ''
     const inv = await wrap(() => apiGet<Inventory>(`/api/assets${q}`), set)
     if (inv) set({ assets: inv })
   },
-  runScan: async (agentID, detectors, scope) => {
+  runScan: async (agentIDs, detectors, scope) => {
     set({ loading: true, error: null })
-    // agentID 显式传入时优先;否则回退 selectedAgent(纯视图状态,可能为空)。
-    // 空 agent 时不带 query,后端回退首 agent(handlers_scan.go 与 RunScan 一致)。
-    const a = agentID ?? get().selectedAgent
+    // agentIDs 空数组 → 不带 ?agents=,后端回退到所有 scan_enabled agent。
     const params = new URLSearchParams()
-    if (a) params.set('agent', a)
+    if (agentIDs.length > 0) params.set('agents', agentIDs.join(','))
     if (detectors) params.set('detectors', detectors)
     // scope=global 不传 query,后端缺省 global,等价旧行为。
     if (scope?.type && scope.type !== 'global') {
@@ -147,14 +165,18 @@ export const useStore = create<State>((set, get) => ({
       if (scope.path) params.set('path', scope.path)
     }
     const q = params.toString() ? `?${params.toString()}` : ''
-    const res = await wrap(() => apiPost<ScanResult>(`/api/scan${q}`), set)
-    set({ scan: res ?? null, loading: false })
-    // 扫描成功后刷新 Dashboard + History(新版 Dashboard 读 dashboard/history 而非 scan,
-    // 不刷新则点"重新扫描"后看板无可见更新)。镜像 saveDetectorConfig 的不 await 模式。
+    // Task 6:响应为 AgentScanResult[](数组),非单个 ScanResult。
+    // 新响应无整体 findings(每 agent 各自有),不再 set scan;fetchDashboard/fetchHistory 刷新视图。
+    const res = await wrap(() => apiPost<AgentScanResult[]>(`/api/scan${q}`), set)
+    set({ loading: false })
     if (res) {
+      // 不再 set scan(旧 runScan 从单个 ScanResult 填 scan;新响应是数组无整体 findings)。
+      // Dashboard 读 dashboard.last_scan;Findings 也读 scan(=dashboard.last_scan,由 fetchDashboard 同步)。
+      // fetchDashboard 完成前 Findings 可能短暂显示旧数据 — Task 12 会重建 Findings 页处理此过渡。
       get().fetchDashboard()
       get().fetchHistory()
     }
+    return res
   },
   fetchDetectors: async () => {
     const list = await wrap(() => apiGet<DetectorMeta[]>('/api/detectors'), set)
@@ -185,9 +207,12 @@ export const useStore = create<State>((set, get) => ({
     return false
   },
   fetchLatestScan: async () => {
-    // Task 10:latest scan 也按 selectedAgent 过滤(getScanResult 已支持 ?agent=)。
-    const a = get().selectedAgent
-    const q = a ? `?agent=${encodeURIComponent(a)}` : ''
+    // selectedAgents 空(全选聚合)时不带 ?agent= → 后端 getScanResult("") → LatestForAgent("")
+    // 返回全局最近一条扫描(空串是 "所有 agent" 的合法语义)。
+    // 注意:不能用 ?agent=all —— /api/scan/result 不解析 all,会按 AgentID=="all" 过滤返回 {}。
+    // selectedAgents 非空(单/多 agent 筛选)时用 agentQuery()。
+    const ids = get().selectedAgents
+    const q = ids.length > 0 ? get().agentQuery() : ''
     const res = await wrap(() => apiGet<ScanRecord>(`/api/scan/result${q}`), set)
     if (res && res.findings) set({ scan: res })
   },
@@ -196,9 +221,10 @@ export const useStore = create<State>((set, get) => ({
     if (list) set({ history: list })
   },
   fetchDashboard: async () => {
-    // Task 10:dashboard 按 selectedAgent 过滤;后端返回 agent/agent_name 供页面上下文显示。
-    const a = get().selectedAgent
-    const q = a ? `?agent=${encodeURIComponent(a)}` : ''
+    // Task 9:dashboard 用 agentQuery()(全选→?agent=all 聚合;否则单/多 agent)。
+    // 聚合模式无顶层 last_scan/agent/agent_name,改返回 is_aggregate + agent_scans。
+    // 单 agent 模式仍返回 last_scan,scan 取 res.last_scan ?? null。
+    const q = get().agentQuery()
     const res = await wrap(() => apiGet<DashboardData>(`/api/dashboard${q}`), set)
     if (res) {
       // 归一化 detectors 的 available/reason(与 fetchDetectors 一致)
@@ -220,15 +246,21 @@ export const useStore = create<State>((set, get) => ({
     const res = await wrap(() => apiGet<AgentsResponse>('/api/agents'), set)
     if (res) {
       set({ agents: res })
-      // 仅在 selectedAgent 当前为空时回填:不覆盖用户已选(纯视图状态,setSelectedAgent 只改本地)。
-      // 优先级:res.current 非空 → 用后端当前 agent;否则回退首 agent。
-      if (!get().selectedAgent) {
-        if (res.current) set({ selectedAgent: res.current })
-        else if (res.agents.length > 0) set({ selectedAgent: res.agents[0].id })
-      }
+      // Task 9:派生 scanEnabledAgents(scan_enabled !== false 的子集,供各页可选项)。
+      const sea = (res.agents ?? []).filter(a => a.scan_enabled !== false)
+      set({ scanEnabledAgents: sea })
+      // selectedAgents 保持空(全选聚合,默认值),不回填——Task 10 Dashboard 默认全选聚合视图。
+      // 旧 fetchAgents 在 selectedAgent 为空时回填 res.current/首 agent;新设计下空=全选聚合,
+      // 回填会破坏默认全选语义。res.current 仍在 AgentsResponse 类型里(后端仍返回),但不再用于选择。
     }
   },
-  setSelectedAgent: (id) => set({ selectedAgent: id }),
+  setSelectedAgents: (ids) => set({ selectedAgents: ids }),
+  // Task 9:per-agent 扫描开关持久化。PUT /api/agents/:id { scan_enabled: bool }。
+  // apiPut 返回 { agent_id, scan_enabled }(后端 Task 4),成功后 fetchAgents 刷新 scanEnabledAgents。
+  saveAgentScanEnabled: async (agentID, enabled) => {
+    const ok = await wrap(() => apiPut<{ agent_id: string; scan_enabled: boolean }>(`/api/agents/${encodeURIComponent(agentID)}`, { scan_enabled: enabled }), set)
+    if (ok) get().fetchAgents()
+  },
   fetchSchedules: async () => {
     const res = await wrap(() => apiGet<{ schedules: ScheduleStatus[] }>('/api/schedules'), set)
     if (res) set({ schedules: res.schedules ?? [] })
@@ -249,15 +281,16 @@ export const useStore = create<State>((set, get) => ({
     return !!res
   },
   fetchProjects: async () => {
-    // Task 10:project 列表也按 selectedAgent 过滤(后端 Task 7 已支持 ?agent=)。
-    const a = get().selectedAgent
+    // TEMPORARY(Task 11 正式改):project 列表按单 agent 派生。Task 11 加 agentID override。
+    const a = get().selectedAgents[0] ?? ''
     const q = a ? `?agent=${encodeURIComponent(a)}` : ''
     const res = await wrap(() => apiGet<{ projects: Project[] }>(`/api/project${q}`), set)
     if (res) set({ projects: res.projects ?? [] })
   },
   fetchTree: async (tab) => {
-    // Task 10:tree 拼 &agent=<selectedAgent>(仅非空时);scope 原有逻辑不变。
-    const a = get().selectedAgent
+    // TEMPORARY(Task 11 正式改):tree 按 &agent=<single>(仅非空时);scope 原有逻辑不变。
+    // Task 11 将加 agentID override 参数支持 per-agent tabs。
+    const a = get().selectedAgents[0] ?? ''
     const agentParam = a ? `&agent=${encodeURIComponent(a)}` : ''
     const url = tab.kind === 'global'
       ? `/api/tree?scope=global${agentParam}`
