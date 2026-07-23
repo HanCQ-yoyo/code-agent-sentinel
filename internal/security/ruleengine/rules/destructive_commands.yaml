@@ -1756,3 +1756,235 @@ rules:
         - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+dcm\\s+drop\\b" }
     metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-dcm-drop" }
     remediation: "snow dcm drop removes the named DCM PROJECT object, including its deployment history."
+
+  # ===== database.supabase 域(源 dcg database/supabase.rs,18 dest + 35 safe)=====
+  # severity 直接映射 dcg 枚举(db-reset/db-push/migration-repair/migration-down/
+  # projects-delete/sso-remove=Critical;db-shell-destructive/migration-squash/
+  # functions-delete/storage-rm/secrets-unset/orgs-delete/branches-delete/
+  # domains-delete/vanity-subdomains-delete/network-restrictions-update/
+  # config-push/stop-no-backup=High)。
+  # dcg safe_pattern(35 条)绝大多数匹配 read-only 子命令(db diff/lint/dump/
+  # migration list/functions list/secrets list/storage ls 等),sentinel 中 destructive
+  # 正则只匹配破坏性子命令(reset/push/delete/down/squash 等),read-only 不匹配,
+  # 故无 false-positive 风险。
+  # 例外:supabase-db-push-dry-run safe_pattern 匹配带 --dry-run 的 db push。
+  # destructive 正则扩展 .* 消费完整命令(含 --dry-run),post_exclude 排除
+  # --dry-run(=true)形态。--dry-run=false / --no-dry-run 不被排除(忠实 dcg)。
+
+  - id: destructive.database.supabase.supabase-db-reset
+    severity: critical
+    asset_type: hook
+    description: "supabase db reset drops and recreates the entire database. All data will be lost."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+db\\s+reset" }
+        - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+db\\s+reset" }
+        - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+db\\s+reset" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-db-reset" }
+    remediation: "Dump the database before resetting: supabase db dump -f backup.sql. Review differences: supabase db diff."
+
+  - id: destructive.database.supabase.supabase-db-push
+    severity: critical
+    asset_type: hook
+    description: "supabase db push applies migrations to the remote database. Use --dry-run to preview first."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+db\\s+push\\b.*" }
+        - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+db\\s+push\\b.*" }
+        - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+db\\s+push\\b.*" }
+    post_exclude:
+      - "--dry-run(?:=true)?(?:\\s|$)"
+    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-db-push" }
+    remediation: "Always preview: supabase db push --dry-run. Dump remote first: supabase db dump -f backup.sql --linked."
+
+  - id: destructive.database.supabase.supabase-db-shell-destructive
+    severity: high
+    asset_type: hook
+    description: "supabase db shell with destructive SQL (DROP/TRUNCATE/DELETE/ALTER). Verify the command carefully."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?i)supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+db\\s+shell\\s+.*\\b(DROP|TRUNCATE|DELETE|ALTER)\\b" }
+        - { field: content, op: regex_match, value: "(?i)supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+db\\s+shell\\s+.*\\b(DROP|TRUNCATE|DELETE|ALTER)\\b" }
+        - { field: allow, op: regex_match, value: "(?i)supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+db\\s+shell\\s+.*\\b(DROP|TRUNCATE|DELETE|ALTER)\\b" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-db-shell-destructive" }
+    remediation: "Dump the database before running destructive commands: supabase db dump -f backup.sql."
+
+  - id: destructive.database.supabase.supabase-migration-repair
+    severity: critical
+    asset_type: hook
+    description: "supabase migration repair modifies the migration history. This can cause drift between schema and migrations."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+migration\\s+repair" }
+        - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+migration\\s+repair" }
+        - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+migration\\s+repair" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-migration-repair" }
+    remediation: "Review migration status: supabase migration list. Dump database before repairing: supabase db dump -f backup.sql."
+
+  - id: destructive.database.supabase.supabase-migration-down
+    severity: critical
+    asset_type: hook
+    description: "supabase migration down reverts applied migrations. Schema changes and associated data may be lost."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+migration\\s+down" }
+        - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+migration\\s+down" }
+        - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+migration\\s+down" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-migration-down" }
+    remediation: "Review applied migrations: supabase migration list. Dump database: supabase db dump -f backup.sql --linked."
+
+  - id: destructive.database.supabase.supabase-migration-squash
+    severity: high
+    asset_type: hook
+    description: "supabase migration squash consolidates migrations and omits data manipulation statements (INSERT/UPDATE/DELETE)."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+migration\\s+squash" }
+        - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+migration\\s+squash" }
+        - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+migration\\s+squash" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-migration-squash" }
+    remediation: "Review migrations before squashing: supabase migration list. Dump database: supabase db dump -f backup.sql."
+
+  - id: destructive.database.supabase.supabase-functions-delete
+    severity: high
+    asset_type: hook
+    description: "supabase functions delete removes a deployed Edge Function. This causes immediate downtime for that function."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+functions\\s+delete" }
+        - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+functions\\s+delete" }
+        - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+functions\\s+delete" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-functions-delete" }
+    remediation: "List functions first: supabase functions list. Download source before deleting: supabase functions download {name}."
+
+  - id: destructive.database.supabase.supabase-storage-rm
+    severity: high
+    asset_type: hook
+    description: "supabase storage rm deletes objects from storage. With --recursive, entire directories are removed."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+storage\\s+rm" }
+        - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+storage\\s+rm" }
+        - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+storage\\s+rm" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-storage-rm" }
+    remediation: "List contents before deleting: supabase storage ls {path}. Copy files locally: supabase storage cp {path} ./backup/."
+
+  - id: destructive.database.supabase.supabase-secrets-unset
+    severity: high
+    asset_type: hook
+    description: "supabase secrets unset removes secrets from the project. Edge Functions depending on them will break immediately."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+secrets\\s+unset" }
+        - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+secrets\\s+unset" }
+        - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+secrets\\s+unset" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-secrets-unset" }
+    remediation: "List secrets before removing: supabase secrets list."
+
+  - id: destructive.database.supabase.supabase-projects-delete
+    severity: critical
+    asset_type: hook
+    description: "supabase projects delete permanently removes the entire Supabase project and all its data."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+projects\\s+delete" }
+        - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+projects\\s+delete" }
+        - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+projects\\s+delete" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-projects-delete" }
+    remediation: "Dump the database before deleting: supabase db dump -f backup.sql --linked. Verify: supabase projects list."
+
+  - id: destructive.database.supabase.supabase-orgs-delete
+    severity: high
+    asset_type: hook
+    description: "supabase orgs delete permanently removes the organization and may affect all projects within it."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+orgs\\s+delete" }
+        - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+orgs\\s+delete" }
+        - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+orgs\\s+delete" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-orgs-delete" }
+    remediation: "List organization projects first: supabase projects list. Verify: supabase orgs list."
+
+  - id: destructive.database.supabase.supabase-branches-delete
+    severity: high
+    asset_type: hook
+    description: "supabase branches delete permanently removes a preview branch and its database."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+branches\\s+delete" }
+        - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+branches\\s+delete" }
+        - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+branches\\s+delete" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-branches-delete" }
+    remediation: "Verify the branch first: supabase branches list. Inspect: supabase branches get --id {branch_id}."
+
+  - id: destructive.database.supabase.supabase-domains-delete
+    severity: high
+    asset_type: hook
+    description: "supabase domains delete removes the custom domain configuration. Clients using the custom domain will lose access."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+domains\\s+delete" }
+        - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+domains\\s+delete" }
+        - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+domains\\s+delete" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-domains-delete" }
+    remediation: "Check current domain configuration: supabase domains get."
+
+  - id: destructive.database.supabase.supabase-vanity-subdomains-delete
+    severity: high
+    asset_type: hook
+    description: "supabase vanity-subdomains delete removes the vanity subdomain. Clients using it will lose access."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+vanity-subdomains\\s+delete" }
+        - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+vanity-subdomains\\s+delete" }
+        - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+vanity-subdomains\\s+delete" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-vanity-subdomains-delete" }
+    remediation: "Check current configuration: supabase vanity-subdomains get."
+
+  - id: destructive.database.supabase.supabase-network-restrictions-update
+    severity: high
+    asset_type: hook
+    description: "supabase network-restrictions update modifies allowed CIDR ranges. Misconfiguration can lock out all database connections."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+network-restrictions\\s+update" }
+        - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+network-restrictions\\s+update" }
+        - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+network-restrictions\\s+update" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-network-restrictions-update" }
+    remediation: "Check current restrictions first: supabase network-restrictions get."
+
+  - id: destructive.database.supabase.supabase-sso-remove
+    severity: critical
+    asset_type: hook
+    description: "supabase sso remove disconnects an SSO identity provider. All users authenticating via that provider will be locked out."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+sso\\s+remove" }
+        - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+sso\\s+remove" }
+        - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+sso\\s+remove" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-sso-remove" }
+    remediation: "List providers before removing: supabase sso list. Inspect: supabase sso show --id {provider_id}."
+
+  - id: destructive.database.supabase.supabase-config-push
+    severity: high
+    asset_type: hook
+    description: "supabase config push overwrites the remote project configuration with local config.toml settings."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+config\\s+push" }
+        - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+config\\s+push" }
+        - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+config\\s+push" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-config-push" }
+    remediation: "Review your local config.toml before pushing. Inspect remote state: supabase inspect db bloat."
+
+  - id: destructive.database.supabase.supabase-stop-no-backup
+    severity: high
+    asset_type: hook
+    description: "supabase stop --no-backup stops the local stack and permanently deletes all data volumes."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+stop\\b.*--no-backup" }
+        - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+stop\\b.*--no-backup" }
+        - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+stop\\b.*--no-backup" }
+    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-stop-no-backup" }
+    remediation: "Use 'supabase stop' without --no-backup to preserve data backups."

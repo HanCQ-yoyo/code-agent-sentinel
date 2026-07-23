@@ -216,6 +216,27 @@ func TestDestructive_DatabaseDomain(t *testing.T) {
 		{"snowflake-cli-stage-drop", "snow stage drop mystage", "command", "destructive.database.snowflake.cli-stage-drop"},
 		{"snowflake-cli-stage-remove", "snow stage remove mystage", "command", "destructive.database.snowflake.cli-stage-remove"},
 		{"snowflake-cli-app-teardown", "snow app teardown myapp", "command", "destructive.database.snowflake.cli-app-teardown"},
+		// ===== supabase(18 dest + 35 safe)=====
+		{"supabase-db-reset", "supabase db reset", "command", "destructive.database.supabase.supabase-db-reset"},
+		{"supabase-db-push", "supabase db push", "command", "destructive.database.supabase.supabase-db-push"},
+		{"supabase-db-shell-destructive", "supabase db shell -- -c 'DROP TABLE users'", "command", "destructive.database.supabase.supabase-db-shell-destructive"},
+		{"supabase-migration-repair", "supabase migration repair", "command", "destructive.database.supabase.supabase-migration-repair"},
+		{"supabase-migration-down", "supabase migration down", "command", "destructive.database.supabase.supabase-migration-down"},
+		{"supabase-migration-squash", "supabase migration squash", "command", "destructive.database.supabase.supabase-migration-squash"},
+		{"supabase-functions-delete", "supabase functions delete my-function", "command", "destructive.database.supabase.supabase-functions-delete"},
+		{"supabase-storage-rm", "supabase storage rm ss:///bucket/path", "command", "destructive.database.supabase.supabase-storage-rm"},
+		{"supabase-secrets-unset", "supabase secrets unset MY_SECRET", "command", "destructive.database.supabase.supabase-secrets-unset"},
+		{"supabase-projects-delete", "supabase projects delete", "command", "destructive.database.supabase.supabase-projects-delete"},
+		{"supabase-orgs-delete", "supabase orgs delete", "command", "destructive.database.supabase.supabase-orgs-delete"},
+		{"supabase-branches-delete", "supabase branches delete abc123", "command", "destructive.database.supabase.supabase-branches-delete"},
+		{"supabase-domains-delete", "supabase domains delete", "command", "destructive.database.supabase.supabase-domains-delete"},
+		{"supabase-vanity-subdomains-delete", "supabase vanity-subdomains delete", "command", "destructive.database.supabase.supabase-vanity-subdomains-delete"},
+		{"supabase-network-restrictions-update", "supabase network-restrictions update --db-allow-cidr 10.0.0.0/8", "command", "destructive.database.supabase.supabase-network-restrictions-update"},
+		{"supabase-sso-remove", "supabase sso remove provider-id", "command", "destructive.database.supabase.supabase-sso-remove"},
+		{"supabase-config-push", "supabase config push", "command", "destructive.database.supabase.supabase-config-push"},
+		{"supabase-stop-no-backup", "supabase stop --no-backup", "command", "destructive.database.supabase.supabase-stop-no-backup"},
+		// dry-run=false 不被 post_exclude 排除(忠实 dcg safe_pattern 语义)
+		{"supabase-db-push-dry-run-false", "supabase db push --dry-run=false", "command", "destructive.database.supabase.supabase-db-push"},
 	}
 	for _, c := range hitCases {
 		t.Run(c.name, func(t *testing.T) {
@@ -258,6 +279,18 @@ func TestDestructive_DatabaseDomain(t *testing.T) {
 		{"sqlite-explain-safe", "sqlite3 mydb 'EXPLAIN SELECT * FROM users'", "command"},
 		{"sqlite-dot-command-safe", "sqlite3 mydb '.schema users'", "command"},
 		{"sqlite-delete-with-where-safe", "sqlite3 mydb 'DELETE FROM users WHERE id = 1'", "command"},
+		// supabase safe(关键:db push --dry-run 应被 post_exclude 排除)
+		{"supabase-db-push-dry-run-safe", "supabase db push --dry-run", "command"},
+		{"supabase-db-push-dry-run-true-safe", "supabase db push --dry-run=true", "command"},
+		{"supabase-db-diff-safe", "supabase db diff", "command"},
+		{"supabase-db-dump-safe", "supabase db dump -f backup.sql", "command"},
+		{"supabase-db-shell-safe", "supabase db shell", "command"},
+		{"supabase-migration-list-safe", "supabase migration list", "command"},
+		{"supabase-functions-list-safe", "supabase functions list", "command"},
+		{"supabase-secrets-list-safe", "supabase secrets list", "command"},
+		{"supabase-storage-ls-safe", "supabase storage ls ss:///bucket/", "command"},
+		{"supabase-projects-list-safe", "supabase projects list", "command"},
+		{"supabase-stop-safe", "supabase stop", "command"},
 	}
 	for _, c := range safeCases {
 		t.Run(c.name, func(t *testing.T) {
