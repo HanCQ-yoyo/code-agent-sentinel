@@ -23,7 +23,11 @@ export function SettingsAgents() {
         pagination={false}
         columns={[
           { title: t('settings.agentName'), dataIndex: 'name' },
+          { title: 'ID', dataIndex: 'id' },
+          { title: t('settings.rootDir'), dataIndex: 'root_dir' },
+          { title: t('settings.claudeJson'), dataIndex: 'claude_json' },
           {
+            // 扫描开关放末列:左侧是只读配置信息,操作列靠右符合 antd Table 习惯。
             title: t('settings.scanSwitch'),
             dataIndex: 'scan_enabled',
             width: 100,
@@ -31,9 +35,6 @@ export function SettingsAgents() {
               <Switch checked={enabled} onChange={(checked) => saveAgentScanEnabled(record.id, checked)} />
             ),
           },
-          { title: 'ID', dataIndex: 'id' },
-          { title: t('settings.rootDir'), dataIndex: 'root_dir' },
-          { title: t('settings.claudeJson'), dataIndex: 'claude_json' },
         ]}
       />
     </div>

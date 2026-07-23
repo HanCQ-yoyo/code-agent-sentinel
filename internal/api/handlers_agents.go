@@ -47,11 +47,39 @@ func (s *Server) putAgentScanEnabled(c *gin.Context) {
 		return
 	}
 	// 更新 s.Config.Agents 对应项
+	found := false
 	for i := range s.Config.Agents {
 		if s.Config.Agents[i].ID == agentID {
 			s.Config.Agents[i].ScanEnabled = &body.ScanEnabled
+			found = true
 			break
 		}
+	}
+	if !found {
+		// 回退 agent 场景:用户没跑过 sentinel setup(config.yaml 是 agents: []),
+		// ResolveAgents 走回退路径合成 claude-code 但不写回 Config.Agents →
+		// s.Agents 含该 agent(开关显示),Config.Agents 为空(更新循环 no-op,开关弹回「开」)。
+		// 此时从 s.Agents 补一条 AgentCfg 进 Config.Agents 再更新,使开关对回退用户生效,
+		// 顺带把回退 agent 落盘(下次启动 Config.Agents 非空,不再走回退)。
+		for _, a := range s.Agents {
+			if a.ID == agentID {
+				se := body.ScanEnabled
+				s.Config.Agents = append(s.Config.Agents, config.AgentCfg{
+					ID:          a.ID,
+					Enabled:     true,
+					ScanEnabled: &se,
+					RootDir:     a.RootDir,
+					ClaudeJSON:  a.ClaudeJSON,
+				})
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		// 不应到达:agentExists 已校验。防御性:agentExists 与 s.Agents 一致,此分支不可达。
+		c.JSON(http.StatusInternalServerError, errorBody("internal_error", "agent 不在 Config.Agents 且无法同步: "+agentID))
+		return
 	}
 	// 持久化
 	if err := config.Save(s.ConfigPath, s.Config); err != nil {

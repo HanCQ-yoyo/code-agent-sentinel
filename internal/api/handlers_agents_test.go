@@ -111,3 +111,45 @@ func TestPutAgentScanEnabled_Unknown(t *testing.T) {
 		t.Errorf("未知 agent 应 400: got %d", w.Code)
 	}
 }
+
+// TestPutAgentScanEnabled_FallbackAgent 覆盖回退 agent 场景:用户没跑过 `sentinel setup`,
+// config.yaml 是 agents: [] → ResolveAgents 走回退路径合成 claude-code,但 Config.Agents 仍空。
+// 此时 s.Agents 含 claude-code(agentExists=true,开关显示),但 s.Config.Agents 为空。
+// PUT scan_enabled 应能切换并持久化(否则开关弹回「开」,对回退用户完全失效)。
+func TestPutAgentScanEnabled_FallbackAgent(t *testing.T) {
+	dir := t.TempDir()
+	s := newTestServer(t, dir)
+	s.ConfigPath = filepath.Join(dir, "config.yaml")
+	// 模拟回退:s.Agents 含 claude-code(newTestServer 已置),但 Config.Agents 为空。
+	s.Config.Agents = nil
+	// 初始 GET:回退 agent 默认 scan_enabled=true
+	w := reqAgent(t, s, "GET", "/api/agents", nil)
+	var body struct {
+		Agents []struct {
+			ID          string `json:"id"`
+			ScanEnabled bool   `json:"scan_enabled"`
+		} `json:"agents"`
+	}
+	json.NewDecoder(w.Body).Decode(&body)
+	if len(body.Agents) == 0 || !body.Agents[0].ScanEnabled {
+		t.Fatalf("回退 agent GET 默认应 scan_enabled=true: %+v", body.Agents)
+	}
+	// 关闭
+	w = reqAgent(t, s, "PUT", "/api/agents/claude-code", map[string]bool{"scan_enabled": false})
+	if w.Code != http.StatusOK {
+		t.Fatalf("PUT status: %d %s", w.Code, w.Body)
+	}
+	// 验证 GET 展开为 false(若 PUT 是 no-op,GET 仍返回默认 true → 测试失败)
+	w = reqAgent(t, s, "GET", "/api/agents", nil)
+	json.NewDecoder(w.Body).Decode(&body)
+	if body.Agents[0].ScanEnabled {
+		t.Error("回退 agent 关闭后 GET 应 scan_enabled=false(PUT 不应是 no-op)")
+	}
+	// 验证已落盘:Config.Agents 现应含该 agent 且 ScanEnabled=false
+	if len(s.Config.Agents) != 1 || s.Config.Agents[0].ID != "claude-code" {
+		t.Fatalf("PUT 后 Config.Agents 应含 claude-code: %+v", s.Config.Agents)
+	}
+	if s.Config.Agents[0].ScanEnabled == nil || *s.Config.Agents[0].ScanEnabled != false {
+		t.Errorf("Config.Agents[0].ScanEnabled 应为 *false: %v", s.Config.Agents[0].ScanEnabled)
+	}
+}

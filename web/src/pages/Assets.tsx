@@ -239,12 +239,13 @@ export default function Assets() {
 
   // Task 11:L1 agent tab items — 每个 scanEnabledAgent 一个 tab。
   // label = 图标 + 显示名(沿用 AgentMultiSelect/TopBar 风格,agentMeta 处理未知 agent 回退)。
-  // 仅 scanEnabledAgents.length > 1 时渲染 L1(单 agent 时 L1 无意义,省一层 tab 减少视觉噪声)。
+  // 始终渲染 L1(即使单 agent):保持页面结构一致,明确当前资产归属哪个 agent。
+  // 仅 scanEnabledAgents 完全为空(未配置任何 agent)时不渲染。
   const agentTabItems = scanEnabledAgents.map((a) => {
     const m = agentMeta(a)
     return { key: a.id, label: `${m.icon} ${m.label}` }
   })
-  const showAgentTabs = scanEnabledAgents.length > 1
+  const showAgentTabs = scanEnabledAgents.length > 0
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
