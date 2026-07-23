@@ -98,6 +98,7 @@ func runServiceInstall(opts serviceInstallOpts) (string, error) {
 	spec := service.UnitSpec{
 		OS: runtime.GOOS, UserMode: opts.UserMode, Home: opts.Home,
 		ExePath: opts.ExePath, Token: tok, Bind: cfg.Bind, Port: cfg.Port,
+		LogPath: cfg.LogPath, // Task 14:用户配置 log_path 时,单元模板 StandardOutPath/StandardOutput 指向它(否则 launchd 回退默认 sentinel.log、systemd 走 journal)
 	}
 	unitPath, content, err := service.GenerateUnit(spec)
 	if err != nil {

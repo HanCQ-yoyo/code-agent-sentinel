@@ -181,11 +181,20 @@ export const useStore = create<State>((set, get) => ({
     const res = await wrap(() => apiPost<AgentScanResult[]>(`/api/scan${q}`), set)
     set({ loading: false })
     if (res) {
-      // 不再 set scan(旧 runScan 从单个 ScanResult 填 scan;新响应是数组无整体 findings)。
-      // Dashboard 读 dashboard.last_scan;Findings 也读 scan(=dashboard.last_scan,由 fetchDashboard 同步)。
-      // fetchDashboard 完成前 Findings 可能短暂显示旧数据 — Task 12 会重建 Findings 页处理此过渡。
+      // 新响应是 AgentScanResult[] 无整体 findings,不再 set scan。重扫成功后需刷新四个视图:
+      // - fetchDashboard:Dashboard 聚合视图 + scan(聚合模式 last_scan=undefined→null,见下)
+      // - fetchHistory:History 列表(新扫描入列)
+      // - fetchFindings:Findings 页数据源(仅 fetchFindings 填 store.findings;不调则 Findings 页
+      //   显示重扫前的旧 findings —— RescanModal 是 overlay 不会 unmount Findings,故必须主动刷新)
+      // - fetchLatestScan:Assets 风险徽章数据源(scan?.findings)。聚合模式 fetchDashboard 把 scan
+      //   置 null(last_scan undefined),需重拉 latest 填回 scan,否则徽章消失。fetchLatestScan 在
+      //   selectedAgents 空时不带 ?agent= → 后端返回全局最近扫描 → scan 恢复(Task 11/9 已知局限:
+      //   聚合模式 scan 反映全局最近扫描而非 per-active-agent,此处仅恢复徽章,不改语义)。
+      // 四个都是独立 GET,无共享状态突变,无 loading/runScan 触发,不会循环。
       get().fetchDashboard()
       get().fetchHistory()
+      get().fetchFindings()   // 修 Findings 页陈旧(重扫后立即刷新)
+      get().fetchLatestScan() // 修 Assets 风险徽章消失(聚合模式 scan 被 fetchDashboard 置 null,重拉)
     }
     return res
   },
