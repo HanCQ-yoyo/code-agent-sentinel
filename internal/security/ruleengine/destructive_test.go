@@ -398,3 +398,95 @@ func TestDestructive_FilesystemDomain(t *testing.T) {
 		})
 	}
 }
+
+// TestDestructive_ContainersDomain — Task 7:containers 域 3 子域规则
+// (docker 9 dest + 10 safe / podman 8 + 8 / compose 4 + 7)。
+// 增量构建:每转写完一个子域就追加该子域的测试用例并提交。
+// 规则名对齐 dcg containers/<sub>.rs 的 pattern name。
+//
+// 关键:docker 与 podman 的 volume-prune severity 不同(docker=High,podman=Critical)。
+// safe_patterns 用 `^\s*docker\b` 或 `(?=\s|$)` 尾锚点保证不匹配 dest 规则的 hitCtx
+// (hitCtx 是 dest regex 命中的子串,不以 ^docker 起始),故无需 post_exclude。
+// destructive 正则本身内置 --dry-run 负向先行断言(npm-publish 等),也不需 post_exclude。
+func TestDestructive_ContainersDomain(t *testing.T) {
+	rules, errs := LoadBuiltin()
+	if len(errs) > 0 {
+		t.Fatalf("LoadBuiltin errors: %v", errs)
+	}
+	ctrRules := filterRulesByDomain(rules, "containers")
+
+	cases := []struct {
+		name   string
+		cmd    string
+		field  string
+		wantID string
+	}{
+		// ===== docker(9 dest + 10 safe)=====
+		{"docker-system-prune", "docker system prune --all", "command", "destructive.containers.docker.system-prune"},
+		{"docker-volume-prune", "docker volume prune", "command", "destructive.containers.docker.volume-prune"},
+		{"docker-network-prune", "docker network prune", "command", "destructive.containers.docker.network-prune"},
+		{"docker-image-prune", "docker image prune -a", "command", "destructive.containers.docker.image-prune"},
+		{"docker-container-prune", "docker container prune", "command", "destructive.containers.docker.container-prune"},
+		{"docker-rm-force", "docker rm -f container", "command", "destructive.containers.docker.rm-force"},
+		{"docker-rmi-force", "docker rmi -f image", "command", "destructive.containers.docker.rmi-force"},
+		{"docker-volume-rm", "docker volume rm my-volume", "command", "destructive.containers.docker.volume-rm"},
+		{"docker-stop-all", "docker stop $(docker ps -q)", "command", "destructive.containers.docker.stop-all"},
+		{"docker-rm-force-combined", "docker rm -vf container", "command", "destructive.containers.docker.rm-force"},
+		// docker safe:read-only / 无破坏标志 / 干运行
+		{"docker-ps-safe", "docker ps -a", "command", ""},
+		{"docker-images-safe", "docker images", "command", ""},
+		{"docker-logs-safe", "docker logs mycontainer", "command", ""},
+		{"docker-inspect-safe", "docker inspect mycontainer", "command", ""},
+		{"docker-build-safe", "docker build -t app .", "command", ""},
+		{"docker-pull-safe", "docker pull nginx:latest", "command", ""},
+		{"docker-run-safe", "docker run --rm hello-world", "command", ""},
+		{"docker-exec-safe", "docker exec -it container bash", "command", ""},
+		{"docker-stats-safe", "docker stats", "command", ""},
+		{"docker-dry-run-safe", "docker run --dry-run", "command", ""},
+		// container 命名为 safe 子命令名时不短路破坏规则
+		{"docker-rm-force-named-ps", "docker rm -f ps", "command", "destructive.containers.docker.rm-force"},
+		{"docker-volume-rm-named-logs", "docker volume rm logs-archive", "command", "destructive.containers.docker.volume-rm"},
+
+		// ===== podman(8 dest + 8 safe)=====
+		{"podman-system-prune", "podman system prune --all", "command", "destructive.containers.podman.system-prune"},
+		{"podman-volume-prune", "podman volume prune", "command", "destructive.containers.podman.volume-prune"},
+		{"podman-pod-prune", "podman pod prune", "command", "destructive.containers.podman.pod-prune"},
+		{"podman-image-prune", "podman image prune -a", "command", "destructive.containers.podman.image-prune"},
+		{"podman-container-prune", "podman container prune", "command", "destructive.containers.podman.container-prune"},
+		{"podman-rm-force", "podman rm -f container", "command", "destructive.containers.podman.rm-force"},
+		{"podman-rmi-force", "podman rmi -f image", "command", "destructive.containers.podman.rmi-force"},
+		{"podman-volume-rm", "podman volume rm my-volume", "command", "destructive.containers.podman.volume-rm"},
+		// podman safe
+		{"podman-ps-safe", "podman ps -a", "command", ""},
+		{"podman-images-safe", "podman images", "command", ""},
+		{"podman-logs-safe", "podman logs mycontainer", "command", ""},
+		{"podman-inspect-safe", "podman inspect mycontainer", "command", ""},
+		{"podman-build-safe", "podman build -t app .", "command", ""},
+		{"podman-pull-safe", "podman pull nginx:latest", "command", ""},
+		{"podman-run-safe", "podman run --rm hello-world", "command", ""},
+		{"podman-exec-safe", "podman exec -it container bash", "command", ""},
+
+		// ===== compose(4 dest + 7 safe)=====
+		{"compose-down-volumes", "docker-compose down -v", "command", "destructive.containers.compose.down-volumes"},
+		{"compose-down-volumes-long", "docker compose down --volumes", "command", "destructive.containers.compose.down-volumes"},
+		{"compose-down-rmi-all", "docker-compose down --rmi all", "command", "destructive.containers.compose.down-rmi-all"},
+		{"compose-rm-volumes", "docker-compose rm -v", "command", "destructive.containers.compose.rm-volumes"},
+		{"compose-rm-force", "docker-compose rm -f", "command", "destructive.containers.compose.rm-force"},
+		// compose safe
+		{"compose-config-safe", "docker-compose config", "command", ""},
+		{"compose-ps-safe", "docker-compose ps", "command", ""},
+		{"compose-logs-safe", "docker-compose logs", "command", ""},
+		{"compose-up-safe", "docker-compose up -d", "command", ""},
+		{"compose-build-safe", "docker-compose build", "command", ""},
+		{"compose-pull-safe", "docker-compose pull", "command", ""},
+		{"compose-down-no-volumes-safe", "docker-compose down", "command", ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			hitID := evalRulesForCommand(t, ctrRules, c.field, c.cmd)
+			if hitID != c.wantID {
+				t.Errorf("cmd=%q field=%s: got %q want %q", c.cmd, c.field, hitID, c.wantID)
+			}
+		})
+	}
+}

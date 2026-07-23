@@ -1988,3 +1988,124 @@ rules:
         - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+stop\\b.*--no-backup" }
     metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-stop-no-backup" }
     remediation: "Use 'supabase stop' without --no-backup to preserve data backups."
+
+  # ============================================================================
+  # containers 域(源 dcg containers/{docker,podman,compose}.rs)
+  # ============================================================================
+  # severity 映射 dcg 源:docker=system/volume/network/rm/rmi/volume-rm/stop-all=High,
+  #   image/container-prune=Medium;podman=volume-prune=Critical(注意与 docker 不同),
+  #   其余与 docker 同(含 pod-prune=Medium);compose=down-volumes=Critical,
+  #   down-rmi-all/rm-volumes=High,rm-force=Medium。
+  # 正则适配:[[:alnum:]_]→\w;YAML 双引号内 \\。dest 正则忠实 dcg 源(含 \\b.*?\\b 形态)。
+  # safe_pattern 映射:dcg safe 用 `^\s*docker\b...$` 全行锚定或 `(?=\s|$)` 尾锚点,
+  #   dest regex 命中的 hitCtx 是子串(非全行),safe 无法匹配 → 无需 post_exclude。
+  #   dest 自带 --dry-run 负向先行断言(npm-publish 等)同样不需 post_exclude。
+
+  # ===== containers.docker(源 containers/docker.rs,9 dest + 10 safe)=====
+  - id: destructive.containers.docker.system-prune
+    severity: high
+    asset_type: hook
+    description: "docker system prune removes ALL unused containers, networks, images. Use 'docker system df' to preview."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "docker\\b.*?\\bsystem\\s+prune" }
+        - { field: content, op: regex_match, value: "docker\\b.*?\\bsystem\\s+prune" }
+        - { field: allow, op: regex_match, value: "docker\\b.*?\\bsystem\\s+prune" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "docker.system-prune" }
+    remediation: "Preview first: docker system df. Safer: docker container prune or docker image prune."
+
+  - id: destructive.containers.docker.volume-prune
+    severity: high
+    asset_type: hook
+    description: "docker volume prune removes ALL unused volumes and their data permanently."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "docker\\b.*?\\bvolume\\s+prune" }
+        - { field: content, op: regex_match, value: "docker\\b.*?\\bvolume\\s+prune" }
+        - { field: allow, op: regex_match, value: "docker\\b.*?\\bvolume\\s+prune" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "docker.volume-prune" }
+    remediation: "List first: docker volume ls -f dangling=true. Remove specific: docker volume rm <name>."
+
+  - id: destructive.containers.docker.network-prune
+    severity: high
+    asset_type: hook
+    description: "docker network prune removes ALL unused networks."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "docker\\b.*?\\bnetwork\\s+prune" }
+        - { field: content, op: regex_match, value: "docker\\b.*?\\bnetwork\\s+prune" }
+        - { field: allow, op: regex_match, value: "docker\\b.*?\\bnetwork\\s+prune" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "docker.network-prune" }
+    remediation: "List first: docker network ls. Remove specific: docker network rm <name>."
+
+  - id: destructive.containers.docker.image-prune
+    severity: medium
+    asset_type: hook
+    description: "docker image prune removes unused images. Use 'docker images' to review first."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "docker\\b.*?\\bimage\\s+prune" }
+        - { field: content, op: regex_match, value: "docker\\b.*?\\bimage\\s+prune" }
+        - { field: allow, op: regex_match, value: "docker\\b.*?\\bimage\\s+prune" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "docker.image-prune" }
+    remediation: "Preview: docker images -f dangling=true. Remove specific: docker rmi <image>."
+
+  - id: destructive.containers.docker.container-prune
+    severity: medium
+    asset_type: hook
+    description: "docker container prune removes ALL stopped containers."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "docker\\b.*?\\bcontainer\\s+prune" }
+        - { field: content, op: regex_match, value: "docker\\b.*?\\bcontainer\\s+prune" }
+        - { field: allow, op: regex_match, value: "docker\\b.*?\\bcontainer\\s+prune" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "docker.container-prune" }
+    remediation: "Preview: docker ps -a -f status=exited. Remove specific: docker rm <container>."
+
+  - id: destructive.containers.docker.rm-force
+    severity: high
+    asset_type: hook
+    description: "docker rm -f forcibly removes containers, potentially losing data."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "docker\\b.*?\\brm\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
+        - { field: content, op: regex_match, value: "docker\\b.*?\\brm\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
+        - { field: allow, op: regex_match, value: "docker\\b.*?\\brm\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "docker.rm-force" }
+    remediation: "Graceful shutdown first: docker stop <container>, then docker rm <container>."
+
+  - id: destructive.containers.docker.rmi-force
+    severity: high
+    asset_type: hook
+    description: "docker rmi -f forcibly removes images even if in use."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "docker\\b.*?\\brmi\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
+        - { field: content, op: regex_match, value: "docker\\b.*?\\brmi\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
+        - { field: allow, op: regex_match, value: "docker\\b.*?\\brmi\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "docker.rmi-force" }
+    remediation: "Check usage: docker ps -a --filter ancestor=<image>. Safe remove: docker rmi <image>."
+
+  - id: destructive.containers.docker.volume-rm
+    severity: high
+    asset_type: hook
+    description: "docker volume rm permanently deletes volumes and their data."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "docker\\b.*?\\bvolume\\s+rm" }
+        - { field: content, op: regex_match, value: "docker\\b.*?\\bvolume\\s+rm" }
+        - { field: allow, op: regex_match, value: "docker\\b.*?\\bvolume\\s+rm" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "docker.volume-rm" }
+    remediation: "Inspect first: docker volume inspect <volume>. Backup before removal."
+
+  - id: destructive.containers.docker.stop-all
+    severity: high
+    asset_type: hook
+    description: "Stopping/killing all containers can disrupt services. Be specific about which containers."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "docker\\b.*?\\b(?:stop|kill)\\s+\\$\\(" }
+        - { field: content, op: regex_match, value: "docker\\b.*?\\b(?:stop|kill)\\s+\\$\\(" }
+        - { field: allow, op: regex_match, value: "docker\\b.*?\\b(?:stop|kill)\\s+\\$\\(" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "docker.stop-all" }
+    remediation: "Be specific: docker stop <name>. Or filter: docker stop $(docker ps -q -f name=myapp)."
