@@ -233,3 +233,73 @@ func TestParseSettingsCorrupted(t *testing.T) {
 		t.Errorf("损坏资产文件可读,应有 hash")
 	}
 }
+
+// TestParseSettingsContentAndFieldsContract 验证 settings 资产对外展示契约:
+//
+// 背景:旧实现把整份文件字节塞进 Fields["raw"](json.RawMessage),并把 model
+// 读出(文件无 model 键时为 "")。API 直接序列化 Asset → 前端拿到
+// {model:"", env:{...}, raw:{整份文件}} 的包装结构,文件内容被冗余包在 raw 里,
+// 空 model 像真实字段误导用户(见 ContentArea.tsx structured 分支泄漏)。
+//
+// 修复后契约:
+//  1. Content = 原文件文本(string):UI 一律从 content 取展示文本,不再从 fields 拼凑。
+//  2. 文件无 model 键时,Fields 不含 model 键(省略空值,避免误导)。有 model 键时如实保留。
+//  3. Fields["raw"] 仍是全文本载体(规则引擎 baseline 规则 field: raw 依赖它),但类型
+//     从 json.RawMessage 改为 string,消除前端「对象 vs 字符串」歧义。stringify 两者兼容。
+func TestParseSettingsContentAndFieldsContract(t *testing.T) {
+	// 文件不含 model 键:Fields 不应出现 model,Content = 原文。
+	src := `{
+  "env": {"FOO": "bar"},
+  "permissions": {"allow": ["Bash(ls:*)"]}
+}`
+	f := newFixture(t)
+	f.write("settings.json", src)
+	assets, err := parseSettings(f.claudePath("settings.json"), ScopeGlobal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var settings Asset
+	for _, a := range assets {
+		if a.Type == AssetSettings {
+			settings = a
+		}
+	}
+	if settings.Content != src {
+		t.Errorf("Content 应为原文件文本, got %q", settings.Content)
+	}
+	if _, ok := settings.Fields["model"]; ok {
+		t.Errorf("文件无 model 键,Fields 不应含 model(省略空值避免误导), got %v", settings.Fields)
+	}
+	// raw 仍是全文本载体,类型为 string(非 json.RawMessage 对象)。
+	raw, ok := settings.Fields["raw"]
+	if !ok {
+		t.Fatalf("Fields 应保留 raw 供规则引擎全文本匹配")
+	}
+	rawStr, ok := raw.(string)
+	if !ok {
+		t.Errorf("Fields[raw] 应为 string(消除前端对象/字符串歧义), got %T", raw)
+	}
+	if rawStr != src {
+		t.Errorf("Fields[raw] 应等于原文件文本")
+	}
+}
+
+// TestParseSettingsModelPresentRetained 验证:文件显式写 model 键时,Fields 如实保留
+// (非空值不省略,区别于「省略空值」)。
+func TestParseSettingsModelPresentRetained(t *testing.T) {
+	f := newFixture(t)
+	f.write("settings.json", `{"model":"opus"}`)
+	assets, err := parseSettings(f.claudePath("settings.json"), ScopeGlobal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var settings Asset
+	for _, a := range assets {
+		if a.Type == AssetSettings {
+			settings = a
+		}
+	}
+	if m, ok := settings.Fields["model"].(string); !ok || m != "opus" {
+		t.Errorf("文件有 model 键时应如实保留, got %v", settings.Fields["model"])
+	}
+}

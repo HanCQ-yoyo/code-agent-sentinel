@@ -22,7 +22,9 @@ func parseKeybindings(path string, scope Scope) ([]Asset, error) {
 		fillHash(&a)
 		return []Asset{a}, nil
 	}
-	a := Asset{Type: AssetKeybinding, Scope: scope, SourcePath: path, Name: "keybindings", Fields: map[string]any{}}
+	// Content = 原文件文本(UI 展示用,与 settings/permissions 等一致);Fields 仍存
+	// 键→动作映射供查询。keybindings.json 是单一用途小文件,展示原文比拼字段更直观。
+	a := Asset{Type: AssetKeybinding, Scope: scope, SourcePath: path, Name: "keybindings", Content: string(data), Fields: map[string]any{}}
 	for k, v := range kb {
 		a.Fields[k] = v
 	}

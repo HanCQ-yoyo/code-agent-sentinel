@@ -24,7 +24,9 @@ func parseClaudeJSONMCP(path string, scope Scope) ([]Asset, error) {
 		fillHash(&a)
 		return []Asset{a}, nil
 	}
-	return mcpAssets(doc.MCPServers, path, scope), nil
+	// Content 留空:.claude.json 是机器管理大文件(含 projects/history 等),
+	// 不宜作 MCP server 资产的全文本展示;UI 改展示结构化字段。见 mcpAssets 注释。
+	return mcpAssets(doc.MCPServers, "", path, scope), nil
 }
 
 // parseClaudeJSONProjectMCP 解析 ~/.claude.json 的 projects[projectPath].mcpServers
@@ -49,5 +51,5 @@ func parseClaudeJSONProjectMCP(path string, projectPath string, scope Scope) ([]
 	if !ok {
 		return nil, nil
 	}
-	return mcpAssets(proj.MCPServers, path, scope), nil
+	return mcpAssets(proj.MCPServers, "", path, scope), nil
 }

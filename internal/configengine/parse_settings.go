@@ -53,18 +53,32 @@ func parseSettings(path string, scope Scope) ([]Asset, error) {
 	}
 	var out []Asset
 
-	// settings 主体:保留 model/env 及原始 JSON。
-	base := Asset{Type: AssetSettings, Scope: scope, SourcePath: path, Name: baseName}
+	// settings 主体:Content = 原文件文本(UI 展示用);Fields 保留 model/env 及全文本载体 raw。
+	//
+	// 展示契约(修 ContentArea structured 泄漏):
+	//   - Content = string(data):UI 一律从 content 取展示文本,不再从 fields 拼凑。
+	//     旧实现只把文件字节塞进 Fields["raw],API 序列化后前端拿到 {model:"",env,raw:{整文件}}
+	//     包装结构,文件被冗余包在 raw 里、空 model 误导用户。现 content 直出原文件。
+	//   - raw 仍是全文本载体,供规则引擎 baseline 规则 field: raw 全文本匹配
+	//     (skipDangerousModePermissionPrompt / curl 远程脚本等)。类型从 json.RawMessage 改 string:
+	//     stringify 两者兼容(eval.go),但 string 经 API marshal 为 JSON 字符串,前端 typeof==='string'
+	//     成立,消除「raw 是对象还是字符串」的歧义。
+	//   - model:文件有 model 键才放进 Fields(省略空值,避免 "" 被误读为「模型配置为空」)。
+	base := Asset{Type: AssetSettings, Scope: scope, SourcePath: path, Name: baseName, Content: string(data)}
 	base.Fields = map[string]any{
-		"model": rs.Model,
-		"env":   rs.Env,
-		"raw":   json.RawMessage(data),
+		"env": rs.Env,
+		"raw": string(data),
+	}
+	if rs.Model != "" {
+		base.Fields["model"] = rs.Model
 	}
 	fillHash(&base)
 	out = append(out, base)
 
 	// permissions 单列,便于基线检测器按类型匹配。
-	perm := Asset{Type: AssetPermissions, Scope: scope, SourcePath: path, Name: "permissions"}
+	// Content = 父文件文本(settings.json):permissions 是 settings.json 的切片,
+	// 点开看父文件全文(含上下文)比看 allow/deny/ask 孤立清单更有用。
+	perm := Asset{Type: AssetPermissions, Scope: scope, SourcePath: path, Name: "permissions", Content: string(data)}
 	perm.Fields = map[string]any{
 		"allow": rs.Permissions.Allow,
 		"deny":  rs.Permissions.Deny,
