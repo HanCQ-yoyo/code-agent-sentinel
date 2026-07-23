@@ -154,9 +154,9 @@ func TestRulesDetectorMeta(t *testing.T) {
 	if len(m.Engines) != 1 || m.Engines[0].Kind != "embedded" || !m.Engines[0].Available {
 		t.Errorf("Engines = %+v", m.Engines)
 	}
-	// 11 baseline + 46 injection + 6 skill + 12 destructive.git + 26 destructive.filesystem (Task 5) + 112 destructive.database (Task 6) = 213 条内置规则
-	if len(m.Rules) != 213 {
-		t.Errorf("Rules 数 = %d, want 213 (11 baseline + 46 injection + 6 skill + 12 destructive.git + 26 destructive.filesystem + 112 destructive.database)", len(m.Rules))
+	// 11 baseline + 46 injection + 6 skill + 12 destructive.git + 26 destructive.filesystem (Task 5) + 112 destructive.database (Task 6) + 21 destructive.containers + 18 destructive.package_managers (Task 7) = 252 条内置规则
+	if len(m.Rules) != 252 {
+		t.Errorf("Rules 数 = %d, want 252 (11 baseline + 46 injection + 6 skill + 12 destructive.git + 26 destructive.filesystem + 112 destructive.database + 21 destructive.containers + 18 destructive.package_managers)", len(m.Rules))
 	}
 	if m.Covers != nil {
 		t.Errorf("Covers 应为 nil, got %v", m.Covers)
