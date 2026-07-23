@@ -12,6 +12,7 @@ import (
 type ScanRecord struct {
 	ID          string                    `json:"id"` // 时间戳+8hex,与文件名一致
 	AgentID     string                    `json:"agent_id"` // 扫描的 code agent ID(多 agent 后区分)
+	BatchID     string                    `json:"batch_id,omitempty"` // 同一次重扫(多 agent)共享
 	StartedAt   time.Time                 `json:"started_at"`
 	Duration    time.Duration             `json:"duration"`
 	Findings    []security.Finding        `json:"findings"`
@@ -27,6 +28,7 @@ type ScanRecord struct {
 type ScanSummary struct {
 	ID            string    `json:"id"`
 	AgentID       string    `json:"agent_id"`
+	BatchID       string    `json:"batch_id,omitempty"`
 	StartedAt     time.Time `json:"started_at"`
 	HealthScore   int       `json:"health_score"`
 	Band          string    `json:"band"`

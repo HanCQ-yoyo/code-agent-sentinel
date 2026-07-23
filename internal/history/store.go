@@ -90,6 +90,7 @@ func (s *Store) List() ([]ScanSummary, error) {
 		var partial struct {
 			ID          string    `json:"id"`
 			AgentID     string    `json:"agent_id"`
+			BatchID     string    `json:"batch_id,omitempty"`
 			StartedAt   time.Time `json:"started_at"`
 			HealthScore *struct {
 				Score int    `json:"score"`
@@ -113,6 +114,7 @@ func (s *Store) List() ([]ScanSummary, error) {
 		sum := ScanSummary{
 			ID:            partial.ID,
 			AgentID:       partial.AgentID,
+			BatchID:       partial.BatchID,
 			StartedAt:     partial.StartedAt,
 			FindingCount:  len(partial.Findings),
 			DetectorAvail: avail,

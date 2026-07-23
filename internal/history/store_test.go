@@ -261,6 +261,41 @@ func TestLatestForAgent(t *testing.T) {
 	}
 }
 
+func TestBatchIDRoundTrip(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+	rec := ScanRecord{
+		ID:        "test-batch-1",
+		AgentID:   "claude-code",
+		BatchID:   "batch-abc",
+		StartedAt: time.Now(),
+	}
+	if err := s.Save(rec); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	sums, err := s.List()
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(sums) != 1 || sums[0].BatchID != "batch-abc" {
+		t.Errorf("BatchID roundtrip failed: got %q", sums[0].BatchID)
+	}
+}
+
+func TestBatchIDEmptyBackwardCompat(t *testing.T) {
+	dir := t.TempDir()
+	s := NewStore(dir)
+	// 旧 record 无 BatchID → 空串
+	rec := ScanRecord{ID: "old-record", AgentID: "claude-code", StartedAt: time.Now()}
+	if err := s.Save(rec); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	sums, _ := s.List()
+	if sums[0].BatchID != "" {
+		t.Errorf("旧 record BatchID 应为空串: got %q", sums[0].BatchID)
+	}
+}
+
 func TestLatestForAgentPrefersGlobalScope(t *testing.T) {
 	s := NewStore(t.TempDir())
 	// a 的 project scope 扫描(较新)+ global scope 扫描(较旧)
