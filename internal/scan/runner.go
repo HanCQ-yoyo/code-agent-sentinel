@@ -18,14 +18,19 @@ import (
 
 // ScanScope 描述一次扫描的范围。
 type ScanScope struct {
-	Type string // "global" | "project" | "asset"
-	Path string // project: 项目路径;asset: 资产 source_path;global: 空
+	Type string // "global" | "project" | "asset" | "user" | "asset-id"
+	Path string // project: 项目路径;asset: 资产 source_path;asset-id: 资产 ID;global/user: 空
 }
 
 // scopeAssets 按 scope 过滤 inv.Assets。
 // global/空 → 全量;project → ScopeProject 且 source_path 前缀匹配(与 getTree 一致);
-// asset → source_path == scope.Path(扫同物理文件的所有 sibling);
+// asset → source_path == scope.Path(扫同物理文件的所有 sibling,供编辑重扫 partialRescan 用);
+// user → ScopeGlobal || ScopePlugin(用户级配置,排除项目级);
+// asset-id → a.ID == scope.Path(精确单条记录,供资产详情页"安全检查"用);
 // 未知 type 退化为全量。
+//
+// 注意:asset(按 source_path)与 asset-id(按 ID)是两条独立路径,不可合并——
+// partialRescan(handlers_edit.go)依赖 asset 的 sibling 语义做 dedup 基线,改它会破坏编辑重扫。
 func scopeAssets(inv configengine.Inventory, scope ScanScope) []configengine.Asset {
 	switch scope.Type {
 	case "", "global":
@@ -43,6 +48,22 @@ func scopeAssets(inv configengine.Inventory, scope ScanScope) []configengine.Ass
 		out := make([]configengine.Asset, 0)
 		for _, a := range inv.Assets {
 			if a.SourcePath == scope.Path {
+				out = append(out, a)
+			}
+		}
+		return out
+	case "user":
+		out := make([]configengine.Asset, 0)
+		for _, a := range inv.Assets {
+			if a.Scope == configengine.ScopeGlobal || a.Scope == configengine.ScopePlugin {
+				out = append(out, a)
+			}
+		}
+		return out
+	case "asset-id":
+		out := make([]configengine.Asset, 0)
+		for _, a := range inv.Assets {
+			if a.ID == scope.Path {
 				out = append(out, a)
 			}
 		}

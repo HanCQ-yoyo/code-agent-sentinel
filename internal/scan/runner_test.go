@@ -337,6 +337,97 @@ func TestRunScanWritesBatchID(t *testing.T) {
 	}
 }
 
+// TestRunScanUserScopeScansGlobalAndPlugin:user scope 只扫 ScopeGlobal+ScopePlugin 资产,
+// 排除 ScopeProject。若 scopeAssets user 分支缺失,RunScan 未知 type 退化为全量 → 扫到项目资产。
+func TestRunScanUserScopeScansGlobalAndPlugin(t *testing.T) {
+	dir := t.TempDir()
+	// 全局 settings(含 Bash(*) 通配)→ user scope 应扫到。
+	src := filepath.Join(dir, ".claude", "settings.json")
+	writeScanFile(t, src, `{"permissions":{"allow":["Bash(*)"]}}`)
+	// 项目级 settings(也含 Bash(*) 通配,不同 source_path)→ user scope 应排除。
+	proj := filepath.Join(dir, "otherproj")
+	writeScanFile(t, filepath.Join(dir, ".claude.json"), `{"projects":{"`+proj+`":{}}}`)
+	writeScanFile(t, filepath.Join(proj, ".claude", "settings.json"), `{"permissions":{"allow":["Bash(*)"]}}`)
+	r := newTestRunner(t, dir)
+
+	// global scope findings 数量(全局 + 项目)。
+	resGlobal, err := r.RunScan(context.Background(), "claude-code", ScanScope{Type: "global"}, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// user scope:只扫全局资产。
+	res, err := r.RunScan(context.Background(), "claude-code", ScanScope{Type: "user"}, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res == nil {
+		t.Fatal("res 不应为 nil")
+	}
+	if len(res.Findings) == 0 {
+		t.Fatal("user scope 应检出全局 Bash(*) 通配,findings 为空(scopeAssets user 分支可能缺失)")
+	}
+	// user scope 排除项目资产 → findings 严格少于 global(后者含项目)。
+	if len(res.Findings) >= len(resGlobal.Findings) {
+		t.Fatalf("user scope 应排除项目资产,findings %d 不应 >= global %d", len(res.Findings), len(resGlobal.Findings))
+	}
+}
+
+// TestRunScanAssetIDScopeScansSingleAsset:asset-id scope 按 Asset.ID 精确扫单条记录,
+// 排除同 source_path 的 sibling 与其他资产。若分支缺失,退化为全量 → 扫到非目标资产。
+func TestRunScanAssetIDScopeScansSingleAsset(t *testing.T) {
+	dir := t.TempDir()
+	src := filepath.Join(dir, ".claude", "settings.json")
+	writeScanFile(t, src, `{"permissions":{"allow":["Bash(*)"]}}`)
+	// 项目级资产(不同 source_path,也含 Bash(*))→ asset-id 不应扫到。
+	proj := filepath.Join(dir, "otherproj")
+	writeScanFile(t, filepath.Join(dir, ".claude.json"), `{"projects":{"`+proj+`":{}}}`)
+	writeScanFile(t, filepath.Join(proj, ".claude", "settings.json"), `{"permissions":{"allow":["Bash(*)"]}}`)
+	r := newTestRunner(t, dir)
+
+	// 先 global 扫一次拿到全局 settings 资产的 AssetID。
+	resGlobal, err := r.RunScan(context.Background(), "claude-code", ScanScope{Type: "global"}, []string{"rules"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 找到全局 settings 的 finding,取其 AssetID(就是目标资产 ID)。
+	var targetID string
+	for _, f := range resGlobal.Findings {
+		if f.AssetID != "" {
+			targetID = f.AssetID
+			break
+		}
+	}
+	if targetID == "" {
+		t.Fatal("global scope 未产出 finding,无法取 AssetID")
+	}
+
+	// asset-id scope:只扫 ID == targetID 这一条。
+	res, err := r.RunScan(context.Background(), "claude-code", ScanScope{Type: "asset-id", Path: targetID}, []string{"rules"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res == nil {
+		t.Fatal("res 不应为 nil")
+	}
+	if len(res.Findings) == 0 {
+		t.Fatal("asset-id scope 应检出目标资产的 Bash(*) 通配,findings 为空")
+	}
+	// 所有 finding 必须归属 targetID(不混入项目资产)。
+	for _, f := range res.Findings {
+		if f.AssetID != targetID {
+			t.Fatalf("asset-id scope 混入非目标资产 finding: got %s want %s", f.AssetID, targetID)
+		}
+	}
+	// 未知 ID → 空结果(不报错)。
+	resEmpty, err := r.RunScan(context.Background(), "claude-code", ScanScope{Type: "asset-id", Path: "nonexistent-id"}, []string{"rules"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resEmpty == nil || len(resEmpty.Findings) != 0 {
+		t.Fatalf("asset-id 未知 ID 应返回空,got %v", resEmpty)
+	}
+}
+
 // findingKeyTest 生成 finding 去重键,与 handlers_edit.go 的 findingKey 一致:
 // (DetectorID, RuleID, AssetID, Evidence)。供测试比较 scope 过滤结果用。
 func findingKeyTest(f security.Finding) string {
