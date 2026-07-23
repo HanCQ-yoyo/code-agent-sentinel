@@ -129,6 +129,7 @@ func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	api.GET("/detectors/config", s.getDetectorConfig)
 	api.PUT("/detectors/config", s.putDetectorConfig)
 	api.GET("/agents", s.getAgents)
+	api.PUT("/agents/:agent_id", s.putAgentScanEnabled) // per-agent 扫描开关
 	api.GET("/project", s.getProject)
 	api.GET("/history", s.getHistoryList)
 	api.GET("/history/:id", s.getHistoryDetail)
