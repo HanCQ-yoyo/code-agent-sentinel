@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -51,16 +52,26 @@ func TestPostScanPassesAgentQuery(t *testing.T) {
 }
 
 // spyRunner 记录 RunScan 收到的 agentID/scope,满足 ScanRunner 接口。
+// callCount 记录调用次数;batchIDs 记录每次调用收到的 batchID(多 agent 共享 batchID 验证用);
+// failOnAgent 非空时,对该 agent ID 返回 error(部分失败测试用)。
 type spyRunner struct {
 	lastAgentID string
 	lastScope   scan.ScanScope
 	lastBatchID string
+	callCount   int
+	batchIDs    []string
+	failOnAgent string
 }
 
 func (s *spyRunner) RunScan(ctx context.Context, agentID string, scope scan.ScanScope, detectorIDs []string, batchID string) (*security.ScanResult, error) {
 	s.lastAgentID = agentID
 	s.lastScope = scope
 	s.lastBatchID = batchID
+	s.callCount++
+	s.batchIDs = append(s.batchIDs, batchID)
+	if s.failOnAgent != "" && agentID == s.failOnAgent {
+		return nil, fmt.Errorf("scan failed for %s", agentID)
+	}
 	return &security.ScanResult{}, nil
 }
 
@@ -115,8 +126,14 @@ func TestPostScan(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatalf("got %d: %s", w.Code, w.Body)
 	}
-	var res security.ScanResult
-	json.Unmarshal(w.Body.Bytes(), &res)
+	// 新响应格式为 []AgentScanResult(多 agent 循环扫描);无参数单 agent 场景返回 1 元素数组。
+	// 解码数组后取首元素验证 ScanResult 字段。
+	var results []AgentScanResult
+	json.Unmarshal(w.Body.Bytes(), &results)
+	if len(results) != 1 {
+		t.Fatalf("无参数单 agent 应返回 1 条结果: got %d", len(results))
+	}
+	res := results[0]
 	if len(res.Findings) == 0 {
 		t.Error("应检出通配 Bash")
 	}
@@ -261,5 +278,58 @@ func TestSaveHistoryProjects(t *testing.T) {
 	}
 	if pl, _ := projects.([]any); len(pl) == 0 {
 		t.Error("projects 不应为空(已登记项目)")
+	}
+}
+
+// TestPostScanMultiAgents 验证 POST /api/scan?agents=a,b 循环扫多 agent:
+// spy 被调用 2 次(每 agent 一次),两次 batchID 相同(共享),响应是 2 元素数组。
+// 用 newTwoAgentTestServer 提供 ID 为 a/b 的两个真实 agent(单 agent fixture 无 agent-b)。
+func TestPostScanMultiAgents(t *testing.T) {
+	dir := t.TempDir()
+	s := newTwoAgentTestServer(t, dir)
+	spy := &spyRunner{}
+	s.Runner = spy
+	w := reqScan(t, s, "POST", "/api/scan?agents=a,b", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: %d %s", w.Code, w.Body.String())
+	}
+	if spy.callCount != 2 {
+		t.Errorf("应调 2 次 RunScan: got %d", spy.callCount)
+	}
+	// 两次调用应共享同一 batchID
+	if len(spy.batchIDs) == 2 && spy.batchIDs[0] != spy.batchIDs[1] {
+		t.Errorf("多 agent 应共享 batchID: got %q vs %q", spy.batchIDs[0], spy.batchIDs[1])
+	}
+	// 响应是数组,长度 2
+	var results []AgentScanResult
+	json.NewDecoder(w.Body).Decode(&results)
+	if len(results) != 2 {
+		t.Errorf("应返回 2 条结果: got %d", len(results))
+	}
+}
+
+// TestPostScanMultiAgents_OneFails 验证部分失败仍返回 200,
+// 失败 agent 在数组中带 error 字段,成功 agent 无 error。
+func TestPostScanMultiAgents_OneFails(t *testing.T) {
+	dir := t.TempDir()
+	s := newTwoAgentTestServer(t, dir)
+	spy := &spyRunner{failOnAgent: "b"}
+	s.Runner = spy
+	w := reqScan(t, s, "POST", "/api/scan?agents=a,b", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("部分失败仍应 200: %d", w.Code)
+	}
+	var results []AgentScanResult
+	json.NewDecoder(w.Body).Decode(&results)
+	if len(results) != 2 {
+		t.Fatalf("应返回 2 条结果: got %d", len(results))
+	}
+	for _, r := range results {
+		if r.AgentID == "b" && r.Error == "" {
+			t.Error("b 应有 error")
+		}
+		if r.AgentID == "a" && r.Error != "" {
+			t.Error("a 不应有 error")
+		}
 	}
 }
