@@ -2207,3 +2207,53 @@ rules:
         - { field: allow, op: regex_match, value: "podman\\b.*?\\bvolume\\s+rm" }
     metadata: { source: dcg, domain: containers, dcg_rule_id: "podman.volume-rm" }
     remediation: "Inspect first: podman volume inspect <volume>. Backup before removal."
+
+  # ===== containers.compose(源 containers/compose.rs,4 dest + 7 safe)=====
+  # dcg 源正则含 -v\\b(--volumes 也匹配)。YAML 双引号内 \\\\b→\\\\b。
+  - id: destructive.containers.compose.down-volumes
+    severity: critical
+    asset_type: hook
+    description: "docker-compose down -v removes volumes and their data permanently."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+down\\s+.*(?:-v\\b|--volumes)" }
+        - { field: content, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+down\\s+.*(?:-v\\b|--volumes)" }
+        - { field: allow, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+down\\s+.*(?:-v\\b|--volumes)" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "compose.down-volumes" }
+    remediation: "Use 'docker-compose down' without -v to preserve volumes. Stop only: docker-compose stop."
+
+  - id: destructive.containers.compose.down-rmi-all
+    severity: high
+    asset_type: hook
+    description: "docker-compose down --rmi all removes all images used by services."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+down\\s+.*--rmi\\s+all" }
+        - { field: content, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+down\\s+.*--rmi\\s+all" }
+        - { field: allow, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+down\\s+.*--rmi\\s+all" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "compose.down-rmi-all" }
+    remediation: "Use 'docker-compose down' to preserve images. Or --rmi local for untagged only."
+
+  - id: destructive.containers.compose.rm-volumes
+    severity: high
+    asset_type: hook
+    description: "docker-compose rm -v removes volumes attached to containers."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+rm\\s+.*(?:-v\\b|--volumes)" }
+        - { field: content, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+rm\\s+.*(?:-v\\b|--volumes)" }
+        - { field: allow, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+rm\\s+.*(?:-v\\b|--volumes)" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "compose.rm-volumes" }
+    remediation: "Use 'docker-compose rm' without -v to preserve volumes."
+
+  - id: destructive.containers.compose.rm-force
+    severity: medium
+    asset_type: hook
+    description: "docker-compose rm -f forcibly removes containers without confirmation."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+rm\\s+.*(?:-f\\b|--force)" }
+        - { field: content, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+rm\\s+.*(?:-f\\b|--force)" }
+        - { field: allow, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+rm\\s+.*(?:-f\\b|--force)" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "compose.rm-force" }
+    remediation: "Graceful shutdown first: docker-compose stop. Then docker-compose rm (asks confirmation)."

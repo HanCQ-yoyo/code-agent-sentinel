@@ -408,6 +408,10 @@ func TestDestructive_FilesystemDomain(t *testing.T) {
 // safe_patterns 用 `^\s*docker\b` 或 `(?=\s|$)` 尾锚点保证不匹配 dest 规则的 hitCtx
 // (hitCtx 是 dest regex 命中的子串,不以 ^docker 起始),故无需 post_exclude。
 // destructive 正则本身内置 --dry-run 负向先行断言(npm-publish 等),也不需 post_exclude。
+//
+// 跨子域重叠:`docker-compose rm -f` 同时命中 docker.rm-force(docker 是 docker-compose
+// 子串,\b 在 docker 与 -compose 间存在)与 compose.rm-force。用 wantAnyHit 验证期望
+// 规则在命中集中;safe 用例期望空命中集。
 func TestDestructive_ContainersDomain(t *testing.T) {
 	rules, errs := LoadBuiltin()
 	if len(errs) > 0 {
@@ -415,7 +419,8 @@ func TestDestructive_ContainersDomain(t *testing.T) {
 	}
 	ctrRules := filterRulesByDomain(rules, "containers")
 
-	cases := []struct {
+	// hitCases:期望 wantID 至少在命中集中出现(可能同时命中其他子域的重叠规则)。
+	hitCases := []struct {
 		name   string
 		cmd    string
 		field  string
@@ -432,17 +437,6 @@ func TestDestructive_ContainersDomain(t *testing.T) {
 		{"docker-volume-rm", "docker volume rm my-volume", "command", "destructive.containers.docker.volume-rm"},
 		{"docker-stop-all", "docker stop $(docker ps -q)", "command", "destructive.containers.docker.stop-all"},
 		{"docker-rm-force-combined", "docker rm -vf container", "command", "destructive.containers.docker.rm-force"},
-		// docker safe:read-only / 无破坏标志 / 干运行
-		{"docker-ps-safe", "docker ps -a", "command", ""},
-		{"docker-images-safe", "docker images", "command", ""},
-		{"docker-logs-safe", "docker logs mycontainer", "command", ""},
-		{"docker-inspect-safe", "docker inspect mycontainer", "command", ""},
-		{"docker-build-safe", "docker build -t app .", "command", ""},
-		{"docker-pull-safe", "docker pull nginx:latest", "command", ""},
-		{"docker-run-safe", "docker run --rm hello-world", "command", ""},
-		{"docker-exec-safe", "docker exec -it container bash", "command", ""},
-		{"docker-stats-safe", "docker stats", "command", ""},
-		{"docker-dry-run-safe", "docker run --dry-run", "command", ""},
 		// container 命名为 safe 子命令名时不短路破坏规则
 		{"docker-rm-force-named-ps", "docker rm -f ps", "command", "destructive.containers.docker.rm-force"},
 		{"docker-volume-rm-named-logs", "docker volume rm logs-archive", "command", "destructive.containers.docker.volume-rm"},
@@ -456,36 +450,62 @@ func TestDestructive_ContainersDomain(t *testing.T) {
 		{"podman-rm-force", "podman rm -f container", "command", "destructive.containers.podman.rm-force"},
 		{"podman-rmi-force", "podman rmi -f image", "command", "destructive.containers.podman.rmi-force"},
 		{"podman-volume-rm", "podman volume rm my-volume", "command", "destructive.containers.podman.volume-rm"},
-		// podman safe
-		{"podman-ps-safe", "podman ps -a", "command", ""},
-		{"podman-images-safe", "podman images", "command", ""},
-		{"podman-logs-safe", "podman logs mycontainer", "command", ""},
-		{"podman-inspect-safe", "podman inspect mycontainer", "command", ""},
-		{"podman-build-safe", "podman build -t app .", "command", ""},
-		{"podman-pull-safe", "podman pull nginx:latest", "command", ""},
-		{"podman-run-safe", "podman run --rm hello-world", "command", ""},
-		{"podman-exec-safe", "podman exec -it container bash", "command", ""},
 
 		// ===== compose(4 dest + 7 safe)=====
+		// 注意:docker-compose rm -f 同时命中 docker.rm-force 和 compose.rm-force(子串重叠)
 		{"compose-down-volumes", "docker-compose down -v", "command", "destructive.containers.compose.down-volumes"},
 		{"compose-down-volumes-long", "docker compose down --volumes", "command", "destructive.containers.compose.down-volumes"},
 		{"compose-down-rmi-all", "docker-compose down --rmi all", "command", "destructive.containers.compose.down-rmi-all"},
 		{"compose-rm-volumes", "docker-compose rm -v", "command", "destructive.containers.compose.rm-volumes"},
 		{"compose-rm-force", "docker-compose rm -f", "command", "destructive.containers.compose.rm-force"},
-		// compose safe
-		{"compose-config-safe", "docker-compose config", "command", ""},
-		{"compose-ps-safe", "docker-compose ps", "command", ""},
-		{"compose-logs-safe", "docker-compose logs", "command", ""},
-		{"compose-up-safe", "docker-compose up -d", "command", ""},
-		{"compose-build-safe", "docker-compose build", "command", ""},
-		{"compose-pull-safe", "docker-compose pull", "command", ""},
-		{"compose-down-no-volumes-safe", "docker-compose down", "command", ""},
 	}
-	for _, c := range cases {
+	for _, c := range hitCases {
 		t.Run(c.name, func(t *testing.T) {
-			hitID := evalRulesForCommand(t, ctrRules, c.field, c.cmd)
-			if hitID != c.wantID {
-				t.Errorf("cmd=%q field=%s: got %q want %q", c.cmd, c.field, hitID, c.wantID)
+			hits := evalAllRulesForCommand(t, ctrRules, c.field, c.cmd)
+			wantAnyHit(t, c.name, c.cmd, hits, c.wantID)
+		})
+	}
+
+	// safeCases:期望不命中任何 containers 规则。
+	safeCases := []struct {
+		name  string
+		cmd   string
+		field string
+	}{
+		// docker safe:read-only / 无破坏标志 / 干运行
+		{"docker-ps-safe", "docker ps -a", "command"},
+		{"docker-images-safe", "docker images", "command"},
+		{"docker-logs-safe", "docker logs mycontainer", "command"},
+		{"docker-inspect-safe", "docker inspect mycontainer", "command"},
+		{"docker-build-safe", "docker build -t app .", "command"},
+		{"docker-pull-safe", "docker pull nginx:latest", "command"},
+		{"docker-run-safe", "docker run --rm hello-world", "command"},
+		{"docker-exec-safe", "docker exec -it container bash", "command"},
+		{"docker-stats-safe", "docker stats", "command"},
+		{"docker-dry-run-safe", "docker run --dry-run", "command"},
+		// podman safe
+		{"podman-ps-safe", "podman ps -a", "command"},
+		{"podman-images-safe", "podman images", "command"},
+		{"podman-logs-safe", "podman logs mycontainer", "command"},
+		{"podman-inspect-safe", "podman inspect mycontainer", "command"},
+		{"podman-build-safe", "podman build -t app .", "command"},
+		{"podman-pull-safe", "podman pull nginx:latest", "command"},
+		{"podman-run-safe", "podman run --rm hello-world", "command"},
+		{"podman-exec-safe", "podman exec -it container bash", "command"},
+		// compose safe
+		{"compose-config-safe", "docker-compose config", "command"},
+		{"compose-ps-safe", "docker-compose ps", "command"},
+		{"compose-logs-safe", "docker-compose logs", "command"},
+		{"compose-up-safe", "docker-compose up -d", "command"},
+		{"compose-build-safe", "docker-compose build", "command"},
+		{"compose-pull-safe", "docker-compose pull", "command"},
+		{"compose-down-no-volumes-safe", "docker-compose down", "command"},
+	}
+	for _, c := range safeCases {
+		t.Run(c.name, func(t *testing.T) {
+			hits := evalAllRulesForCommand(t, ctrRules, c.field, c.cmd)
+			if len(hits) > 0 {
+				t.Errorf("cmd=%q field=%s: expected no hits, got %v", c.cmd, c.field, hits)
 			}
 		})
 	}
