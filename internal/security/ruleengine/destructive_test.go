@@ -168,6 +168,36 @@ func TestDestructive_FilesystemDomain(t *testing.T) {
 		{"rm-interactive-safe", "rm -i file", "command", ""},                 // -i 无 -rf,不匹配
 		{"chmod-normal", "chmod 644 file", "command", ""},                    // 无 chmod 规则(filesystem 域)
 		{"rm-help-safe", "rm --help", "command", ""},                         // 无 -rf,不匹配
+		// 回归守卫(Important #1):`..` 路径遍历不得被 tmp post_exclude 抑制。
+		// dcg safe_pattern 含 `(?!\.\.(?:/|\s|$)|[^\s]*/\.\.(?:/|\s|$))` 防护;
+		// sentinel post_exclude 加 `(?!.*\.\.(?:/|\s|$))` lookahead 忠实对齐。
+		// 未修复前 `rm -rf /tmp/foo/../etc` 被错误抑制(hitCtx 以 /tmp/ 开头 → post_exclude 命中 → 漏报)。
+		// rm 规则 hitCtx 贪婪消费完整路径(/tmp/foo/../etc 以 / 起始满足 root-home)→ 命中 root-home;
+		// 非 rm 规则(find/unlink/...)root-home 要求敏感目录紧接 / 起始(/etc 等),/tmp/foo/../etc 不满足,
+		// 故命中 general 规则。关键:无论 root-home 还是 general,均不得被 post_exclude 抑制(危险方向漏报)。
+		{"rm-rf-tmp-traversal-etc", "rm -rf /tmp/foo/../etc", "command", "destructive.filesystem.rm-rf-root-home"},
+		{"rm-rf-vartmp-traversal-etc", "rm -rf /var/tmp/foo/../etc", "command", "destructive.filesystem.rm-rf-root-home"},
+		{"rm-recursive-force-tmp-traversal", "rm --recursive --force /tmp/foo/../etc", "command", "destructive.filesystem.rm-recursive-force-root-home"},
+		{"find-delete-tmp-traversal", "find /tmp/foo/../etc -delete", "command", "destructive.filesystem.find-delete-general"},
+		{"unlink-tmp-traversal", "unlink /tmp/foo/../etc/passwd", "command", "destructive.filesystem.unlink-general"},
+		{"shred-tmp-traversal", "shred /tmp/foo/../etc/passwd", "command", "destructive.filesystem.shred-general"},
+		{"truncate-tmp-traversal", "truncate -s 0 /tmp/foo/../etc/passwd", "command", "destructive.filesystem.truncate-zero-general"},
+		{"tar-remove-files-tmp-traversal", "tar --remove-files -cf out.tar /tmp/foo/../etc", "command", "destructive.filesystem.tar-remove-files-general"},
+		{"dd-tmp-traversal", "dd if=/dev/zero of=/tmp/foo/../etc/passwd", "command", "destructive.filesystem.dd-overwrite-general"},
+		// 回归守卫(Important #2):$TMPDIR 由调用方控制,可能解析为 /etc 或 /。
+		// dcg safe_pattern 刻意不含 $TMPDIR;sentinel post_exclude 原误加 → 已移除。
+		// 未修复前 `rm -rf $TMPDIR/foo` 被错误抑制(危险方向漏报)。
+		{"rm-rf-tmpdir-var", "rm -rf $TMPDIR/foo", "command", "destructive.filesystem.rm-rf-general"},
+		{"rm-rf-tmpdir-brace", "rm -rf ${TMPDIR}/foo", "command", "destructive.filesystem.rm-rf-general"},
+		{"rm-recursive-force-tmpdir", "rm --recursive --force $TMPDIR/foo", "command", "destructive.filesystem.rm-recursive-force-long"},
+		// redirect-truncate-dynamic-path(Important #3):5 分支 regex,此前无测试覆盖。
+		// dcg 源测试用例(见 references/.../filesystem.rs:5049):变量路径、命令替换、
+		// 通配符路径、^ 转义路径、%! Windows 变量。命中 destructive.filesystem.redirect-truncate-dynamic-path。
+		{"redirect-truncate-dynamic-var", "echo data > $LOG_FILE", "command", "destructive.filesystem.redirect-truncate-dynamic-path"},
+		{"redirect-truncate-dynamic-backtick", "echo data 2> `dynamic-path`", "command", "destructive.filesystem.redirect-truncate-dynamic-path"},
+		{"redirect-truncate-dynamic-tilde", ": > ~root/.ssh/authorized_keys", "command", "destructive.filesystem.redirect-truncate-dynamic-path"},
+		{"redirect-truncate-dynamic-wildcard", ": > /et?/passwd", "command", "destructive.filesystem.redirect-truncate-dynamic-path"},
+		{"redirect-truncate-dynamic-caret", "echo x >^/etc/passwd", "command", "destructive.filesystem.redirect-truncate-dynamic-path"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

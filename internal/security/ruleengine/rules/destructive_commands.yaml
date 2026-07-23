@@ -243,8 +243,8 @@ rules:
         - { field: content, op: regex_match, value: "rm\\s+-[a-zA-Z]*[rR][a-zA-Z]*f[a-zA-Z]*\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*|rm\\s+-[a-zA-Z]*f[a-zA-Z]*[rR][a-zA-Z]*\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*" }
         - { field: allow, op: regex_match, value: "rm\\s+-[a-zA-Z]*[rR][a-zA-Z]*f[a-zA-Z]*\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*|rm\\s+-[a-zA-Z]*f[a-zA-Z]*[rR][a-zA-Z]*\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*" }
     post_exclude:
-      - "rm\\s+-[a-zA-Z]*[rR][a-zA-Z]*f[a-zA-Z]*\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
-      - "rm\\s+-[a-zA-Z]*f[a-zA-Z]*[rR][a-zA-Z]*\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
+      - "rm\\s+-[a-zA-Z]*[rR][a-zA-Z]*f[a-zA-Z]*\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
+      - "rm\\s+-[a-zA-Z]*f[a-zA-Z]*[rR][a-zA-Z]*\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rm-rf-root-home" }
     remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
@@ -258,8 +258,8 @@ rules:
         - { field: content, op: regex_match, value: "rm\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+(-[a-zA-Z]+\\s+)*-f\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*|rm\\s+(-[a-zA-Z]+\\s+)*-f\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*" }
         - { field: allow, op: regex_match, value: "rm\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+(-[a-zA-Z]+\\s+)*-f\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*|rm\\s+(-[a-zA-Z]+\\s+)*-f\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*" }
     post_exclude:
-      - "rm\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+(-[a-zA-Z]+\\s+)*-f\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
-      - "rm\\s+(-[a-zA-Z]+\\s+)*-f\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
+      - "rm\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+(-[a-zA-Z]+\\s+)*-f\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
+      - "rm\\s+(-[a-zA-Z]+\\s+)*-f\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rm-r-f-separate-root-home" }
     remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
@@ -273,8 +273,8 @@ rules:
         - { field: content, op: regex_match, value: "rm\\s+.*--recursive.*--force\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*|rm\\s+.*--force.*--recursive\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*" }
         - { field: allow, op: regex_match, value: "rm\\s+.*--recursive.*--force\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*|rm\\s+.*--force.*--recursive\\s+['\\\"\\\\]?(?:[/~]|\\$\\{?HOME\\b)[^|;&\\s]*" }
     post_exclude:
-      - "rm\\s+.*--recursive.*--force\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
-      - "rm\\s+.*--force.*--recursive\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
+      - "rm\\s+.*--recursive.*--force\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
+      - "rm\\s+.*--force.*--recursive\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rm-recursive-force-root-home" }
     remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
@@ -288,8 +288,8 @@ rules:
         - { field: content, op: regex_match, value: "rm\\s+-[a-zA-Z]*[rR][a-zA-Z]*f[a-zA-Z]*(?:\\s+[^|;&\\s]+)?|rm\\s+-[a-zA-Z]*f[a-zA-Z]*[rR][a-zA-Z]*(?:\\s+[^|;&\\s]+)?" }
         - { field: allow, op: regex_match, value: "rm\\s+-[a-zA-Z]*[rR][a-zA-Z]*f[a-zA-Z]*(?:\\s+[^|;&\\s]+)?|rm\\s+-[a-zA-Z]*f[a-zA-Z]*[rR][a-zA-Z]*(?:\\s+[^|;&\\s]+)?" }
     post_exclude:
-      - "rm\\s+-[a-zA-Z]*[rR][a-zA-Z]*f[a-zA-Z]*\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
-      - "rm\\s+-[a-zA-Z]*f[a-zA-Z]*[rR][a-zA-Z]*\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
+      - "rm\\s+-[a-zA-Z]*[rR][a-zA-Z]*f[a-zA-Z]*\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
+      - "rm\\s+-[a-zA-Z]*f[a-zA-Z]*[rR][a-zA-Z]*\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rm-rf-general" }
     remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
@@ -303,8 +303,8 @@ rules:
         - { field: content, op: regex_match, value: "rm\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+(-[a-zA-Z]+\\s+)*-f(?:\\s+[^|;&\\s]+)?|rm\\s+(-[a-zA-Z]+\\s+)*-f\\s+(-[a-zA-Z]+\\s+)*-[rR](?:\\s+[^|;&\\s]+)?" }
         - { field: allow, op: regex_match, value: "rm\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+(-[a-zA-Z]+\\s+)*-f(?:\\s+[^|;&\\s]+)?|rm\\s+(-[a-zA-Z]+\\s+)*-f\\s+(-[a-zA-Z]+\\s+)*-[rR](?:\\s+[^|;&\\s]+)?" }
     post_exclude:
-      - "rm\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+(-[a-zA-Z]+\\s+)*-f\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
-      - "rm\\s+(-[a-zA-Z]+\\s+)*-f\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
+      - "rm\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+(-[a-zA-Z]+\\s+)*-f\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
+      - "rm\\s+(-[a-zA-Z]+\\s+)*-f\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rm-r-f-separate" }
     remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
@@ -318,8 +318,8 @@ rules:
         - { field: content, op: regex_match, value: "rm\\s+.*--recursive.*--force(?:\\s+[^|;&\\s]+)?|rm\\s+.*--force.*--recursive(?:\\s+[^|;&\\s]+)?" }
         - { field: allow, op: regex_match, value: "rm\\s+.*--recursive.*--force(?:\\s+[^|;&\\s]+)?|rm\\s+.*--force.*--recursive(?:\\s+[^|;&\\s]+)?" }
     post_exclude:
-      - "rm\\s+.*--recursive.*--force\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
-      - "rm\\s+.*--force.*--recursive\\s+['\\\"\\\\]?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)"
+      - "rm\\s+.*--recursive.*--force\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
+      - "rm\\s+.*--force.*--recursive\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rm-recursive-force-long" }
     remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
@@ -333,8 +333,8 @@ rules:
         - { field: content, op: regex_match, value: "\\bfind\\b[^|;&]*?(?:\\s|=)['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&]*?\\s-delete(?:\\s|$|[;&|)\\n])" }
         - { field: allow, op: regex_match, value: "\\bfind\\b[^|;&]*?(?:\\s|=)['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&]*?\\s-delete(?:\\s|$|[;&|)\\n])" }
     post_exclude:
-      - "\\bfind\\b\\s+/tmp/"
-      - "\\bfind\\b\\s+/var/tmp/"
+      - "\\bfind\\b\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
+      - "\\bfind\\b\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.find-delete-root-home" }
     remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
@@ -348,8 +348,8 @@ rules:
         - { field: content, op: regex_match, value: "\\bfind\\b[^|;&]*\\s-delete(?:\\s|$|[;&|)\\n])" }
         - { field: allow, op: regex_match, value: "\\bfind\\b[^|;&]*\\s-delete(?:\\s|$|[;&|)\\n])" }
     post_exclude:
-      - "\\bfind\\b\\s+/tmp/"
-      - "\\bfind\\b\\s+/var/tmp/"
+      - "\\bfind\\b\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
+      - "\\bfind\\b\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.find-delete-general" }
     remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
@@ -363,8 +363,8 @@ rules:
         - { field: content, op: regex_match, value: "\\bunlink\\s+['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&\\s]*" }
         - { field: allow, op: regex_match, value: "\\bunlink\\s+['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&\\s]*" }
     post_exclude:
-      - "\\bunlink\\s+/tmp/"
-      - "\\bunlink\\s+/var/tmp/"
+      - "\\bunlink\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
+      - "\\bunlink\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\bunlink\\s+(?:--help|--version)\\b"
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.unlink-root-home" }
     remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
@@ -379,8 +379,8 @@ rules:
         - { field: content, op: regex_match, value: "\\bunlink\\s+\\S+" }
         - { field: allow, op: regex_match, value: "\\bunlink\\s+\\S+" }
     post_exclude:
-      - "\\bunlink\\s+/tmp/"
-      - "\\bunlink\\s+/var/tmp/"
+      - "\\bunlink\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
+      - "\\bunlink\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\bunlink\\s+(?:--help|--version)\\b"
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.unlink-general" }
     remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
@@ -395,8 +395,8 @@ rules:
         - { field: content, op: regex_match, value: "\\btruncate\\b[^|;&]*?(?:\\s-s\\s+(?!\\+)\\S+|\\s--size=(?!\\+)\\S+)[^|;&]*?\\s+['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&\\s]*" }
         - { field: allow, op: regex_match, value: "\\btruncate\\b[^|;&]*?(?:\\s-s\\s+(?!\\+)\\S+|\\s--size=(?!\\+)\\S+)[^|;&]*?\\s+['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&\\s]*" }
     post_exclude:
-      - "\\btruncate\\b[^|;&]*?\\s+/tmp/"
-      - "\\btruncate\\b[^|;&]*?\\s+/var/tmp/"
+      - "\\btruncate\\b[^|;&]*?\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
+      - "\\btruncate\\b[^|;&]*?\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\btruncate\\s+(?:-s\\s+\\+\\S+|--size=\\+\\S+)\\b"
       - "\\btruncate\\s+(?:--help|--version)\\b"
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.truncate-zero-root-home" }
@@ -412,8 +412,8 @@ rules:
         - { field: content, op: regex_match, value: "\\btruncate\\b[^|;&]*?(?:\\s-s\\s+(?!\\+)\\S+|\\s--size=(?!\\+)\\S+)(?:\\s+[^|;&\\s]+)?" }
         - { field: allow, op: regex_match, value: "\\btruncate\\b[^|;&]*?(?:\\s-s\\s+(?!\\+)\\S+|\\s--size=(?!\\+)\\S+)(?:\\s+[^|;&\\s]+)?" }
     post_exclude:
-      - "\\btruncate\\b[^|;&]*?\\s+/tmp/"
-      - "\\btruncate\\b[^|;&]*?\\s+/var/tmp/"
+      - "\\btruncate\\b[^|;&]*?\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
+      - "\\btruncate\\b[^|;&]*?\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\btruncate\\s+(?:-s\\s+\\+\\S+|--size=\\+\\S+)\\b"
       - "\\btruncate\\s+(?:--help|--version)\\b"
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.truncate-zero-general" }
@@ -429,8 +429,8 @@ rules:
         - { field: content, op: regex_match, value: "\\bshred\\b[^|;&]*?\\s+['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&\\s]*" }
         - { field: allow, op: regex_match, value: "\\bshred\\b[^|;&]*?\\s+['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=\\s|$|['\"]))|/(?=\\s|$|['\"])|~(?=\\s|$|/)|\\$\\{?HOME\\b)[^|;&\\s]*" }
     post_exclude:
-      - "\\bshred\\b[^|;&]*?\\s+/tmp/"
-      - "\\bshred\\b[^|;&]*?\\s+/var/tmp/"
+      - "\\bshred\\b[^|;&]*?\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
+      - "\\bshred\\b[^|;&]*?\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\bshred\\s+(?:--help|--version)\\b"
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.shred-root-home" }
     remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
@@ -445,8 +445,8 @@ rules:
         - { field: content, op: regex_match, value: "\\bshred\\s+(?:-[a-zA-Z]+\\s+|--[a-z\\-]+\\s+|--[a-z\\-]+=\\S+\\s+)*\\S" }
         - { field: allow, op: regex_match, value: "\\bshred\\s+(?:-[a-zA-Z]+\\s+|--[a-z\\-]+\\s+|--[a-z\\-]+=\\S+\\s+)*\\S" }
     post_exclude:
-      - "\\bshred\\b[^|;&]*?\\s+/tmp/"
-      - "\\bshred\\b[^|;&]*?\\s+/var/tmp/"
+      - "\\bshred\\b[^|;&]*?\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
+      - "\\bshred\\b[^|;&]*?\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\bshred\\s+(?:--help|--version)\\b"
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.shred-general" }
     remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
@@ -461,8 +461,8 @@ rules:
         - { field: content, op: regex_match, value: "\\btar\\b[^|;&]*?\\s--remove-files\\b[^|;&]*?(?:\\s|=)['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)|\\btar\\b[^|;&]*?(?:\\s|=)['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?\\s--remove-files\\b" }
         - { field: allow, op: regex_match, value: "\\btar\\b[^|;&]*?\\s--remove-files\\b[^|;&]*?(?:\\s|=)['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)|\\btar\\b[^|;&]*?(?:\\s|=)['\"\\\\]?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?\\s--remove-files\\b" }
     post_exclude:
-      - "\\btar\\b[^|;&]*?\\s+/tmp/"
-      - "\\btar\\b[^|;&]*?\\s+/var/tmp/"
+      - "\\btar\\b[^|;&]*?\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
+      - "\\btar\\b[^|;&]*?\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.tar-remove-files-root-home" }
     remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
@@ -476,8 +476,8 @@ rules:
         - { field: content, op: regex_match, value: "\\btar\\b[^|;&]*?\\s--remove-files\\b[^|;&]*" }
         - { field: allow, op: regex_match, value: "\\btar\\b[^|;&]*?\\s--remove-files\\b[^|;&]*" }
     post_exclude:
-      - "\\btar\\b[^|;&]*?\\s+/tmp/"
-      - "\\btar\\b[^|;&]*?\\s+/var/tmp/"
+      - "\\btar\\b[^|;&]*?\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
+      - "\\btar\\b[^|;&]*?\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.tar-remove-files-general" }
     remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
@@ -491,7 +491,7 @@ rules:
         - { field: content, op: regex_match, value: "\\bdd\\b[^|;&]*?\\bof=['\"\\\\]?(?!/dev/)(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&\\s]*" }
         - { field: allow, op: regex_match, value: "\\bdd\\b[^|;&]*?\\bof=['\"\\\\]?(?!/dev/)(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&\\s]*" }
     post_exclude:
-      - "\\bof=['\\\"\\\\]?(?:/tmp/|/var/tmp/)"
+      - "\\bof=['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
       - "\\bdd\\s+(?:--help|--version)\\b"
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.dd-overwrite-root-home" }
     remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
@@ -506,7 +506,7 @@ rules:
         - { field: content, op: regex_match, value: "\\bdd\\b[^|;&]*?\\bof=['\"\\\\]?(?!/dev/)\\S" }
         - { field: allow, op: regex_match, value: "\\bdd\\b[^|;&]*?\\bof=['\"\\\\]?(?!/dev/)\\S" }
     post_exclude:
-      - "\\bof=['\\\"\\\\]?(?:/tmp/|/var/tmp/)"
+      - "\\bof=['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
       - "\\bdd\\s+(?:--help|--version)\\b"
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.dd-overwrite-general" }
     remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
@@ -521,8 +521,8 @@ rules:
         - { field: content, op: regex_match, value: "\\bmv\\b[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&\\s]*" }
         - { field: allow, op: regex_match, value: "\\bmv\\b[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&\\s]*" }
     post_exclude:
-      - "\\bmv\\b[^|;&]*?\\s+/tmp/"
-      - "\\bmv\\b[^|;&]*?\\s+/var/tmp/"
+      - "\\bmv\\b[^|;&]*?\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
+      - "\\bmv\\b[^|;&]*?\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\bmv\\s+(?:--help|--version)\\b"
     metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.mv-sensitive-source-root-home" }
     remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
