@@ -2109,3 +2109,101 @@ rules:
         - { field: allow, op: regex_match, value: "docker\\b.*?\\b(?:stop|kill)\\s+\\$\\(" }
     metadata: { source: dcg, domain: containers, dcg_rule_id: "docker.stop-all" }
     remediation: "Be specific: docker stop <name>. Or filter: docker stop $(docker ps -q -f name=myapp)."
+
+  # ===== containers.podman(源 containers/podman.rs,8 dest + 8 safe)=====
+  # 注意:podman volume-prune=Critical(docker 为 High,忠实 dcg 源)。
+  - id: destructive.containers.podman.system-prune
+    severity: high
+    asset_type: hook
+    description: "podman system prune removes ALL unused containers, pods, images. Use 'podman system df' to preview."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "podman\\b.*?\\bsystem\\s+prune" }
+        - { field: content, op: regex_match, value: "podman\\b.*?\\bsystem\\s+prune" }
+        - { field: allow, op: regex_match, value: "podman\\b.*?\\bsystem\\s+prune" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "podman.system-prune" }
+    remediation: "Preview first: podman system df. Safer: podman container prune or podman image prune."
+
+  - id: destructive.containers.podman.volume-prune
+    severity: critical
+    asset_type: hook
+    description: "podman volume prune removes ALL unused volumes and their data permanently."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "podman\\b.*?\\bvolume\\s+prune" }
+        - { field: content, op: regex_match, value: "podman\\b.*?\\bvolume\\s+prune" }
+        - { field: allow, op: regex_match, value: "podman\\b.*?\\bvolume\\s+prune" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "podman.volume-prune" }
+    remediation: "List first: podman volume ls. Remove specific: podman volume rm <name>."
+
+  - id: destructive.containers.podman.pod-prune
+    severity: medium
+    asset_type: hook
+    description: "podman pod prune removes ALL stopped pods."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "podman\\b.*?\\bpod\\s+prune" }
+        - { field: content, op: regex_match, value: "podman\\b.*?\\bpod\\s+prune" }
+        - { field: allow, op: regex_match, value: "podman\\b.*?\\bpod\\s+prune" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "podman.pod-prune" }
+    remediation: "List first: podman pod ps -a. Remove specific: podman pod rm <pod>."
+
+  - id: destructive.containers.podman.image-prune
+    severity: medium
+    asset_type: hook
+    description: "podman image prune removes unused images. Use 'podman images' to review first."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "podman\\b.*?\\bimage\\s+prune" }
+        - { field: content, op: regex_match, value: "podman\\b.*?\\bimage\\s+prune" }
+        - { field: allow, op: regex_match, value: "podman\\b.*?\\bimage\\s+prune" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "podman.image-prune" }
+    remediation: "Preview: podman images -f dangling=true. Remove specific: podman rmi <image>."
+
+  - id: destructive.containers.podman.container-prune
+    severity: medium
+    asset_type: hook
+    description: "podman container prune removes ALL stopped containers."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "podman\\b.*?\\bcontainer\\s+prune" }
+        - { field: content, op: regex_match, value: "podman\\b.*?\\bcontainer\\s+prune" }
+        - { field: allow, op: regex_match, value: "podman\\b.*?\\bcontainer\\s+prune" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "podman.container-prune" }
+    remediation: "Preview: podman ps -a -f status=exited. Remove specific: podman rm <container>."
+
+  - id: destructive.containers.podman.rm-force
+    severity: high
+    asset_type: hook
+    description: "podman rm -f forcibly removes containers, potentially losing data."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "podman\\b.*?\\brm\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
+        - { field: content, op: regex_match, value: "podman\\b.*?\\brm\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
+        - { field: allow, op: regex_match, value: "podman\\b.*?\\brm\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "podman.rm-force" }
+    remediation: "Graceful shutdown first: podman stop <container>, then podman rm <container>."
+
+  - id: destructive.containers.podman.rmi-force
+    severity: high
+    asset_type: hook
+    description: "podman rmi -f forcibly removes images even if in use."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "podman\\b.*?\\brmi\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
+        - { field: content, op: regex_match, value: "podman\\b.*?\\brmi\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
+        - { field: allow, op: regex_match, value: "podman\\b.*?\\brmi\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "podman.rmi-force" }
+    remediation: "Check usage: podman ps -a --filter ancestor=<image>. Safe remove: podman rmi <image>."
+
+  - id: destructive.containers.podman.volume-rm
+    severity: high
+    asset_type: hook
+    description: "podman volume rm permanently deletes volumes and their data."
+    match:
+      or:
+        - { field: command, op: regex_match, value: "podman\\b.*?\\bvolume\\s+rm" }
+        - { field: content, op: regex_match, value: "podman\\b.*?\\bvolume\\s+rm" }
+        - { field: allow, op: regex_match, value: "podman\\b.*?\\bvolume\\s+rm" }
+    metadata: { source: dcg, domain: containers, dcg_rule_id: "podman.volume-rm" }
+    remediation: "Inspect first: podman volume inspect <volume>. Backup before removal."
