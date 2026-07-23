@@ -63,14 +63,14 @@ func (s *Server) postScan(c *gin.Context) {
 		}
 	}
 
-	// scope:global(缺省)/project/asset;project/asset 需 path
+	// scope:global(缺省)/project/asset/user/asset-id;project/asset/asset-id 需 path,user 不需
 	scopeType := c.DefaultQuery("scope", "global")
 	scopePath := c.Query("path")
-	if (scopeType == "project" || scopeType == "asset") && scopePath == "" {
+	if (scopeType == "project" || scopeType == "asset" || scopeType == "asset-id") && scopePath == "" {
 		c.JSON(http.StatusBadRequest, errorBody("bad_request", scopeType+" scope 需 path 参数"))
 		return
 	}
-	if scopeType != "global" && scopeType != "project" && scopeType != "asset" {
+	if scopeType != "global" && scopeType != "project" && scopeType != "asset" && scopeType != "user" && scopeType != "asset-id" {
 		c.JSON(http.StatusBadRequest, errorBody("bad_scope", "未知 scope: "+scopeType))
 		return
 	}

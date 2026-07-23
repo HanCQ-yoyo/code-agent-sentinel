@@ -281,6 +281,39 @@ func TestSaveHistoryProjects(t *testing.T) {
 	}
 }
 
+// TestPostScanNewScopes:user 与 asset-id scope 应通过校验并透传给 Runner。
+// asset-id 需 path;user 不需。沿用 TestPostScanScopeQuery 的 spyRunner 模式。
+func TestPostScanNewScopes(t *testing.T) {
+	dir := t.TempDir()
+	s := newTestServer(t, dir)
+	spy := &spyRunner{}
+	s.Runner = spy
+
+	// scope=user → 200,scope.Type == "user",Path 空。
+	w := reqScan(t, s, "POST", "/api/scan?agent=claude-code&scope=user", nil)
+	if w.Code != http.StatusOK {
+		t.Fatalf("user scope 应 200: got %d %s", w.Code, w.Body)
+	}
+	if spy.lastScope.Type != "user" || spy.lastScope.Path != "" {
+		t.Errorf("user scope 透传错误: got %+v", spy.lastScope)
+	}
+
+	// scope=asset-id&path=<id> → 200,scope.Type == "asset-id",Path == id。
+	w2 := reqScan(t, s, "POST", "/api/scan?agent=claude-code&scope=asset-id&path=abc123", nil)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("asset-id scope 应 200: got %d %s", w2.Code, w2.Body)
+	}
+	if spy.lastScope.Type != "asset-id" || spy.lastScope.Path != "abc123" {
+		t.Errorf("asset-id scope 透传错误: got %+v", spy.lastScope)
+	}
+
+	// scope=asset-id 无 path → 400 bad_request。
+	w3 := reqScan(t, s, "POST", "/api/scan?scope=asset-id", nil)
+	if w3.Code != http.StatusBadRequest {
+		t.Errorf("asset-id 无 path 应 400: got %d %s", w3.Code, w3.Body)
+	}
+}
+
 // TestPostScanMultiAgents 验证 POST /api/scan?agents=a,b 循环扫多 agent:
 // spy 被调用 2 次(每 agent 一次),两次 batchID 相同(共享),响应是 2 元素数组。
 // 用 newTwoAgentTestServer 提供 ID 为 a/b 的两个真实 agent(单 agent fixture 无 agent-b)。
