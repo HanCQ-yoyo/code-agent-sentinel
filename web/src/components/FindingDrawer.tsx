@@ -33,7 +33,7 @@ function findSyntax(detectors: DetectorMeta[], detectorId: string, ruleId: strin
 // locations:从 finding 透传(后端 ruleengine.Location 序列化为 snake_case line/start_col/end_col,
 // 仅 RulesDetector 填充;子进程检测器 finding 无此字段)。在此边界映射为 camelCase highlights
 // 传给 AssetDetailPanel→AssetEditor→ContentArea→MonacoViewer(Monaco Range API 用 camelCase)。
-function AssetSection({ assetId, locations }: { assetId: string, locations?: { line: number; start_col: number; end_col: number }[] }) {
+function AssetSection({ assetId, locations, agentId }: { assetId: string, locations?: { line: number; start_col: number; end_col: number }[], agentId?: string }) {
   const { t } = useTranslation()
   const [asset, setAsset] = useState<Asset | null>(null)
   const [loading, setLoading] = useState(true)
@@ -67,7 +67,7 @@ function AssetSection({ assetId, locations }: { assetId: string, locations?: { l
   if (loading) return <Spin style={{ display: 'block', margin: '40px auto' }} />
   if (err) return <Alert type="error" message={t('findingDrawer.loadFailed')} description={err} showIcon />
   if (!asset) return <Empty description={t('findingDrawer.notFound')} />
-  return <AssetDetailPanel asset={asset} highlights={highlights} />
+  return <AssetDetailPanel asset={asset} highlights={highlights} agentID={agentId} />
 }
 
 export function FindingDrawer({ finding, detectors, startedAt, onClose }: FindingDrawerProps) {
@@ -180,7 +180,7 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
 
           <div>
             <Typography.Title level={5} style={{ marginTop: 8 }}>{t('findingDrawer.assetInfo')}</Typography.Title>
-            <AssetSection key={finding.asset_id} assetId={finding.asset_id} locations={finding.locations} />
+            <AssetSection key={finding.asset_id} assetId={finding.asset_id} locations={finding.locations} agentId={finding.agent_id} />
           </div>
 
           {/* 抑制操作:添加到 suppressions(需 fingerprint)+ 加入 baseline(全量扫描合并)。

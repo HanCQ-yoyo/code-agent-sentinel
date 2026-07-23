@@ -343,7 +343,7 @@ export default function Assets() {
           <Splitter.Panel>
             <Card style={{ height: '100%', overflow: 'auto' }}>
               {selectedAsset ? (
-                <AssetDetailPanel asset={selectedAsset} findings={scan?.findings} detectors={detectors} />
+                <AssetDetailPanel asset={selectedAsset} findings={scan?.findings} detectors={detectors} agentID={activeAgent} />
               ) : rawPath ? (
                 <RawFilePanel path={rawPath} />
               ) : (

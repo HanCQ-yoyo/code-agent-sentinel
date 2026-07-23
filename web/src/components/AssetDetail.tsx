@@ -29,6 +29,8 @@ export default function AssetDetail() {
   return (
     <div>
       <Link to="/assets"><Button type="link" icon={<ArrowLeftOutlined />}>{t('assetDetail.back')}</Button></Link>
+      {/* 全页路由无 agent 上下文:安全检查不传 agentID → runScan 不带 ?agents= → 后端回退 SelectedAgentID
+          (与 getAsset 的 engineForQuery 回退一致)。URL 不含 agent,故依赖后端默认。 */}
       <Card><AssetDetailPanel asset={asset} /></Card>
     </div>
   )
