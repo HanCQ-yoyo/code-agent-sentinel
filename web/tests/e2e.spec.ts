@@ -78,7 +78,7 @@ test('dashboard 带 token 认证后扫描并返回数据依赖结果', async ({ 
   await expect(page.getByTestId('brand')).toBeVisible()
 
   // 触发扫描
-  await page.getByRole('button', { name: /重新扫描|扫描/ }).click()
+  await page.getByRole('button', { name: /安全检测|Security Scan|扫描/ }).click()
 
   // 主要断言(数据依赖):健康分值在扫描前为 "--"(未扫描态),
   // 扫描成功后变为具体数值。fixture 含 Bash(*) 基线 finding → 分数 < 100,
@@ -91,7 +91,7 @@ test('dashboard 带 token 认证后扫描并返回数据依赖结果', async ({ 
 // 说明:本 e2e 通过 --token 标志使用已知 token(见 playwright.config.ts webServer.command),
 // 无需从 server stdout 提取。sentinel 由 Playwright webServer 自动启动(reuseExistingServer=true)。
 
-test('导航后重新扫描不丢 token(问题 3 回归)', async ({ page }) => {
+test('导航后安全检测不丢 token(问题 3 回归)', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
   await expect(page.getByTestId('brand')).toBeVisible()
 
@@ -101,8 +101,8 @@ test('导航后重新扫描不丢 token(问题 3 回归)', async ({ page }) => {
   // 再导航回 /dashboard
   await page.getByRole('menuitem', { name: /dashboard/i }).click()
 
-  // 重新扫描 —— 旧行为会 401,修复后应成功
-  await page.getByRole('button', { name: /重新扫描|扫描/ }).click()
+  // 安全检测 —— 旧行为会 401,修复后应成功
+  await page.getByRole('button', { name: /安全检测|Security Scan|扫描/ }).click()
   const score = page.getByTestId('health-score-value')
   await expect(score).not.toHaveText('--', { timeout: 15000 })
   // 确认无 401 错误显示
@@ -133,7 +133,7 @@ test('主题切换并持久化', async ({ page }) => {
 
 test('看板扫描后显示健康分与严重度分布', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
-  await page.getByRole('button', { name: /重新扫描|扫描/ }).click()
+  await page.getByRole('button', { name: /安全检测|Security Scan|扫描/ }).click()
   await expect(page.getByTestId('health-score-value')).not.toHaveText('--', { timeout: 15000 })
   // 4 个严重度行(critical/high/medium/low)均渲染出 severity-{s} testid
   await expect(
@@ -189,9 +189,9 @@ test('资产详情页显示字段与 hash', async ({ page }) => {
 
 test('发现页扫描后展示 finding 行', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
-  // Task 15:TopBar「重新扫描」打开 RescanModal(非直接扫描),需在 modal 内点「开始扫描」触发。
-  await page.getByRole('button', { name: /重新扫描|扫描/ }).click()
-  await page.locator('.ant-modal').filter({ hasText: '重扫描' }).getByRole('button', { name: '开始扫描' }).click()
+  // Task 15:TopBar「安全检测」打开 RescanModal(非直接扫描),需在 modal 内点「开始检测」触发。
+  await page.getByRole('button', { name: /安全检测|Security Scan|扫描/ }).click()
+  await page.locator('.ant-modal').filter({ hasText: '安全检测配置' }).getByRole('button', { name: '开始检测' }).click()
   await page.getByRole('menuitem', { name: /风险管理/ }).click()
   // fixture 含 Bash(*) → 至少一条 finding
   await expect(page.locator('[data-testid="finding-row"]').first()).toBeVisible({ timeout: 15000 })
@@ -223,6 +223,27 @@ test('结构化资产详情渲染', async ({ page }) => {
   await structRow.click()
   await expect(page.getByTestId('asset-detail-name')).toBeVisible({ timeout: 10000 })
   await expect(page.locator('[data-testid="structured-kv"], .monaco-editor').first()).toBeVisible({ timeout: 10000 })
+})
+
+test('settings 资产详情显示原文件文本(非 fields 包装泄漏)', async ({ page }) => {
+  // 回归:旧实现 structured 资产无 content,前端 JSON.stringify(fields) 把
+  // {model:"",env,raw:{整文件}} 整个 dump,文件内容被冗余包在 raw 里、空 model 误导。
+  // 修复后 settings 资产 Content=原文件文本,Monaco 显示原文件;不应出现 "raw" 包装键
+  // 或孤立的 "model" 字段(fixture settings.json 无 model 键)。
+  await page.goto('/#token=e2e-test-token-123')
+  await page.getByRole('menuitem', { name: /资产/i }).click()
+  // fixture 全局 settings.json = { permissions: { allow: ['Bash(*)'] } },点 settings 资产行。
+  // 用 type 列 Badge(text=settings) 精确定位,避免误点 permissions 资产(同 source_path)。
+  const settingsRow = page.locator('[data-testid="asset-row"]').filter({ has: page.locator('.ant-tag', { hasText: 'settings' }) }).first()
+  await settingsRow.click()
+  await expect(page.getByTestId('asset-detail-name')).toBeVisible({ timeout: 10000 })
+  const editor = page.locator('.monaco-editor').first()
+  await expect(editor).toBeVisible({ timeout: 10000 })
+  // Monaco 文本:应含原文件的 permissions/allow/Bash(*) 内容。
+  await expect(editor.getByText('Bash(*)')).toBeVisible({ timeout: 10000 })
+  // 不应把文件包在 "raw" 键里(旧泄漏的标志)。
+  const editorText = await editor.textContent()
+  expect(editorText).not.toContain('"raw"')
 })
 
 test('设置页合并视图渲染检测器与规则', async ({ page }) => {
@@ -362,8 +383,8 @@ test('语言切换:中→英后侧栏与按钮变英文', async ({ page }) => {
   // 侧栏导航变英文
   await expect(page.getByRole('menuitem', { name: 'Dashboard' })).toBeVisible()
   await expect(page.getByRole('menuitem', { name: 'Assets' })).toBeVisible()
-  // 重新扫描按钮变英文
-  await expect(page.getByRole('button', { name: 'Rescan' })).toBeVisible()
+  // 安全检测按钮变英文
+  await expect(page.getByRole('button', { name: 'Security Scan' })).toBeVisible()
   // 切回中文(此时当前是 English,ArrowDown 循环回中文,或 ArrowUp)
   await langSelect.click()
   await page.keyboard.press('ArrowDown')
@@ -399,9 +420,9 @@ test('项目 tab 右键置顶 + 颜色 + 刷新保留', async ({ page }) => {
 
 test('finding 命中位置高亮(源码视图自动激活)', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
-  // Task 15:TopBar「重新扫描」打开 RescanModal,需在 modal 内点「开始扫描」触发扫描。
-  await page.getByRole('button', { name: /Rescan|重新扫描/ }).click()
-  await page.locator('.ant-modal').filter({ hasText: /重扫描|Rescan/ }).getByRole('button', { name: /开始扫描|Start scan/ }).click()
+  // Task 15:TopBar「安全检测」打开 RescanModal,需在 modal 内点「开始检测」触发扫描。
+  await page.getByRole('button', { name: /安全检测|Security Scan|扫描/ }).click()
+  await page.locator('.ant-modal').filter({ hasText: /安全检测配置|Security Scan Config/ }).getByRole('button', { name: /开始检测|Start Scan/ }).click()
   // finding 行只在风险管理页渲染,需导航过去(参考既有「发现页扫描后展示 finding 行」用例)。
   await page.getByRole('menuitem', { name: /风险管理/ }).click()
   // 等待 finding 行渲染(fixture 含 Bash(*) baseline + injection.hidden-instruction.memory)。
@@ -420,9 +441,9 @@ test('finding 命中位置高亮(源码视图自动激活)', async ({ page }) =>
 
 test('风险信息表格 label 列定宽', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
-  // Task 15:TopBar「重新扫描」打开 RescanModal,需在 modal 内点「开始扫描」触发扫描。
-  await page.getByRole('button', { name: /Rescan|重新扫描/ }).click()
-  await page.locator('.ant-modal').filter({ hasText: /重扫描|Rescan/ }).getByRole('button', { name: /开始扫描|Start scan/ }).click()
+  // Task 15:TopBar「安全检测」打开 RescanModal,需在 modal 内点「开始检测」触发扫描。
+  await page.getByRole('button', { name: /安全检测|Security Scan|扫描/ }).click()
+  await page.locator('.ant-modal').filter({ hasText: /安全检测配置|Security Scan Config/ }).getByRole('button', { name: /开始检测|Start Scan/ }).click()
   // finding 行只在风险管理页渲染,需导航过去。
   await page.getByRole('menuitem', { name: /风险管理/ }).click()
   await expect(page.locator('[data-testid="finding-row"]').first()).toBeVisible({ timeout: 15000 })
@@ -449,8 +470,8 @@ test('[默认英文] 无 localStorage 时 fallbackLng=en', async ({ page }) => {
   // 侧栏导航为英文(Dashboard / Assets),证明默认英文生效(而非旧的中文默认)。
   await expect(page.getByRole('menuitem', { name: 'Dashboard' })).toBeVisible()
   await expect(page.getByRole('menuitem', { name: 'Assets' })).toBeVisible()
-  // 重新扫描按钮为英文 Rescan
-  await expect(page.getByRole('button', { name: 'Rescan' })).toBeVisible()
+  // 安全检测按钮为英文 Security Scan
+  await expect(page.getByRole('button', { name: 'Security Scan' })).toBeVisible()
 })
 
 // 语言切换后刷新保留(问题:切换语种后刷新恢复默认):标题带 [默认英文] 标记 → beforeEach
@@ -494,9 +515,9 @@ test('分页每页条数可改且不被重置', async ({ page }) => {
 // 基础信息下方出现 asset-risk-list,含 风险名称/级别/检测器/规则 4 列表头。
 test('资产风险列显示数量且详情抽屉含风险列表', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
-  // Task 15:TopBar「重新扫描」打开 RescanModal,需在 modal 内点「开始扫描」触发扫描。
-  await page.getByRole('button', { name: /重新扫描|扫描/ }).click()
-  await page.locator('.ant-modal').filter({ hasText: '重扫描' }).getByRole('button', { name: '开始扫描' }).click()
+  // Task 15:TopBar「安全检测」打开 RescanModal,需在 modal 内点「开始检测」触发扫描。
+  await page.getByRole('button', { name: /安全检测|Security Scan|扫描/ }).click()
+  await page.locator('.ant-modal').filter({ hasText: '安全检测配置' }).getByRole('button', { name: '开始检测' }).click()
   await page.getByRole('menuitem', { name: /资产/i }).click()
   await expect(page.locator('[data-testid="asset-row"]').first()).toBeVisible({ timeout: 15000 })
   // 全局 settings.json 含 Bash(*) baseline finding → 该资产行风险列显示数字徽标(>0)。
@@ -553,18 +574,18 @@ test('扫描总开关切换后 UI 反映状态', async ({ page }) => {
   await expect(masterSwitch).not.toBeChecked({ timeout: 10000 })
 })
 
-// Pillar 3(RescanModal):点 TopBar「重新扫描」→ modal 弹出 → 选 project scope →
+// Pillar 3(RescanModal):点 TopBar「安全检测」→ modal 弹出 → 选 project scope →
 // 断言项目 Select 出现 → 取消关闭(不实际跑扫描,避免慢/flaky)。
 test('RescanModal 打开并切换 project scope 显示项目选择', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
-  // TopBar「重新扫描」按钮(Task 15:onClick → openRescan → RescanModal open=true)。
-  await page.getByRole('button', { name: /重新扫描/ }).click()
-  // Modal 标题 rescan.title = 「重扫描」(中文 fixture)。
-  const modal = page.locator('.ant-modal').filter({ hasText: '重扫描' })
+  // TopBar「安全检测」按钮(Task 15:onClick → openRescan → RescanModal open=true)。
+  await page.getByRole('button', { name: /安全检测|Security Scan|扫描/ }).click()
+  // Modal 标题 rescan.title = 「安全检测配置」(中文 fixture)。
+  const modal = page.locator('.ant-modal').filter({ hasText: '安全检测配置' })
   await expect(modal).toBeVisible({ timeout: 10000 })
   // 选「项目」scope:antd Radio 渲染 <label><input type=radio><span>项目</span></label>,
   // getByRole('radio',{name:'项目'}) 靠可见文本匹配。点击后 scopeType='project'。
-  await modal.getByRole('radio', { name: '项目' }).click()
+  await modal.getByRole('radio', { name: '项目级' }).click()
   // 项目 Select 渲染(RescanModal L53-55:scopeType==='project' 时渲染 Select)。
   // antd Select 的 placeholder 不在 DOM placeholder 属性上,而在 .ant-select-selection-placeholder 内,
   // 故用 getByText 匹配文案 rescan.selectProject = 「选择项目」。
