@@ -15,7 +15,7 @@
 ## Codex CLI 支持
 
 - **合入日期**:2026-07-24
-- **合入 SHA**:待合并(分支 `worktree-codex-agent-support`,基于 main `8acd561`)
+- **合入 SHA**:`2438ee1`(main,fast-forward,7 commits)
 
 ### 升级
 
