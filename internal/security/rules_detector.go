@@ -154,49 +154,27 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 		// script/skill/command/agent/memory 用 content 字段,permissions 无命令文本(跳过语义)。
 		cmdText, _ := commandTextFromAsset(a)
 
-		// 语义缓存:对该 asset 的命令文本跑一次 DispatchCommand(优先级分发),
-		// 所有规则复用。nil = 尚未计算或不可计算(无命令文本/permissions 资产);
-		// 非 nil = 已缓存(含 Unknown,表示语义层无法判定)。
-		// 用 DispatchCommand(优先级分发 git > filesystem > database)而非 Dispatch(domain, ...):
-		// 解决 `git commit -m "rm -rf /"` 跨域冲突 —— filesystem 解析器不识别 git
-		// 数据区边界会误判 Deny;优先级分发让 git Safe 先返回,正确抑制误报。
-		var semResult *semantics.SemanticResult
-		if cmdText != "" && a.Type != configengine.AssetPermissions {
-			res := semantics.DispatchCommand(cmdText)
-			semResult = &res
-		}
-		// semDenyRuleDomain 映射语义 Deny 来源域到 sentinel 规则的 domain Metadata:
-		//   git → git, filesystem → filesystem, snowflake → database
-		// 从 RuleID 第一段提取(如 "filesystem"/"git"/"snowflake")。
-		// snowflake 域 RuleID 是 "snowflake.drop"(通用语义 RuleID),域段 = "snowflake",
-		// 但 sentinel 规则域是 "database" —— 需特殊映射。
-		// 仅对该域规则跳过正则(语义已判破坏,正则不必再跑)。
-		semDenyRuleDomain := ""
-		if semResult != nil && semResult.Decision == semantics.Deny && semResult.RuleID != "" {
-			switch strings.SplitN(semResult.RuleID, ".", 2)[0] {
-			case "git":
-				semDenyRuleDomain = "git"
-			case "filesystem":
-				semDenyRuleDomain = "filesystem"
-			case "snowflake":
-				semDenyRuleDomain = "database"
-			}
-		}
-		// semFindingEmitted 标记语义 finding 是否已构造(去重:一个 asset 一条语义 finding)。
-		semFindingEmitted := false
+		// 按行语义状态(修复最终 review C1:Safe span-scoping)。
+		// 修前:对整个命令文本跑一次 DispatchCommand 缓存单个 SemanticResult,任意 Safe 决策
+		// 会经关卡 1 `case Safe: continue` + 关卡 2 抑制该 asset 全部规则 —— 包括同一 content
+		// 另一行的真实 rm -rf /(漏报:git commit -m 'rm -rf /'\nrm -rf / → health 60 而非 20)。
+		// 修后:按行跑 DispatchCommand,Deny 仍 asset-wide-correct(任意行 Deny 即触发语义
+		// finding + 该域规则 continue),Safe 只抑制落在 safeLines 内的正则命中(同一行才抑制)。
+		// 无命令文本/permissions 资产 → anySem=false,语义关卡整体跳过(纯正则)。
+		semState := computeLineSemantic(cmdText)
 
-		// 预选语义 finding 载体规则(关卡 1 Deny 分支用):
-		// 优先匹配 r.Metadata["dcg_rule_id"] == sem.RuleID(精确匹配,继承正确 severity/remediation);
-		// 若无精确匹配(snowflake.drop 是通用语义 RuleID,无对应 dcg_rule_id),回退到该域首条
-		// asset_type 匹配规则。若该域无任何匹配规则,返回 nil(Deny 必有对应域规则,理论不会发生)。
-		//
-		// 修复 review Important #1:原实现用循环内首条域匹配规则做载体,若该规则 severity
-		// 与语义判定不匹配(如 rm -rf / → 首条 sed-exec-unverified high,而非 rm-rf-root-home critical),
-		// finding severity 被扭曲,健康分扣分失真。按 dcg_rule_id 精确匹配后,severity 从正确规则继承。
-		var semCarrier *ruleengine.Rule
-		if semResult != nil && semResult.Decision == semantics.Deny && semDenyRuleDomain != "" {
-			semCarrier = pickSemanticCarrier(allRules, a, semDenyRuleDomain, semResult.RuleID)
+		// 预选每域语义 finding 载体规则(关卡 1 Deny 用):
+		// 按 dcg_rule_id == sem.RuleID 精确匹配(继承正确 severity/remediation);
+		// 无精确匹配回退到该域首条 asset_type 匹配规则(snowflake.drop 通用 RuleID 时,
+		// 修 C2 后 snowflake 语义返回具体 dcg_rule_id,通常 strategy 1 即命中)。
+		// 见 pickSemanticCarrier 注释(修复 review Important #1)。
+		semCarriers := map[string]*ruleengine.Rule{}
+		for _, dom := range semState.denyOrder {
+			res := semState.denyByDomain[dom]
+			semCarriers[dom] = pickSemanticCarrier(allRules, a, dom, res.RuleID)
 		}
+		// emittedDomains:每域只构造一次语义 finding(去重;多 Deny 域各产一条)。
+		emittedDomains := map[string]bool{}
 
 		for _, r := range allRules {
 			// 规则按 asset_type 路由(Covers=nil → 全资产传入,内部按类型分发)。
@@ -219,39 +197,29 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 			// 语义两道关卡(仅对有命令文本 + 有语义解析器的域 + 非 permissions 资产触发)。
 			// domain 来自规则 Metadata["domain"](destructive.<domain>.<pattern>)。
 			domain, _ := r.Metadata["domain"].(string)
-			semActive := semResult != nil && semantics.HasParser(domain)
+			semActive := semState.anySem && semantics.HasParser(domain)
 
 			if semActive {
-				// 关卡 1:正则前语义判定。
-				//   Deny + 规则域 == 语义来源域(mapped)→ 该域所有规则跳过正则(语义已判破坏);
-				//     对预选载体规则构造一次语义 finding(去重:semFindingEmitted 标记)。
-				//   Safe → 跳过该规则(防误报,如 git commit -m 数据区内的 rm 字面量)。
-				//     Safe 来自优先级最高的解析器(如 git),对所有有解析器的域规则生效 ——
-				//     若 git 判 Safe(commit -m 数据区),filesystem 规则也不应报(避免误报)。
-				//   Unknown → 走正则
-				switch semResult.Decision {
-				case semantics.Deny:
-					if domain == semDenyRuleDomain {
-						// 对预选载体规则构造语义 finding(去重)。
-						// 载体规则已按 dcg_rule_id == sem.RuleID 精确匹配预选(见循环前 semCarrier):
-						// Severity/Remediation/Message 从正确规则继承(如 rm -rf / → rm-rf-root-home critical);
-						// RuleID 用 semantic.<dcg_rule_id> 覆盖(见 makeSemanticFinding)。
-						// 若 semCarrier 为 nil(域无匹配规则,理论不发生),用当前 r 兜底。
-						if !semFindingEmitted {
-							carrier := r
-							if semCarrier != nil {
-								carrier = *semCarrier
-							}
-							f := makeSemanticFinding(d, carrier, a, *semResult)
-							fp := ruleengine.Fingerprint(carrier, a.ID)
-							applySuppression(&f, fp, d.baseline, d.supprs)
-							out = append(out, f)
-							semFindingEmitted = true
+				// 关卡 1(正则前语义判定):Deny 按域触发。
+				//   若该域有任意行 Deny(denyByDomain[domain] 存在)→ 构造一次语义 finding
+				//     (去重:emittedDomains[domain]),并 continue 跳过该域所有正则
+				//     (语义已判破坏,正则不必再跑;Deny asset-wide-correct,任意行 Deny 即触发)。
+				//   Safe 不再在此无条件 continue(C1 修复):Safe 改由关卡 2 按行 span-scoping 复核,
+				//     避免一行 Safe 抑制另一行的真实破坏性命令。
+				//   Unknown → 走正则。
+				if denyRes, ok := semState.denyByDomain[domain]; ok {
+					if !emittedDomains[domain] {
+						carrier := r
+						if c := semCarriers[domain]; c != nil {
+							carrier = *c
 						}
-						continue // 该域所有规则跳过正则(语义已判破坏)
+						f := makeSemanticFinding(d, carrier, a, denyRes)
+						fp := ruleengine.Fingerprint(carrier, a.ID)
+						applySuppression(&f, fp, d.baseline, d.supprs)
+						out = append(out, f)
+						emittedDomains[domain] = true
 					}
-				case semantics.Safe:
-					continue // 跳过该规则(语义判安全,防误报)
+					continue // 该域所有规则跳过正则(语义已判破坏)
 				}
 			}
 
@@ -260,13 +228,16 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 				continue
 			}
 
-			// 关卡 2:正则后语义 Safe 复核(防误报)。
-			// 正则命中,但若语义判 Safe,丢弃 finding(如正则对 git commit -m 数据区
-			// 内 rm 字面量误报,语义 Safe 复核抑制)。
-			// Deny 在关卡 1 已处理(不会走到这里,semDenyRuleDomain 域规则已 continue);
-			// Unknown 不复核(正则命中即报)。
-			if semActive && semResult.Decision == semantics.Safe {
-				continue // 丢弃正则误报
+			// 关卡 2:正则后语义 Safe 按行复核(防误报,C1 span-scoping)。
+			// 正则命中,若该命中落在 Safe 行(同一行语义判 Safe)则丢弃 —— 抑制数据区内
+			// 字面量误报(如 git commit -m "rm -rf /" 单行 Safe,该行 rm 字面量不报)。
+			// 但落在非 Safe 行(另一行的真实 rm -rf /)→ 不丢弃(修 C1 跨行漏报)。
+			// Locations 为空(command 字段命中无行位置)→ 整条命令 wholeSafe 才丢弃
+			// (hook/mcp_server 单行命令 Safe 场景)。
+			if semActive {
+				if semState.findingInSafeLines(res.Locations) {
+					continue // 丢弃正则误报(命中在 Safe 行内)
+				}
 			}
 
 			fp := ruleengine.Fingerprint(r, a.ID)
@@ -415,6 +386,100 @@ func commandTextFromAsset(a configengine.Asset) (text string, field string) {
 	}
 	return "", ""
 }
+
+// lineSemanticState 是按行跑语义解析后的聚合状态(修复最终 review C1)。
+//
+// 修前:对整个命令文本跑一次 DispatchCommand,缓存单个 SemanticResult,所有规则复用。
+// 问题:任何 Safe 决策(git commit -m / rm -i / git restore --staged / git checkout -b)
+// 都会经关卡 1 `case Safe: continue` + 关卡 2 抑制该 asset 的所有规则 —— 包括同一
+// content 里另一行的真实 rm -rf /(漏报:health 60 而非 20)。
+//
+// 修后(C1 span-scoping):对 content 资产按行切分,逐行跑 DispatchCommand,聚合:
+//   - denyByDomain:每域首条 Deny 结果(用于关卡 1 语义 finding + 该域规则 continue)。
+//     Deny 仍 asset-wide-correct(任意行 Deny 即触发),保持破坏性兜底不漏。
+//   - safeLines:被判 Safe 的行号集合(1-based);关卡 2 只丢弃 Location.Line 落在
+//     safeLines 内的正则命中(同一行 Safe 才抑制,不跨行)。
+//   - wholeSafe:所有行都 Safe(单行命令或全部行 Safe);用于无 Location 的 command
+//     字段匹配(hook/mcp_server command 无行位置,按整条命令 Safe 判定丢弃)。
+//
+// 简化:按 \n 切行;跨行命令(如 rm -rf \\\n/)可能被拆散。这类情况任意行若 Unknown
+// → 不进 safeLines → 不抑制,正则照常命中(不漏报);仅当跨行命令恰好被判 Safe 时可能
+// 误抑制,属 R1 可接受简化(review C1 明确允许 line-split 简化)。
+type lineSemanticState struct {
+	denyByDomain map[string]semantics.SemanticResult // 域 → 首条 Deny(关卡 1 用)
+	denyOrder    []string                            // Deny 域出现顺序(稳定 emit 顺序)
+	safeLines    map[int]bool                        // Safe 行号(1-based,关卡 2 用)
+	wholeSafe    bool                                // 所有行均 Safe(无 Location 命中丢弃用)
+	anySem       bool                                // 是否跑了语义(有命令文本 + 非 permissions)
+}
+
+// computeLineSemantic 按行跑 DispatchCommand,聚合 lineSemanticState。
+// 无命令文本 / permissions 资产 → 返回 anySem=false(语义关卡整体跳过)。
+func computeLineSemantic(cmdText string) lineSemanticState {
+	st := lineSemanticState{
+		denyByDomain: map[string]semantics.SemanticResult{},
+		safeLines:    map[int]bool{},
+	}
+	if cmdText == "" {
+		return st
+	}
+	st.anySem = true
+	lines := strings.Split(cmdText, "\n")
+	allSafe := true
+	for i, line := range lines {
+		res := semantics.DispatchCommand(line)
+		switch res.Decision {
+		case semantics.Deny:
+			dom := mapSemDomain(res.RuleID)
+			if dom != "" {
+				if _, ok := st.denyByDomain[dom]; !ok {
+					st.denyByDomain[dom] = res
+					st.denyOrder = append(st.denyOrder, dom)
+				}
+			}
+			allSafe = false
+		case semantics.Safe:
+			st.safeLines[i+1] = true
+		case semantics.Unknown:
+			allSafe = false
+		}
+	}
+	st.wholeSafe = allSafe
+	return st
+}
+
+// mapSemDomain 把语义 RuleID 的首段映射到 sentinel 规则 domain Metadata。
+//   git → git, filesystem → filesystem, snowflake.* → database
+// snowflake 语义 RuleID 现返回具体 dcg_rule_id(如 snowflake.drop-database,修复 C2),
+// 首段仍是 "snowflake",映射到 sentinel 的 "database" 域。
+func mapSemDomain(ruleID string) string {
+	switch strings.SplitN(ruleID, ".", 2)[0] {
+	case "git":
+		return "git"
+	case "filesystem":
+		return "filesystem"
+	case "snowflake":
+		return "database"
+	}
+	return ""
+}
+
+// findingInSafeLines 判断正则命中是否落在 Safe 行(关卡 2 用)。
+// Locations 为空(command 字段命中,无行位置)时,若整条命令 wholeSafe 才丢弃;
+// 否则按 Location.Line 是否在 safeLines 判定。命中多行只要有一行非 Safe 就不丢弃
+// (保守:避免漏报跨行命中)。
+func (st lineSemanticState) findingInSafeLines(locs []ruleengine.Location) bool {
+	if len(locs) == 0 {
+		return st.wholeSafe // command 字段命中无行位置:整条命令 Safe 才丢弃
+	}
+	for _, loc := range locs {
+		if !st.safeLines[loc.Line] {
+			return false // 有命中行非 Safe → 不丢弃
+		}
+	}
+	return true
+}
+
 
 // pickSemanticCarrier 为语义 Deny finding 预选载体规则(修复 review Important #1)。
 //

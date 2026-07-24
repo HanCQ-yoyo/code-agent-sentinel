@@ -103,9 +103,67 @@ func snowflakeSemanticDecision(command string) SemanticResult {
 		}
 		return SemanticResult{
 			Decision: Deny,
-			RuleID:   "snowflake.drop",
+			RuleID:   snowflakeRuleIDForSQL(m[1]),
 			Reason:   "SQL 破坏性 keyword: " + strings.Join(kws, ","),
 		}
 	}
 	return SemanticResult{Decision: Safe, Reason: "SQL 无破坏性 keyword"}
+}
+
+// snowRuleTargetRe 捕获破坏性 SQL 构造的 leading keyword + 紧邻目标 keyword,
+// 用于映射到具体 dcg_rule_id(修复最终 review C2)。
+// ScanSQL 的 lexer 只保留破坏性 keyword token(DROP/TRUNCATE/...),不保留 DATABASE/
+// TABLE/SCHEMA 等目标 keyword,故无法从 DestructiveTokens 序列判定 DROP 的对象类型。
+// 这里在原始 SQL 文本上做正则提取(绕过 lexer 的 token 保留限制),已排除注释/字符串内
+// 的误命中由 ScanSQL 的 DestructiveTokens 把关(调用者仅在 DestructiveTokens 非空时进入本函数)。
+var snowRuleTargetRe = regexp.MustCompile(`(?i)\b(DROP|TRUNCATE|DELETE|UPDATE)\s+(DATABASE|SCHEMA|TABLE|FROM|SET)\b`)
+
+// snowflakeRuleIDForSQL 把 SQL 文本里的破坏性构造映射到具体 dcg_rule_id,
+// 对齐 destructive_commands.yaml 的 snowflake.* 条目(修复最终 review C2)。
+//
+// 修前:snowflakeSemanticDecision 统一返回 RuleID="snowflake.drop"(通用语义 RuleID,
+// 无对应 dcg_rule_id)→ pickSemanticCarrier strategy 1 miss → 回退 strategy 2 = 该域首条
+// 规则(按文件序 destructive.database.mongodb.stdin-unverified,severity high)→
+// (1) semantic finding severity 被扭曲成 high(DROP DATABASE 本应 critical);
+// (2) Gate 1 continue 抑制了正确的 critical 正则规则(snowflake.drop-database 等)。
+//
+// 修后:按破坏性构造返回具体 dcg_rule_id(如 DROP DATABASE → snowflake.drop-database),
+// pickSemanticCarrier strategy 1 精确命中对应 YAML 规则,继承正确 severity/remediation。
+//
+// 映射规则(对齐 YAML 的 dcg_rule_id):
+//   - DROP DATABASE → snowflake.drop-database   (critical)
+//   - DROP SCHEMA   → snowflake.drop-schema      (critical)
+//   - DROP TABLE    → snowflake.drop-table       (critical)
+//   - TRUNCATE      → snowflake.truncate-table   (critical)
+//   - DELETE FROM   → snowflake.delete-all       (critical)
+//   - UPDATE ... SET → snowflake.update-all     (critical)
+//   - 其他(DROP 其他目标 / 无法细分)→ snowflake.drop(回退,保持旧行为)
+//
+// WHERE 子句区分(bounded-delete/bounded-update)由正则规则承担,语义层只负责给 Deny
+// 配正确 carrier,故任何 DELETE/UPDATE keyword(无论有无 WHERE)都映射到 delete-all/update-all。
+func snowflakeRuleIDForSQL(sql string) string {
+	m := snowRuleTargetRe.FindStringSubmatch(sql)
+	if m == nil {
+		return "snowflake.drop"
+	}
+	lead := strings.ToUpper(m[1])
+	target := strings.ToUpper(m[2])
+	switch lead {
+	case "DROP":
+		switch target {
+		case "DATABASE":
+			return "snowflake.drop-database"
+		case "SCHEMA":
+			return "snowflake.drop-schema"
+		case "TABLE":
+			return "snowflake.drop-table"
+		}
+	case "TRUNCATE":
+		return "snowflake.truncate-table"
+	case "DELETE":
+		return "snowflake.delete-all"
+	case "UPDATE":
+		return "snowflake.update-all"
+	}
+	return "snowflake.drop"
 }
