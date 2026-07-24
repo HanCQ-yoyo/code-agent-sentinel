@@ -40,6 +40,37 @@ func TestRunSetupRejectsNonTTY(t *testing.T) {
 	}
 }
 
+// TestDetectAgentsFindsCodex 验证 home 下有 ~/.codex/config.toml 时,detectAgents 返回 codex。
+// Task 1 已让 KnownAgents() 含 codex spec(Detect 检查 ~/.codex/config.toml),此处只验证端到端。
+func TestDetectAgentsFindsCodex(t *testing.T) {
+	home := t.TempDir()
+	// 无任何 agent → 空
+	if got := detectAgents(home); len(got) != 0 {
+		t.Fatalf("空 home 应探测到 0 agent, got %d", len(got))
+	}
+	// 造 ~/.codex/config.toml
+	if err := os.MkdirAll(filepath.Join(home, ".codex"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".codex", "config.toml"), []byte("model = \"x\"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := detectAgents(home)
+	var ids []string
+	for _, s := range got {
+		ids = append(ids, s.ID)
+	}
+	found := false
+	for _, id := range ids {
+		if id == "codex" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatalf("应探测到 codex, got %v", ids)
+	}
+}
+
 // TestMergeSetupSelectionIntoConfig 验证 mergeAgents 把选择写入 cfg.Agents 且保留其他字段。
 func TestMergeSetupSelectionIntoConfig(t *testing.T) {
 	selection := []config.AgentCfg{

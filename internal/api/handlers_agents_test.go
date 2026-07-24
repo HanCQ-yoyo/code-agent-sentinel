@@ -112,6 +112,44 @@ func TestPutAgentScanEnabled_Unknown(t *testing.T) {
 	}
 }
 
+// TestGetAgentsMixedClaudeAndCodex 验证混合部署(claude-code + codex)下 /api/agents 返回两者且 Kind 正确。
+// 模拟 main.go 经 AgentsFromSpecs 填充后的 s.Agents,直接构造混合切片传入 NewServer。
+func TestGetAgentsMixedClaudeAndCodex(t *testing.T) {
+	dir := t.TempDir()
+	gin.SetMode(gin.TestMode)
+	eng := configengine.NewEngine(dir, "")
+	// 直接构造混合 agents(模拟 main.go 经 AgentsFromSpecs 填充后的结果)
+	agents := []configengine.Agent{
+		{ID: "claude-code", Name: "Claude Code", Kind: "claude-code", RootDir: filepath.Join(dir, ".claude"), HomeDir: dir},
+		{ID: "codex", Name: "Codex CLI", Kind: "codex", RootDir: filepath.Join(dir, ".codex"), HomeDir: dir},
+	}
+	s := NewServer(eng, nil, config.DefaultConfig(), "tok", nil, agents, nil)
+	w := reqAgent(t, s, "GET", "/api/agents", nil)
+	if w.Code != 200 {
+		t.Fatalf("got %d: %s", w.Code, w.Body)
+	}
+	var body struct {
+		Agents []struct {
+			ID   string `json:"id"`
+			Kind string `json:"kind"`
+		} `json:"agents"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &body)
+	if len(body.Agents) != 2 {
+		t.Fatalf("got %d agents, want 2", len(body.Agents))
+	}
+	got := map[string]string{}
+	for _, a := range body.Agents {
+		got[a.ID] = a.Kind
+	}
+	if got["claude-code"] != "claude-code" {
+		t.Fatalf("claude-code Kind = %q, want claude-code", got["claude-code"])
+	}
+	if got["codex"] != "codex" {
+		t.Fatalf("codex Kind = %q, want codex", got["codex"])
+	}
+}
+
 // TestPutAgentScanEnabled_FallbackAgent 覆盖回退 agent 场景:用户没跑过 `sentinel setup`,
 // config.yaml 是 agents: [] → ResolveAgents 走回退路径合成 claude-code,但 Config.Agents 仍空。
 // 此时 s.Agents 含 claude-code(agentExists=true,开关显示),但 s.Config.Agents 为空。
