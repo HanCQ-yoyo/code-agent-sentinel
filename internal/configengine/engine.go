@@ -7,6 +7,7 @@ type Engine struct {
 	HomeDir    string // 用户的 home(~)
 	ClaudeDir  string // 全局 .claude 目录(空 → home/.claude);项目级 .claude 不受此影响
 	ClaudeJSON string // ~/.claude.json(机器管理文件,不随 .claude 移动)
+	Kind       string // "claude-code" | "codex";决定 Discover 用哪套解析器。空=claude(向后兼容)
 	// DisabledAssetTypes 按资产类型关闭发现(空 = 全发现)。由 main.go 从 config 桥接。
 	DisabledAssetTypes []AssetType
 }
@@ -31,7 +32,9 @@ func (e *Engine) ListProjects() ([]Project, error) {
 // NewEngineFromAgent 用 agent 描述构造 Engine。本轮 Claude Code 等价 NewEngine(a.HomeDir, a.RootDir),
 // 但 agent 描述显式化,为多 agent 铺路。
 func NewEngineFromAgent(a Agent) *Engine {
-	return NewEngine(a.HomeDir, a.RootDir)
+	e := NewEngine(a.HomeDir, a.RootDir)
+	e.Kind = a.Kind
+	return e
 }
 
 // isAssetTypeDisabled 判断某资产类型是否被关闭发现。

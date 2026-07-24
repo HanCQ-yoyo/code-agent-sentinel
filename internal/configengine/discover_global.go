@@ -7,11 +7,23 @@ import (
 	"path/filepath"
 )
 
-// Discover 发现全局资产:settings 单文件 + skills/commands/agents markdown 目录 +
-// ~/.claude.json 的 mcpServers + memory(CLAUDE.md + memory/)+ plugins +
-// keybindings + scripts(从 hook/command 抽取)。
-// 项目级发现在 discover_project.go(Task 8)。
+// Discover 按 Engine.Kind 分流到对应解析器集。空 Kind 走 Claude(向后兼容)。
+//
+// 注意:Discover 定义在 discover_global.go(而非 engine.go),因为 Claude 发现主体
+// 一直在此文件——Task 3 只在原 Discover 主体基础上改名为 discoverClaude 并加此分流
+// 开关,不做文件搬移(避免无关重构)。
 func (e *Engine) Discover() (Inventory, error) {
+	switch e.Kind {
+	case "codex":
+		return e.discoverCodex()
+	default:
+		return e.discoverClaude()
+	}
+}
+
+// discoverClaude 发现 Claude Code 资产(原 Discover 主体,逻辑不变)。
+// 项目级发现在 discover_project.go(Task 8)。
+func (e *Engine) discoverClaude() (Inventory, error) {
 	inv := Inventory{}
 	claude := e.ClaudeDir
 
