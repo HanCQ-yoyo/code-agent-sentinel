@@ -40,9 +40,10 @@ export function Badge({ tone, children }: { tone: BadgeTone; children: ReactNode
   }
 
   if (tone in sevFill) {
-    // 级别标签统一:实色填充 + 白字(全级别一致),实色 token 已保证白字对比度。
+    // 级别标签统一:实色填充 + 白字(全级别一致,-solid token 已调深保证白字对比度 ≥ AA)。
+    // 文字走 --badge-text token(design.md:取代 #fff 硬编码)。
     return (
-      <Tag style={{ ...base, background: sevFill[tone], color: '#fff', border: 'none', fontWeight: 600 }}>
+      <Tag style={{ ...base, background: sevFill[tone], color: 'var(--badge-text)', border: 'none', fontWeight: 600 }}>
         {children}
       </Tag>
     )

@@ -4,9 +4,12 @@ import type { ScanSummary } from '../types'
 import { formatDateTimeShort } from '../lib/format'
 import { agentMetaById } from '../lib/agents'
 
-// 颜色板(固定 hex,需在多线间区分,不用 CSS 变量)。
-// 与 antd tag 色系对齐,前 6 色覆盖典型 agent 数量,超出按模 6 轮询。
-const COLORS = ['#1677ff', '#52c41a', '#faad14', '#f5222d', '#722ed1', '#13c2c2']
+// 分类色板:走 --cat-1..6 token(design.md:统一 scope / pinned / 趋势线的 category 色系)。
+// 前 6 色覆盖典型 agent 数量,超出按模 6 轮询。明暗由 token 自动切,不再固定 hex。
+const COLORS = [
+  'var(--cat-1)', 'var(--cat-2)', 'var(--cat-3)',
+  'var(--cat-4)', 'var(--cat-5)', 'var(--cat-6)',
+]
 
 // 风险指数趋势:多线版本(Task 10)。history 按 agent_id groupBy,每组一条 <polyline>。
 // 关键设计:共享时间轴 —— 取所有 agent 点的全局 min/max started_at,
@@ -49,11 +52,11 @@ export function RiskTrendChart({ history }: { history: ScanSummary[] }) {
   return (
     <Card title={t('chart.riskTrendTitle')}>
       <svg viewBox={`0 0 ${W} ${H}`} style={{ width: '100%', height: 220 }} role="img" aria-label={t('chart.riskTrendAria')}>
-        {/* y 轴参考线 0/50/100 */}
+        {/* y 轴参考线 0/50/100(SVG fill 走 --color-*;fontSize 是 viewBox 内数值,不进 token) */}
         {[0, 50, 100].map((v) => (
           <g key={v}>
-            <line x1={P} y1={y(v)} x2={W - P} y2={y(v)} stroke="var(--bg-border)" strokeWidth={1} />
-            <text x={4} y={y(v) + 4} fontSize={10} fill="var(--text-muted)">{v}</text>
+            <line x1={P} y1={y(v)} x2={W - P} y2={y(v)} stroke="var(--color-rule)" strokeWidth={1} />
+            <text x={4} y={y(v) + 4} fontSize={10} fill="var(--color-muted)">{v}</text>
           </g>
         ))}
         {/* 每 agent 一条折线 + 点(带 <title> tooltip) */}
@@ -87,13 +90,13 @@ export function RiskTrendChart({ history }: { history: ScanSummary[] }) {
           return (
             <g key={`lg-${aid}`}>
               <line x1={lx} y1={ly} x2={lx + 16} y2={ly} stroke={color} strokeWidth={2} />
-              <text x={lx + 20} y={ly + 4} fontSize={11} fill="var(--text-secondary)">{label}</text>
+              <text x={lx + 20} y={ly + 4} fontSize={11} fill="var(--color-muted)">{label}</text>
             </g>
           )
         })}
         {/* 首尾时间标签(共享轴) */}
-        <text x={P} y={H - 8} fontSize={10} fill="var(--text-muted)">{formatDateTimeShort(tMin)}</text>
-        {tMax !== tMin ? <text x={W - P} y={H - 8} fontSize={10} fill="var(--text-muted)" textAnchor="end">{formatDateTimeShort(tMax)}</text> : null}
+        <text x={P} y={H - 8} fontSize={10} fill="var(--color-muted)">{formatDateTimeShort(tMin)}</text>
+        {tMax !== tMin ? <text x={W - P} y={H - 8} fontSize={10} fill="var(--color-muted)" textAnchor="end">{formatDateTimeShort(tMax)}</text> : null}
       </svg>
     </Card>
   )

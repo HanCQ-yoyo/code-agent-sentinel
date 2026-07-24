@@ -9,7 +9,6 @@ import { AssetStatTiles } from '../components/AssetStatTiles'
 import { TopRiskTypes } from '../components/TopRiskTypes'
 import { RiskTrendChart } from '../components/RiskTrendChart'
 import { AgentMultiSelect } from '../components/AgentMultiSelect'
-import { AgentIcon } from '../components/AgentIcon'
 import { formatDateTimeShort } from '../lib/format'
 import type { Finding } from '../types'
 
@@ -61,16 +60,19 @@ export default function Dashboard() {
         <Typography.Text strong>{t('dashboard.multiAgentView')}</Typography.Text>
         <AgentMultiSelect value={selectedAgents} onChange={setSelectedAgents} />
       </div>
-      {/* 健康分圆圈行:聚合模式多圆圈,单 agent 模式单圆圈。每圆圈附 agent 名 + 上次扫描时间。 */}
+      {/* 健康分圆圈行:聚合模式多圆圈,单 agent 模式单圆圈。每圆圈卡标题即 agent 身份
+          (logo+名),上次扫描时间作为次级元信息放在 band 下(design.md #1+#8:
+          卡片固定宽度不拉满行,单 agent 不再占满整行;去掉外层「环卡+标签」div)。 */}
       <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'stretch' }}>
         {healthCards.map((c) => (
-          <div key={c.key} style={{ flex: '1 1 220px', minWidth: 220, maxWidth: 320, display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <HealthScoreCard h={c.h} />
-            <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>
-              <AgentIcon id={c.agentId} /> {c.agentName}
-              {c.lastScanAt ? ` · ${formatDateTimeShort(c.lastScanAt)}` : ` · ${t('dashboard.notScanned')}`}
-            </div>
-          </div>
+          <HealthScoreCard
+            key={c.key}
+            h={c.h}
+            agentId={c.agentId}
+            agentName={c.agentName}
+            lastScanAt={c.lastScanAt ? formatDateTimeShort(c.lastScanAt) : undefined}
+            notScannedHint={c.lastScanAt ? undefined : t('dashboard.notScanned')}
+          />
         ))}
       </div>
       <Row gutter={16} align="stretch">

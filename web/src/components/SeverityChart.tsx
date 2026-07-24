@@ -13,14 +13,14 @@ export function SeverityChart({ findings }: { findings: Finding[] }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
         {SEVERITY_ORDER.map((s) => (
           <div key={s} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ width: 32, color: 'var(--text-muted)' }}>{t(SEVERITY_LABEL_KEY[s])}</span>
-            <div style={{ flex: 1, background: 'var(--bg-border)', borderRadius: 4, height: 12, overflow: 'hidden' }}>
+            <span style={{ width: 32, color: 'var(--color-muted)', fontSize: 'var(--fs-sm)' }}>{t(SEVERITY_LABEL_KEY[s])}</span>
+            <div style={{ flex: 1, background: 'var(--color-rule)', borderRadius: 'var(--radius-sm)', height: 12, overflow: 'hidden' }}>
               <div
                 data-testid={`severity-${s}`}
                 style={{ width: `${(counts[s] / total) * 100}%`, minWidth: counts[s] > 0 ? 8 : 0, height: '100%', background: `var(--sev-${s})` }}
               />
             </div>
-            <span style={{ width: 28, textAlign: 'right', color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>{counts[s]}</span>
+            <span style={{ width: 28, textAlign: 'right', color: 'var(--color-ink)', fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)', fontVariantNumeric: 'tabular-nums' }}>{counts[s]}</span>
           </div>
         ))}
       </div>

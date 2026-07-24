@@ -123,8 +123,10 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
   ]
 
   return (
+    // design.md #2:筛选作为表的控制头,框在结果 Card 内顶部 + 底部 hairline 分隔
+    // (filter-toolbar 统一模式:控制层/数据层同卡内分层,不脱节、省垂直空间)。
     <Card>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 12, marginBottom: 12, alignItems: 'center' }}>
+      <div className="filter-toolbar">
         <Segmented
           className="sev-seg"
           value={filter}
@@ -138,15 +140,16 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
             })),
           ]}
         />
-        {/* 抑制状态筛选:与 sev 筛选 AND 组合。已抑制 finding 默认仍在「全部」中显示(降透明度)。 */}
+        {/* 抑制状态筛选:与 sev 筛选 AND 组合。已抑制 finding 默认仍在「全部」中显示(降透明度)。
+            design.md #5:统一用 sev-seg 配色(色点 + 选中 accent 实色填充),与级别筛选同一套样式。 */}
         <Segmented
-          size="small"
+          className="sev-seg"
           value={supprFilter}
           onChange={(v) => setSupprFilter(v as SupprFilter)}
           options={[
-            { value: 'all', label: `${t('findingTable.all')} ${supprCounts.all}` },
-            { value: 'active', label: `${t('findingTable.active')} ${supprCounts.active}` },
-            { value: 'suppressed', label: `${t('findingTable.suppressed')} ${supprCounts.suppressed}` },
+            { value: 'all', label: <SevSegLabel text={t('findingTable.all')} count={supprCounts.all} />, className: 'sev-tab-all' },
+            { value: 'active', label: <SevSegLabel text={t('findingTable.active')} count={supprCounts.active} />, className: 'sev-tab-all' },
+            { value: 'suppressed', label: <SevSegLabel text={t('findingTable.suppressed')} count={supprCounts.suppressed} />, className: 'sev-tab-all' },
           ]}
         />
       </div>

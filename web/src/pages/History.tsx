@@ -95,18 +95,14 @@ export default function History() {
           {isBatch ? <Tag style={{ marginLeft: 8 }} color="blue">{t('history.batchTag', { id: detail.batch_id!.slice(-8) })}</Tag> : null}
         </Typography.Title>
         {batchLoading ? <Spin size="small" style={{ display: 'block', margin: '8px auto' }} /> : null}
-        {/* 健康分圆圈行:batch 模式每 agent 一张;单记录模式一张。每张附 agent 名。 */}
+        {/* 健康分圆圈行:batch 模式每 agent 一张;单记录模式一张。卡标题即 agent 身份
+            (design.md #1+#8:固定宽度不拉满,去掉外层「环卡+标签」div)。 */}
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'stretch' }}>
           {batchRecords.map((r) => {
             const aid = r.agent_id ?? ''
             const m = agentMetaById(aid)
             return (
-              <div key={r.id} style={{ flex: '1 1 220px', minWidth: 220, maxWidth: 320, display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <HealthScoreCard h={r.health_score} />
-                <div style={{ textAlign: 'center', color: 'var(--text-secondary)', fontSize: 12 }}>
-                  <AgentIcon id={aid} /> {m.label}
-                </div>
-              </div>
+              <HealthScoreCard key={r.id} h={r.health_score} agentId={aid} agentName={m.label} />
             )
           })}
         </div>
@@ -168,8 +164,9 @@ export default function History() {
 
   return (
     <Card>
-      {/* Task 10:agent 筛选下拉 + Task 12:按批次分组开关。 */}
-      <div style={{ marginBottom: 12, display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+      {/* design.md #2:筛选作为表的控制头,框在结果 Card 内顶部 + 底部 hairline 分隔
+          (filter-toolbar 统一模式:控制层/数据层同卡内分层,不脱节、省垂直空间)。 */}
+      <div className="filter-toolbar">
         <Select
           allowClear
           placeholder={t('history.filterAgent')}
@@ -178,7 +175,7 @@ export default function History() {
           options={(agents?.agents ?? []).map(a => ({ value: a.id, label: a.name }))}
           onChange={(v) => setAgentFilter(v ?? '')}
         />
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-secondary)', fontSize: 12 }}>
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--color-muted)', fontSize: 'var(--fs-sm)' }}>
           {t('history.batchGroup')}
           <Switch size="small" checked={batchGroup} onChange={setBatchGroup} />
         </span>
@@ -190,9 +187,26 @@ export default function History() {
           {batchGroups.map((g) => {
             const agentCount = new Set(g.rows.map((r) => r.agent_id)).size
             const t0 = g.rows.map((r) => r.started_at).sort()[0]
-            const header = g.batchId
-              ? `${t('history.batchTag', { id: g.batchId.slice(-8) })} · ${t('history.batchNAgents', { count: agentCount })} · ${formatDateTimeShort(t0)}`
-              : `${g.rows[0].id} · ${formatDateTimeShort(t0)}`
+            // 结构化面板头(design.md #8:原拼接字符串太丑,改成 batch 标签 + agent 数 + 时间
+            // 三段式,用 Tag + 次级文字区分层级,与 RescanModal/Findings 的标签风格统一)。
+            const header = (
+              <div style={{ display: 'inline-flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                {g.batchId ? (
+                  <Tag style={{ marginInlineEnd: 0, fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', borderColor: 'var(--cat-6)', color: 'var(--cat-6)', background: 'transparent' }}>
+                    {t('history.batchTag', { id: g.batchId.slice(-8) })}
+                  </Tag>
+                ) : null}
+                <span style={{ fontWeight: 600, color: 'var(--color-ink)' }}>
+                  {g.batchId ? t('history.batchNAgents', { count: agentCount }) : g.rows[0].id}
+                </span>
+                <span style={{ color: 'var(--color-dim)', fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', fontVariantNumeric: 'tabular-nums' }}>
+                  {formatDateTimeShort(t0)}
+                </span>
+                <span style={{ color: 'var(--color-dim)', fontSize: 'var(--fs-xs)' }}>
+                  · {t('history.colRiskCount')}: {g.rows.reduce((n, r) => n + (r.finding_count ?? 0), 0)}
+                </span>
+              </div>
+            )
             return (
               <Collapse.Panel key={g.key} header={header}>
                 <Table<ScanSummary>
@@ -217,6 +231,6 @@ export default function History() {
           size="middle"
         />
       )}
-    </Card>
+      </Card>
   )
 }

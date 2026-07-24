@@ -33,13 +33,13 @@ export function Sidebar() {
   // '/' 等同 '/dashboard'
   const selected = loc.pathname === '/' ? '/dashboard' : loc.pathname
   return (
-    <Sider width={208} breakpoint="lg" collapsedWidth={0} style={{ background: 'var(--bg-card)' }}>
-      {/* 品牌:落侧边栏最上方 = 平台最左上角 */}
+    <Sider width={208} breakpoint="lg" collapsedWidth={0} style={{ background: 'var(--color-paper-2)' }}>
+      {/* 品牌:落侧边栏最上方 = 平台最左上角。Inter Tight 700 + accent + 紧字距(design.md CTA voice)。 */}
       <div
         data-testid="brand"
-        style={{ display: 'flex', alignItems: 'center', padding: '20px 24px' }}
+        style={{ display: 'flex', alignItems: 'center', padding: 'var(--space-xl) var(--space-2xl)' }}
       >
-        <span style={{ color: 'var(--accent)', fontWeight: 700, fontSize: 15, lineHeight: '20px' }}>
+        <span style={{ color: 'var(--color-accent)', fontWeight: 700, fontSize: 'var(--fs-md)', lineHeight: '20px', letterSpacing: '-0.01em' }}>
           Code Agent Sentinel
         </span>
       </div>
@@ -48,7 +48,7 @@ export function Sidebar() {
         selectedKeys={[selected]}
         onClick={({ key }) => nav(key)}
         items={items}
-        style={{ background: 'var(--bg-card)', borderInlineEnd: 'none' }}
+        style={{ background: 'var(--color-paper-2)', borderInlineEnd: 'none' }}
       />
     </Sider>
   )

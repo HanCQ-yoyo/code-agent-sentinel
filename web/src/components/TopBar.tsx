@@ -50,12 +50,12 @@ export function TopBar({ onOpenRescan, loading }: Props) {
   return (
     <Header
       style={{
-        background: 'var(--bg-card)',
-        borderBottom: '1px solid var(--bg-border)',
+        background: 'var(--color-paper-2)',
+        borderBottom: '1px solid var(--color-rule)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'space-between',
-        padding: '0 24px',
+        padding: '0 var(--space-2xl)',
         height: 56,
       }}
     >
@@ -87,7 +87,7 @@ export function TopBar({ onOpenRescan, loading }: Props) {
           unCheckedChildren={t('topbar.light')}
           aria-label={t('topbar.theme')}
         />
-        <Button type="primary" icon={<ReloadOutlined />} loading={loading} onClick={onOpenRescan}>
+        <Button type="primary" icon={<ReloadOutlined />} loading={loading} onClick={onOpenRescan} style={{ whiteSpace: 'nowrap' }}>
           {loading ? t('topbar.scanning') : t('topbar.rescan')}
         </Button>
       </Space>

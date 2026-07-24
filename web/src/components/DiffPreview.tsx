@@ -57,11 +57,12 @@ export function DiffPreview({
       )}
       <pre
         style={{
-          background: 'var(--bg-surface, #f5f5f5)',
-          padding: 12,
-          borderRadius: 4,
-          fontSize: 12,
-          fontFamily: 'var(--font-mono, monospace)',
+          background: 'var(--color-surface)',
+          padding: 'var(--space-md)',
+          borderRadius: 'var(--radius-sm)',
+          fontSize: 'var(--fs-sm)',
+          fontFamily: 'var(--font-mono)',
+          fontVariantNumeric: 'tabular-nums',
           maxHeight: 360,
           overflow: 'auto',
           whiteSpace: 'pre-wrap',

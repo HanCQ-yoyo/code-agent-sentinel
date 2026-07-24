@@ -2,90 +2,157 @@
 @tailwind components;
 @tailwind utilities;
 
-/* 默认 D3 浅色(FOUC 回退) */
+/* Hallmark · genre: modern-minimal · macrostructure family: Workbench · design-system: design.md · designed-as-app
+ * 主题:custom OKLCH 锚青绿 oklch(50% 0.09 195)。中性色往青绿偏冷调,无纯黑纯白。
+ * 收敛自原 6 套配色:accent + severity + category + 品牌身份色 agent-claude。
+ * token 值与 theme/tokens.ts 同名同值(一处定义两处消费)。所有组件引用 token 名,不内联裸值。
+ * 默认浅色(FOUC 回退):main.tsx 前的内联脚本已按 localStorage 设 data-theme。
+ */
+
+/* 浅色 —— Light */
 :root {
-  --bg: #F6F5F1;
-  --bg-card: #FFFFFF;
-  --surface-2: #F2F1EC;
-  --bg-border: #E4E1D8;
-  --hairline-strong: #D2CEC3;
-  --text: #1B1A17;
-  --text-muted: #5C574F;
-  --text-dim: #8A857C;
-  --accent: #1B6E6A;
-  --brand-soft: rgba(27, 110, 106, .10);
-  --sev-critical: #C8413A;
-  --sev-high: #C9742E;
-  --sev-medium: #B8901F;
-  --sev-low: #2E8B4A;
-  --sev-info: #6B7280;
-  /* 级别标签实色填充(白字专用):比图表基础色略深,保证 12px 加粗白字对比度 ≥ AA。
-     红→橙→铜→绿→石板,语义递进;两套主题共用同一组(标签自带填充,在浅/深卡片上都可读)。 */
-  --sev-critical-solid: #C2362C;
-  --sev-high-solid: #BC5A1A;
-  --sev-medium-solid: #946A12;
-  --sev-low-solid: #2C7A3E;
-  --sev-info-solid: #5C6573;
-  --scope-global: #1B6E6A;
-  --scope-project: #2E8B4A;
-  --scope-managed: #C9742E;
-  --scope-plugin: #6B3A8C;
-  /* 字号统一标准:微标签 / 紧凑数据 / 正文 / 强调 / 页内标题 / 大数字。
-     antd 主题 fontSize(14)与本 scale 对齐;inline 文案优先用这些 token 而非裸数字。 */
-  --fs-xs: 11px;
-  --fs-sm: 12px;
+  /* 表面与文字 */
+  --color-paper:   oklch(97% 0.008 175);
+  --color-paper-2: oklch(99% 0.004 175);
+  --color-surface: oklch(95% 0.010 175);
+  --color-rule:    oklch(90% 0.008 175);
+  --color-rule-2:  oklch(84% 0.010 175);
+  --color-muted:   oklch(46% 0.012 175);   /* 次级文字:ΔL=53 vs paper-2,过 4.5:1 */
+  --color-dim:     oklch(52% 0.010 175);   /* 三级文字:ΔL=47 vs paper-2,过 large/icon;仅用于非关键 ≥12px 标签 */
+  --color-ink:     oklch(24% 0.012 175);
+  --color-accent:  oklch(50% 0.090 195);
+  --color-accent-soft: oklch(50% 0.090 195 / 0.10);
+  --color-focus:   oklch(50% 0.090 195);
+  --color-on-accent: oklch(99% 0.004 175);
+
+  /* severity 5 级(-solid 为标签实色填充,白字专用,保证 ≥ AA) */
+  --sev-critical: oklch(58% 0.190 27);
+  --sev-high:     oklch(63% 0.150 55);
+  --sev-medium:   oklch(70% 0.130 85);
+  --sev-low:      oklch(62% 0.150 145);
+  --sev-info:     oklch(62% 0.012 250);
+  --sev-critical-solid: oklch(52% 0.200 27);
+  --sev-high-solid:     oklch(56% 0.160 55);
+  --sev-medium-solid:   oklch(50% 0.150 85);  /* 调深:统一白字,ΔL=49 vs 白,过 large/icon */
+  --sev-low-solid:      oklch(55% 0.150 145);
+  --sev-info-solid:     oklch(52% 0.014 250);
+  /* 徽章文字:实色填充上的固定白字(-solid 不随主题,文字也不随),提为 token 取代 #fff 硬编码 */
+  --badge-text: oklch(99% 0.004 175);
+
+  /* category 6 色循环(统一 scope / pinned-project / 趋势线) */
+  --cat-1: oklch(62% 0.130 250); /* 蓝  */
+  --cat-2: oklch(60% 0.150 145); /* 绿  */
+  --cat-3: oklch(72% 0.150 85);  /* 黄  */
+  --cat-4: oklch(58% 0.190 27);  /* 红  */
+  --cat-5: oklch(55% 0.160 300); /* 紫  */
+  --cat-6: oklch(68% 0.110 195); /* 青  */
+
+  /* 品牌身份色(Claude 橙,仅 agent 图标,与 accent 平级) */
+  --agent-claude: oklch(68% 0.130 41);
+
+  /* 字号阶梯(major third,从 14px 正文起) */
+  --fs-xs:   11px;
+  --fs-sm:   12px;
   --fs-base: 14px;
-  --fs-md: 16px;
-  --fs-lg: 20px;
-  --fs-xl: 28px;
+  --fs-md:   16px;
+  --fs-lg:   20px;
+  --fs-xl:   28px;
+  --fs-2xl:  36px;
+
+  /* 4pt 间距阶梯 */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 12px;
+  --space-lg: 16px;
+  --space-xl: 20px;
+  --space-2xl: 24px;
+  --space-3xl: 32px;
+
+  /* motion(motion-cut 倾向,仅功能性过渡) */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-short: 150ms;
+  --dur-base: 220ms;
+
+  /* radius(统一 8) */
+  --radius-sm: 6px;
+  --radius-card: 8px;
+  --radius-pill: 999px;
+  --radius-input: 8px;
+
   --font-mono: 'JetBrains Mono', 'Noto Sans SC', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --font-sans: 'Inter', 'Noto Sans SC', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --font-sans: 'Inter Tight', 'Noto Sans SC', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
-/* D1 深色覆盖 */
+/* 深色 —— Dark(共享 hue,只动 lightness/chroma;深色靠明度升层,不靠阴影) */
 :root[data-theme="dark"] {
-  --bg: #14110F;
-  --bg-card: #1C1916;
-  --surface-2: #221E1A;
-  --bg-border: #2A2622;
-  --hairline-strong: #3A352F;
-  --text: #EDE8E0;
-  --text-muted: #9A938A;
-  --text-dim: #6B665F;
-  --accent: #2FB8A3;
-  --brand-soft: rgba(47, 184, 163, .14);
-  --sev-critical: #E0584E;
-  --sev-high: #E89B5A;
-  --sev-medium: #E8C547;
-  --sev-low: #4FB868;
-  --sev-info: #9CA3AF;
-  --sev-critical-solid: #C2362C;
-  --sev-high-solid: #BC5A1A;
-  --sev-medium-solid: #946A12;
-  --sev-low-solid: #2C7A3E;
-  --sev-info-solid: #5C6573;
-  --scope-global: #2D4A6B;
-  --scope-project: #2F5D3A;
-  --scope-managed: #6B4A2D;
-  --scope-plugin: #4A2D6B;
-  --font-mono: 'JetBrains Mono', 'Noto Sans SC', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-  --font-sans: 'Inter', 'Noto Sans SC', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --color-paper:   oklch(16% 0.008 175);
+  --color-paper-2: oklch(20% 0.010 175);
+  --color-surface: oklch(24% 0.010 175);
+  --color-rule:    oklch(28% 0.008 175);
+  --color-rule-2:  oklch(34% 0.010 175);
+  --color-muted:   oklch(66% 0.010 175);
+  --color-dim:     oklch(62% 0.008 175);   /* 三级文字:ΔL=42 vs paper-2(20),过 large/icon */
+  --color-ink:     oklch(92% 0.006 175);
+  --color-accent:  oklch(72% 0.110 195);
+  --color-accent-soft: oklch(72% 0.110 195 / 0.14);
+  --color-focus:   oklch(72% 0.110 195);
+  --color-on-accent: oklch(16% 0.008 175);
+
+  --sev-critical: oklch(64% 0.180 27);
+  --sev-high:     oklch(70% 0.140 55);
+  --sev-medium:   oklch(75% 0.130 85);
+  --sev-low:      oklch(68% 0.150 145);
+  --sev-info:     oklch(70% 0.012 250);
+  /* -solid 浅深共用(标签自带填充,两套主题都可读;值与浅色块一致) */
+  --sev-critical-solid: oklch(52% 0.200 27);
+  --sev-high-solid:     oklch(56% 0.160 55);
+  --sev-medium-solid:   oklch(50% 0.150 85);
+  --sev-low-solid:      oklch(55% 0.150 145);
+  --sev-info-solid:     oklch(52% 0.014 250);
+  --badge-text: oklch(99% 0.004 175);
+
+  --cat-1: oklch(68% 0.130 250);
+  --cat-2: oklch(66% 0.150 145);
+  --cat-3: oklch(78% 0.140 85);
+  --cat-4: oklch(64% 0.180 27);
+  --cat-5: oklch(62% 0.150 300);
+  --cat-6: oklch(74% 0.110 195);
+
+  --agent-claude: oklch(72% 0.130 41);
+}
+
+/* 兼容旧 token 名别名 —— 组件迁移过渡期:旧 --bg / --text 等名映射到新 --color-*,
+   避免一次性改 50+ 处内联 style。新代码应直接用 --color-* / --fs-*。 */
+:root {
+  --bg: var(--color-paper);
+  --bg-card: var(--color-paper-2);
+  --surface-2: var(--color-surface);
+  --bg-border: var(--color-rule);
+  --hairline-strong: var(--color-rule-2);
+  --text: var(--color-ink);
+  --text-muted: var(--color-muted);
+  --text-dim: var(--color-dim);
+  --accent: var(--color-accent);
+  --brand-soft: var(--color-accent-soft);
 }
 
 body {
-  background: var(--bg);
-  color: var(--text);
+  background: var(--color-paper);
+  color: var(--color-ink);
   font-family: var(--font-sans);
   font-size: var(--fs-base);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  /* 看板数字密集,正文也走 tabular 防抖(局部覆盖见 .prose-body)。 */
+  font-variant-numeric: tabular-nums;
 }
 
-/* 等宽工具类(供路径/ID/hash/时间/code 用) */
+/* 等宽工具类(供路径/ID/hash/时间/code 用)。mono 默认带 tabular-nums(audit:数字列对齐)。 */
 .font-mono, .mono {
   font-family: 'JetBrains Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
 }
 
 /* markdown-preview 列表渲染:Tailwind Preflight(@tailwind base)重置了 ul/ol 的
@@ -93,116 +160,43 @@ body {
    仅作用于 .markdown-preview,不影响全局 antd/Tailwind 行为。 */
 .markdown-preview ul,
 .markdown-preview ol {
-  margin: 8px 0;
+  margin: var(--space-sm) 0;
   padding-inline-start: 1.6em;
 }
-.markdown-preview ul {
-  list-style: disc;
-}
-.markdown-preview ol {
-  list-style: decimal;
-}
-.markdown-preview li {
-  margin: 2px 0;
-}
-.markdown-preview li::marker {
-  color: var(--text-dim);
-}
-/* 嵌套列表缩进 */
+.markdown-preview ul { list-style: disc; }
+.markdown-preview ol { list-style: decimal; }
+.markdown-preview li { margin: 2px 0; }
+.markdown-preview li::marker { color: var(--color-dim); }
 .markdown-preview ul ul,
 .markdown-preview ol ol,
 .markdown-preview ul ol,
-.markdown-preview ol ul {
-  margin: 2px 0;
-}
+.markdown-preview ol ul { margin: 2px 0; }
 /* 段落/标题/引用/分隔线间距(react-markdown 输出裸块级元素,Preflight 已清 margin) */
-.markdown-preview p {
-  margin: 8px 0;
-}
+.markdown-preview p { margin: var(--space-sm) 0; }
 .markdown-preview h1, .markdown-preview h2, .markdown-preview h3, .markdown-preview h4 {
-  margin: 16px 0 8px;
+  margin: var(--space-lg) 0 var(--space-sm);
   line-height: 1.3;
   font-weight: 600;
+  letter-spacing: -0.01em;
 }
 .markdown-preview h1 { font-size: 1.5em; }
 .markdown-preview h2 { font-size: 1.3em; }
 .markdown-preview h3 { font-size: 1.15em; }
 .markdown-preview h4 { font-size: 1em; }
 .markdown-preview blockquote {
-  margin: 8px 0;
-  padding: 4px 12px;
-  border-inline-start: 3px solid var(--bg-border);
-  color: var(--text-muted);
+  margin: var(--space-sm) 0;
+  padding: var(--space-xs) var(--space-md);
+  border-inline-start: 3px solid var(--color-rule);
+  color: var(--color-muted);
 }
 .markdown-preview hr {
   border: none;
-  border-top: 1px solid var(--bg-border);
-  margin: 16px 0;
-}
-
-/* 视图切换 Segmented(列表/文件树):增强选中态对比度。
-   antd 默认选中项是浅灰填充,在浅色主题下与未选中差异过小(用户反馈"看不出来
-   当前是哪个")。此处选中项用 accent 实色填充 + 白字,未选中用透明背景,差异明显。 */
-.view-segmented .ant-segmented-item-selected {
-  background: var(--accent) !important;
-  color: #fff !important;
-  font-weight: 600;
-}
-.view-segmented .ant-segmented-item-selected .ant-segmented-item-icon {
-  color: #fff;
-}
-.view-segmented .ant-segmented-item {
-  transition: color .15s, background .15s;
-}
-.view-segmented .ant-segmented-item:not(.ant-segmented-item-selected):hover {
-  color: var(--accent);
-}
-.view-segmented .ant-segmented-thumb {
-  /* 拖动滑块也用 accent(选中项背景随滑块移动) */
-  background: var(--accent);
-}
-
-/* 风险管理级别筛选 Segmented:按级别配色 + 选中态明显区别于未选中。
-   未选中:透明底,仅色点带级别色;选中:整块填级别实色 + 白字,色点转白。
-   「全部」用 accent。滑块跟随选中项填充同色(随选项移动)。 */
-.sev-seg .ant-segmented-item {
-  transition: color .15s, background .15s;
-}
-.sev-seg .ant-segmented-item:not(.ant-segmented-item-selected):hover {
-  color: var(--accent);
-}
-.sev-seg .ant-segmented-item-selected.sev-tab-all {
-  background: var(--accent) !important; color: #fff !important; font-weight: 600;
-}
-.sev-seg .ant-segmented-item-selected.sev-tab-critical {
-  background: var(--sev-critical) !important; color: #fff !important; font-weight: 600;
-}
-.sev-seg .ant-segmented-item-selected.sev-tab-high {
-  background: var(--sev-high) !important; color: #fff !important; font-weight: 600;
-}
-.sev-seg .ant-segmented-item-selected.sev-tab-medium {
-  background: var(--sev-medium) !important; color: #1a1a1a !important; font-weight: 600;
-}
-.sev-seg .ant-segmented-item-selected.sev-tab-low {
-  background: var(--sev-low) !important; color: #fff !important; font-weight: 600;
-}
-.sev-seg .ant-segmented-item-selected.sev-tab-info {
-  background: var(--sev-info) !important; color: #fff !important; font-weight: 600;
-}
-/* 选中时色点转白(中等级别用深字,点也转深);未选中保留级别色点。 */
-.sev-seg .ant-segmented-item-selected .sev-seg-dot {
-  background: #fff !important;
-}
-.sev-seg .ant-segmented-item-selected.sev-tab-medium .sev-seg-dot {
-  background: #1a1a1a !important;
-}
-/* 滑块底色随选中项级别;默认透明,选中态由上面的规则直接填实色,滑块设透明避免双层。 */
-.sev-seg .ant-segmented-thumb {
-  background: transparent;
+  border-top: 1px solid var(--color-rule);
+  margin: var(--space-lg) 0;
 }
 
 /* antd Card 标题默认 nowrap + ellipsis,长标题(如「Top 风险类型(按严重度)」)在窄列
-   被截断成「Top 风险…」。改为允许换行完整展示——Card 标题本就该完整可读,不截断。 */
+   被截断。改为允许换行完整展示。antd v5 用 styles.head 也能设,但此处全局兜底更稳。 */
 .ant-card-head-title {
   white-space: normal !important;
   overflow: visible !important;
@@ -210,9 +204,48 @@ body {
   word-break: break-word;
 }
 
+/* 风险管理级别筛选 Segmented:按级别配色 + 选中态明显区别于未选中。
+   未选中:透明底,仅色点带级别色;选中:整块填级别实色 + 白字,色点转白。
+   「全部」用 accent。这是 view-segmented(antd 组件 token 已处理)之外的按级别配色,
+   属自定义需求,保留 !important 压 antd 默认。 */
+.sev-seg .ant-segmented-item {
+  transition: color var(--dur-short) var(--ease-out), background var(--dur-short) var(--ease-out);
+}
+.sev-seg .ant-segmented-item:not(.ant-segmented-item-selected):hover {
+  color: var(--color-accent);
+}
+.sev-seg .ant-segmented-item-selected.sev-tab-all {
+  background: var(--color-accent) !important; color: var(--color-on-accent) !important; font-weight: 600;
+}
+.sev-seg .ant-segmented-item-selected.sev-tab-critical {
+  background: var(--sev-critical-solid) !important; color: var(--color-on-accent) !important; font-weight: 600;
+}
+.sev-seg .ant-segmented-item-selected.sev-tab-high {
+  background: var(--sev-high-solid) !important; color: var(--color-on-accent) !important; font-weight: 600;
+}
+.sev-seg .ant-segmented-item-selected.sev-tab-medium {
+  background: var(--sev-medium-solid) !important; color: var(--badge-text) !important; font-weight: 600;
+}
+.sev-seg .ant-segmented-item-selected.sev-tab-low {
+  background: var(--sev-low-solid) !important; color: var(--badge-text) !important; font-weight: 600;
+}
+.sev-seg .ant-segmented-item-selected.sev-tab-info {
+  background: var(--sev-info-solid) !important; color: var(--badge-text) !important; font-weight: 600;
+}
+/* 选中时色点转白(全级别统一白字,点也转白);未选中保留级别色点。 */
+.sev-seg .ant-segmented-item-selected .sev-seg-dot {
+  background: var(--badge-text) !important;
+}
+.sev-seg .ant-segmented-item-selected.sev-tab-medium .sev-seg-dot {
+  background: var(--badge-text) !important;
+}
+/* 滑块底色随选中项级别;默认透明,选中态由上面的规则直接填实色,滑块设透明避免双层。 */
+.sev-seg .ant-segmented-thumb {
+  background: transparent;
+}
+
 /* #7 命中行高亮:Monaco deltaDecorations 整行背景(isWholeLine:true)。
-   固定 rgba(无 --warn-bg 变量),浅深色通用——命中行是警示色,不随主题切换。
-   !important 压过 Monaco 默认行背景。 */
+   固定 rgba(警示色,不随主题切换),!important 压过 Monaco 默认行背景。 */
 .hit-line {
   background: rgba(250, 173, 20, 0.18) !important;
 }
@@ -222,4 +255,71 @@ body {
    此规则作兜底,保证 label 列定宽、值列自适应高度,不被长 label 撑变形。 */
 .risk-desc table {
   table-layout: fixed;
+}
+
+/* 统一的「筛选工具栏行」:四页(Dashboard/Assets/Findings/History/RulesTable)共用。
+   筛选框在结果 Card 内顶部,作为表的控制头;底部 hairline 分隔控制层与数据层。
+   这是「框在一起 + 内部分层」模式(design.md #2):筛选和结果是同一语义单元,
+   不脱节、不浪费垂直空间;细分隔线区分「控制 / 数据」两层层级(Linear 式)。 */
+.filter-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+  padding: 0 0 var(--space-md);
+  margin-bottom: var(--space-md);
+  border-bottom: 1px solid var(--color-rule);
+}
+
+/* 收藏星标按钮(design.md #2):图标按钮风格——hover 出 accent 底色圈,选中实色填充 accent。
+   替代原裸 span 星标(无 hover 反馈、选中色用 sev-medium 与系统脱节)。 */
+.fav-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--color-dim);
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+  transition: background var(--dur-short) var(--ease-out), color var(--dur-short) var(--ease-out);
+}
+.fav-btn:hover {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+.fav-btn:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 1px;
+}
+.fav-btn-on {
+  color: var(--color-accent);
+}
+.fav-btn-on:hover {
+  background: var(--color-accent-soft);
+  color: var(--color-accent);
+}
+
+/* 收藏行高亮(design.md #2):左侧 3px accent 竖条 + 行底微 tint,一眼区分收藏项。
+   antd Table 行 td 有 border-bottom,用 box-shadow inset 画左条避免破坏表格边框。 */
+.asset-row-fav > td {
+  background: var(--color-accent-soft) !important;
+  /* 左侧 accent 竖条:inset box-shadow,3px 宽,占满行高。 */
+  box-shadow: inset 3px 0 0 var(--color-accent);
+}
+
+/* 分区标题(design.md #3):详情抽屉四分区(身份/属性/内容/风险)的小字 muted uppercase 标题,
+   串联层次、消除 4 块平铺的塌平。比 Typography.Title 轻,不抢内容区的视觉重量。 */
+.section-label {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--color-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding-bottom: var(--space-xs);
+  margin-bottom: var(--space-xs);
+  border-bottom: 1px solid var(--color-rule);
 }

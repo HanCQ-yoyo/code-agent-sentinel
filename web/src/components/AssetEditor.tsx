@@ -144,7 +144,8 @@ export function AssetEditor({ asset, highlights }: { asset: Asset, highlights?: 
           onCancel={() => setFsOpen(false)}
           footer={null}
           width="96vw"
-          styles={{ body: { height: 'calc(92vh - 55px)', padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' } }}
+          centered
+          styles={{ body: { height: 'calc(88vh - 55px)', padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' } }}
           destroyOnClose
         >
           {fsOpen ? (

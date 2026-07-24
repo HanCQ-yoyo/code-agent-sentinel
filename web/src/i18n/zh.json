@@ -45,6 +45,9 @@
     "notScanned": "未扫描"
   },
   "assets": {
+    "viewLabel": "视图",
+    "tagLabel": "标签",
+    "typeLabel": "类型",
     "viewList": "列表",
     "viewTree": "文件树",
     "searchPlaceholder": "搜索名称或路径",
@@ -253,6 +256,7 @@
   },
   "assetDetail": {
     "notFound": "未找到资产",
+    "metaTitle": "属性",
     "back": "返回资产列表",
     "parseError": "解析失败",
     "path": "路径",

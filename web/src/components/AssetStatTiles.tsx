@@ -31,9 +31,9 @@ export function AssetStatTiles({ counts }: { counts: Record<string, number> }) {
       style={{ flex: 1, height: '100%', display: 'flex', flexDirection: 'column' }}
       styles={{ body: { flex: 1, minHeight: 0 } }}
     >
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 12, height: '100%', alignContent: 'center', justifyItems: 'center', textAlign: 'center' }}>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(110px, 1fr))', gap: 'var(--space-md)', height: '100%', alignContent: 'center', justifyItems: 'center', textAlign: 'center' }}>
         {tiles.map((s) => (
-          <Statistic key={s.type} title={t(s.labelKey)} value={counts[s.type] ?? 0} prefix={s.icon} valueStyle={{ fontFamily: 'var(--font-mono)' }} />
+          <Statistic key={s.type} title={t(s.labelKey)} value={counts[s.type] ?? 0} prefix={s.icon} valueStyle={{ fontFamily: 'var(--font-mono)', fontVariantNumeric: 'tabular-nums' }} />
         ))}
       </div>
     </Card>

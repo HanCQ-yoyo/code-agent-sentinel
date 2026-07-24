@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
-import { Card, Segmented, Input, Radio, Spin, Alert, Typography, Tabs, Splitter, Modal, Tag, Button, Dropdown } from 'antd'
+import { useEffect, useState, type ReactNode } from 'react'
+import { Card, Segmented, Input, Select, Spin, Alert, Typography, Tabs, Splitter, Modal, Tag, Button, Dropdown } from 'antd'
+import { UnorderedListOutlined, ApartmentOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
 import type { Asset, PinnedProject, Project } from '../types'
@@ -14,6 +15,20 @@ import { agentMeta } from '../lib/agents'
 import { AgentIcon } from '../components/AgentIcon'
 
 type View = 'list' | 'tree'
+
+// 筛选分组(design.md #1):三类筛选语义不同,用「小字 muted label + 控件」统一结构,
+// 但控件形态按语义区分——视图切换(互斥模式,带 icon Segmented)/ 标签筛选(属性过滤,Segmented)/
+// 类型筛选(多值过滤,Select 下拉省空间防溢出)。label 区分功能,控件形态区分特点,整体统一。
+function FilterGroup({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+      <Typography.Text style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-dim)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+        {label}
+      </Typography.Text>
+      {children}
+    </div>
+  )
+}
 
 // 收藏/置顶:持久化到后端 config.yaml(跨重启/跨端口)。
 // 原用 localStorage,但默认随机端口重启后 origin(host:port)变化 → localStorage 隔离丢失,
@@ -197,7 +212,11 @@ export default function Assets() {
     { value: 'blue', label: t('assets.colorBlue') },
     { value: 'purple', label: t('assets.colorPurple') },
   ]
-  const colorHex: Record<string, string> = { red: '#f5222d', orange: '#fa8c16', gold: '#faad14', green: '#52c41a', blue: '#1677ff', purple: '#722ed1' }
+  // 置顶色走 --cat-* token(design.md:统一 category 色系,不再各写 hex)。red=cat-4/橙=cat-3 偏暖…映射到 6 色 token。
+  const colorHex: Record<string, string> = {
+    red: 'var(--cat-4)', orange: 'var(--cat-3)', gold: 'var(--cat-3)',
+    green: 'var(--cat-2)', blue: 'var(--cat-1)', purple: 'var(--cat-5)',
+  }
 
   const projectTabLabel = (p: Project) => {
     const color = pinnedByPath.get(p.path)
@@ -248,6 +267,63 @@ export default function Assets() {
   })
   const showAgentTabs = scanEnabledAgents.length > 0
 
+  // 筛选工具栏行(design.md #2:统一模式——框在结果 Card 内顶部 + 底部 hairline 分隔)。
+  // list 与 tree 视图共用(视图切换/标签筛选/类型/搜索都同时作用于列表与树),故提取为常量,
+  // 在各视图 Card 顶部渲染一次。原实现筛选在 Card 外,与 History/Findings/RulesTable 不统一。
+  const filterRow = (
+    <div className="filter-toolbar">
+      {/* 视图切换(互斥模式:list/tree 二选一):带 icon 的 Segmented,FilterGroup 标「视图」。 */}
+      <FilterGroup label={t('assets.viewLabel')}>
+        <Segmented
+          className="view-segmented"
+          size="small"
+          value={view}
+          onChange={(v) => setView(v as View)}
+          options={[
+            { value: 'list', label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><UnorderedListOutlined /> {t('assets.viewList')}</span> },
+            { value: 'tree', label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><ApartmentOutlined /> {t('assets.viewTree')}</span> },
+          ]}
+        />
+      </FilterGroup>
+      {/* 标签筛选(属性过滤:全部/配置/运行时):Segmented,标「标签」,同时作用于列表与树。 */}
+      <FilterGroup label={t('assets.tagLabel')}>
+        <Segmented
+          size="small"
+          value={tagFilterValue}
+          onChange={(v) => setSelectedTagFilter(v === 'all' ? null : (v as DirTag))}
+          options={tagFilterItems}
+        />
+      </FilterGroup>
+      {view === 'list' ? (
+        <>
+          {/* 类型筛选(多值过滤):Radio.Group → Select 下拉,省空间防类型多时溢出,标「类型」。 */}
+          <FilterGroup label={t('assets.typeLabel')}>
+            <Select
+              size="small"
+              value={type || undefined}
+              onChange={(v) => setType(v ?? '')}
+              placeholder={t('common.all')}
+              style={{ width: 140 }}
+              allowClear
+              options={types.map((ty) => ({ value: ty, label: ty }))}
+            />
+          </FilterGroup>
+          <Input.Search value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('assets.searchPlaceholder')} style={{ width: 220, marginLeft: 'auto' }} allowClear />
+        </>
+      ) : (
+        // 树模式:全部收起按钮(默认已全收起,展开后可一键收回)。
+        <Button size="small" style={{ marginLeft: 'auto' }} onClick={() => setExpandedKeys([])} disabled={expandedKeys.length === 0}>{t('assets.collapseAll')}</Button>
+      )}
+      <Typography.Text style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', color: 'var(--color-dim)', fontVariantNumeric: 'tabular-nums' }}>
+        {view === 'list' ? t('assets.countList', { shown: list.length, total: tabFiltered.length }) : t('assets.countTree', { total: tabFiltered.length })}
+      </Typography.Text>
+      {/* 收藏计数提示 */}
+      {favorites.length > 0 ? (
+        <Tag color="gold" style={{ marginInlineStart: 0 }}>{t('assets.favoritesCount', { count: favorites.length })}</Tag>
+      ) : null}
+    </div>
+  )
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {error ? <Alert type="error" message={t('common.loadFailed')} description={error} showIcon /> : null}
@@ -268,43 +344,10 @@ export default function Assets() {
           else if (key.startsWith('project:')) setActiveProjectTab({ kind: 'project', path: key.slice('project:'.length) })
         }}
       />
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-        <Segmented
-          className="view-segmented"
-          value={view}
-          onChange={(v) => setView(v as View)}
-          options={[{ value: 'list', label: t('assets.viewList') }, { value: 'tree', label: t('assets.viewTree') }]}
-        />
-        {/* 2.3:标签筛选 Segmented(全部/配置/运行时),同时作用于列表与树。 */}
-        <Segmented
-          size="small"
-          value={tagFilterValue}
-          onChange={(v) => setSelectedTagFilter(v === 'all' ? null : (v as DirTag))}
-          options={tagFilterItems}
-        />
-        {view === 'list' ? (
-          <>
-            <Radio.Group value={type} onChange={(e) => setType(e.target.value)} size="small">
-              <Radio.Button value="">{t('common.all')}</Radio.Button>
-              {types.map((ty) => <Radio.Button key={ty} value={ty}>{ty}</Radio.Button>)}
-            </Radio.Group>
-            <Input.Search value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('assets.searchPlaceholder')} style={{ width: 240, marginLeft: 'auto' }} allowClear />
-          </>
-        ) : (
-          // 树模式:全部收起按钮(默认已全收起,展开后可一键收回)。
-          <Button size="small" onClick={() => setExpandedKeys([])} disabled={expandedKeys.length === 0}>{t('assets.collapseAll')}</Button>
-        )}
-        <Typography.Text type="secondary" style={{ fontFamily: 'var(--font-mono)' }}>
-          {view === 'list' ? t('assets.countList', { shown: list.length, total: tabFiltered.length }) : t('assets.countTree', { total: tabFiltered.length })}
-        </Typography.Text>
-        {/* 收藏计数提示 */}
-        {favorites.length > 0 ? (
-          <Tag color="gold" style={{ marginInlineStart: 'auto' }}>{t('assets.favoritesCount', { count: favorites.length })}</Tag>
-        ) : null}
-      </div>
 
       {view === 'list' ? (
         <Card>
+          {filterRow}
           <AssetTable
             assets={list}
             findings={scan?.findings}
@@ -317,7 +360,9 @@ export default function Assets() {
           <AssetDrawer asset={selectedAsset ?? null} findings={scan?.findings} detectors={detectors} agentID={activeAgent} onClose={() => setSelected(null)} />
         </Card>
       ) : (
-        <Splitter style={{ height: 'calc(100vh - 240px)', minHeight: 360 }}>
+        <Card>
+          {filterRow}
+          <Splitter style={{ height: 'calc(100vh - 280px)', minHeight: 360 }}>
           {/* 树:窄(原右侧 480 宽与左侧 flex 互换);min 200 防压扁,max 60% 防吃掉详情。
               鼠标拖中间分隔条可调,不再写死。 */}
           <Splitter.Panel defaultSize="34%" min={200} max="60%">
@@ -352,6 +397,7 @@ export default function Assets() {
             </Card>
           </Splitter.Panel>
         </Splitter>
+        </Card>
       )}
       {/* 标签编辑弹窗:点树节点标签徽标触发,选配置/运行时/恢复默认。 */}
       <Modal

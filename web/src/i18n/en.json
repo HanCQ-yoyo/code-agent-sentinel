@@ -45,6 +45,9 @@
     "notScanned": "Not scanned"
   },
   "assets": {
+    "viewLabel": "View",
+    "tagLabel": "Tag",
+    "typeLabel": "Type",
     "viewList": "List",
     "viewTree": "File Tree",
     "searchPlaceholder": "Search name or path",
@@ -253,6 +256,7 @@
   },
   "assetDetail": {
     "notFound": "Asset not found",
+    "metaTitle": "Properties",
     "back": "Back to assets",
     "parseError": "Parse error",
     "path": "Path",

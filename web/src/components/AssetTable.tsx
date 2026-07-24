@@ -53,18 +53,21 @@ export function AssetTable({ assets, findings = [], onSelect, favorites, onToggl
     {
       title: t('assetTable.colFav'),
       width: 40,
-      // 收藏列:点击星标切换置顶(列排序 + 收藏优先排序由 dataSource 顺序保证)。
+      // 收藏列(design.md #2):星标改图标按钮风格——hover 出 accent 底色圈,选中实色填充 accent。
+      // 点击切换置顶(列排序 + 收藏优先排序由 dataSource 顺序保证)。
       render: (_: unknown, a: Asset) => {
         const fav = favorites.has(a.id)
         return (
           <Tooltip title={fav ? t('assetTable.favUnpin') : t('assetTable.favPin')}>
-            <span
+            <button
+              type="button"
               data-testid="fav-toggle"
               onClick={(e) => { e.stopPropagation(); onToggleFavorite(a.id) }}
-              style={{ cursor: 'pointer', color: fav ? 'var(--sev-medium)' : 'var(--text-dim)', fontSize: 15, lineHeight: 1, display: 'inline-flex' }}
+              aria-label={fav ? t('assetTable.favUnpin') : t('assetTable.favPin')}
+              className={`fav-btn${fav ? ' fav-btn-on' : ''}`}
             >
               {fav ? <StarFilled /> : <StarOutlined />}
-            </span>
+            </button>
           </Tooltip>
         )
       },
@@ -146,7 +149,8 @@ export function AssetTable({ assets, findings = [], onSelect, favorites, onToggl
       locale={{ emptyText: t('assetTable.empty') }}
       // 保留 asset-row testid 供 e2e;cast 与 FindingTable onRow 一致(antd Table onRow 无 data-* 索引签名)。
       onRow={(a) => ({ 'data-testid': 'asset-row', onClick: () => onSelect(a.id) }) as HTMLAttributes<HTMLElement>}
-      rowClassName={() => 'cursor-pointer'}
+      // 收藏行加 .asset-row-fav 类(design.md #2):左侧 accent 竖条 + 行底微 tint,一眼区分收藏项。
+      rowClassName={(a) => `cursor-pointer${favorites.has(a.id) ? ' asset-row-fav' : ''}`}
     />
   )
 }

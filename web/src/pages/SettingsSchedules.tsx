@@ -139,17 +139,20 @@ export function SettingsSchedules() {
           {t('settings.addSchedule')}
         </Button>
       </div>
-      {schedules.length === 0 ? (
-        <Empty description={t('settings.noSchedules')} />
-      ) : (
-        <Table<ScheduleStatus>
-          size="small"
-          dataSource={schedules}
-          rowKey="agent_id"
-          pagination={false}
-          columns={columns}
-        />
-      )}
+      {/* design.md #2:表格统一加 Card 外框(与 Assets/Findings/History 一致,SettingsAgents 同改)。 */}
+      <Card>
+        {schedules.length === 0 ? (
+          <Empty description={t('settings.noSchedules')} />
+        ) : (
+          <Table<ScheduleStatus>
+            size="small"
+            dataSource={schedules}
+            rowKey="agent_id"
+            pagination={false}
+            columns={columns}
+          />
+        )}
+      </Card>
       <Modal
         title={t('settings.addSchedule')}
         open={modalOpen}

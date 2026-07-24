@@ -1,8 +1,9 @@
 import { useEffect } from 'react'
-import { Table, Alert, Switch } from 'antd'
+import { Table, Alert, Switch, Card } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
 import type { Agent } from '../types'
+import { AgentIcon } from '../components/AgentIcon'
 
 // Settings 页「Code Agents」tab:展示已注册 agent。
 // agent 的*配置*(id/name/路径/Enabled 加载标志)只读——修改走 `sentinel setup` + 重启。
@@ -16,27 +17,33 @@ export function SettingsAgents() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <Alert type="info" showIcon message={t('settings.agentsReadonlyHint')} description={t('settings.agentsReadonlyDesc')} />
-      <Table
-        size="small"
-        dataSource={agents?.agents ?? []}
-        rowKey="id"
-        pagination={false}
-        columns={[
-          { title: t('settings.agentName'), dataIndex: 'name' },
-          { title: 'ID', dataIndex: 'id' },
-          { title: t('settings.rootDir'), dataIndex: 'root_dir' },
-          { title: t('settings.claudeJson'), dataIndex: 'claude_json' },
-          {
-            // 扫描开关放末列:左侧是只读配置信息,操作列靠右符合 antd Table 习惯。
-            title: t('settings.scanSwitch'),
-            dataIndex: 'scan_enabled',
-            width: 100,
-            render: (enabled: boolean, record: Agent) => (
-              <Switch checked={enabled} onChange={(checked) => saveAgentScanEnabled(record.id, checked)} />
-            ),
-          },
-        ]}
-      />
+      <Card>
+        <Table
+          size="small"
+          dataSource={agents?.agents ?? []}
+          rowKey="id"
+          pagination={false}
+          columns={[
+            { title: t('settings.agentName'), dataIndex: 'name', render: (name: string, r: Agent) => (
+              // agent 名前加品牌 logo(claude-code 用 Claude 橙 SVG,其他 agent 回退方块)。
+              // design.md #4:与 Dashboard/Assets/Findings 的 agent 展示统一。
+              <span style={{ whiteSpace: 'nowrap' }}><AgentIcon id={r.id} /> {name}</span>
+            ) },
+            { title: 'ID', dataIndex: 'id' },
+            { title: t('settings.rootDir'), dataIndex: 'root_dir' },
+            { title: t('settings.claudeJson'), dataIndex: 'claude_json' },
+            {
+              // 扫描开关放末列:左侧是只读配置信息,操作列靠右符合 antd Table 习惯。
+              title: t('settings.scanSwitch'),
+              dataIndex: 'scan_enabled',
+              width: 100,
+              render: (enabled: boolean, record: Agent) => (
+                <Switch checked={enabled} onChange={(checked) => saveAgentScanEnabled(record.id, checked)} />
+              ),
+            },
+          ]}
+        />
+      </Card>
     </div>
   )
 }

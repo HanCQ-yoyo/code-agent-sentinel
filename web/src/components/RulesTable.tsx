@@ -134,10 +134,12 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
     },
     {
       // 校验:valid 默认 true(Meta() 只返回已 Validate 的规则);false → 红色标记。
+      // 用 Badge 实色填充 + 白字(design.md #3:原 antd Tag color=success 在浅色下黑底黑字,
+      // 改 Badge tone=sev-low 绿底白字 / tone=sev-critical 红底白字,与风险级别标签统一)。
       title: t('ruleTable.colValidity'), width: 70, render: (_: unknown, r: FlatRule) => (
         r.valid === false
-          ? <Tag color="error" style={{ marginInlineEnd: 0 }}>{t('ruleTable.invalid')}</Tag>
-          : <Tag color="success" style={{ marginInlineEnd: 0 }}>{t('ruleTable.valid')}</Tag>
+          ? <SevBadge tone="sev-critical">{t('ruleTable.invalid')}</SevBadge>
+          : <SevBadge tone="sev-low">{t('ruleTable.valid')}</SevBadge>
       ),
     },
     { title: t('ruleTable.colDetector'), width: 120, dataIndex: 'detector' },
@@ -166,37 +168,36 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
           description={invalidRules.map((r) => r.id).join('、')}
         />
       ) : null}
-      {/* 来源分组:按 rule_id 前缀筛选(全部/基线/注入/技能/自定义/其他),
-          复用 sev-seg 配色(选中 accent 填充),与级别筛选组合:检测器 → 来源 → 级别。 */}
-      <Segmented
-        className="sev-seg"
-        style={{ marginBottom: 12 }}
-        value={src}
-        onChange={(v) => setSrc(v as string)}
-        options={[
-          { value: 'all', label: <SevSegLabel text={t('ruleTable.all')} count={sourceCounts.all} />, className: 'sev-tab-all' },
-          ...sourceOrder.map((s) => ({
-            value: s,
-            label: <SevSegLabel text={t(sourceLabel[s])} count={sourceCounts[s] ?? 0} />,
-            className: 'sev-tab-all',
-          })),
-        ]}
-      />
-      {/* 级别筛选:与风险管理列表同一套 sev-seg 配色(色点 + 选中实色填充),复用 index.css 的 .sev-seg。 */}
-      <Segmented
-        className="sev-seg"
-        style={{ marginBottom: 12 }}
-        value={sev}
-        onChange={(v) => setSev(v as Severity | 'all')}
-        options={[
-          { value: 'all', label: <SevSegLabel text={t('ruleTable.all')} count={counts.all} />, className: 'sev-tab-all' },
-          ...SEVERITY_ORDER.map((s) => ({
-            value: s,
-            label: <SevSegLabel text={t(SEVERITY_LABEL_KEY[s])} count={counts[s] ?? 0} sev={s} />,
-            className: `sev-tab-${s}`,
-          })),
-        ]}
-      />
+      {/* 筛选工具栏行(design.md #2:统一模式——框在结果 Card 内顶部 + 底部 hairline 分隔)。
+          来源 + 级别两组筛选同一行(flex-wrap),复用 sev-seg 配色,组合:检测器 → 来源 → 级别。 */}
+      <div className="filter-toolbar">
+        <Segmented
+          className="sev-seg"
+          value={src}
+          onChange={(v) => setSrc(v as string)}
+          options={[
+            { value: 'all', label: <SevSegLabel text={t('ruleTable.all')} count={sourceCounts.all} />, className: 'sev-tab-all' },
+            ...sourceOrder.map((s) => ({
+              value: s,
+              label: <SevSegLabel text={t(sourceLabel[s])} count={sourceCounts[s] ?? 0} />,
+              className: 'sev-tab-all',
+            })),
+          ]}
+        />
+        <Segmented
+          className="sev-seg"
+          value={sev}
+          onChange={(v) => setSev(v as Severity | 'all')}
+          options={[
+            { value: 'all', label: <SevSegLabel text={t('ruleTable.all')} count={counts.all} />, className: 'sev-tab-all' },
+            ...SEVERITY_ORDER.map((s) => ({
+              value: s,
+              label: <SevSegLabel text={t(SEVERITY_LABEL_KEY[s])} count={counts[s] ?? 0} sev={s} />,
+              className: `sev-tab-${s}`,
+            })),
+          ]}
+        />
+      </div>
       <Table<FlatRule>
         rowKey={(r) => `${r.detector_id}:${r.id}`}
         columns={columns}

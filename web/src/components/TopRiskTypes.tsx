@@ -34,12 +34,12 @@ export function TopRiskTypes({ findings, topN = 10 }: { findings: Finding[]; top
               {/* 风险类型名:取规则双语名(ruleNameById:先 i18n rules.<rule_id>,回退 finding.message);
                   Tooltip 兜底显示原始 rule_id 便于定位规则。 */}
               <Tooltip title={r.id}>
-                <span style={{ width: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 11, color: 'var(--text-muted)' }}>{ruleNameById(r.id, r.msg)}</span>
+                <span style={{ width: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontSize: 'var(--fs-xs)', color: 'var(--color-muted)' }}>{ruleNameById(r.id, r.msg)}</span>
               </Tooltip>
-              <div style={{ flex: 1, background: 'var(--bg-border)', borderRadius: 4, height: 12, overflow: 'hidden' }}>
+              <div style={{ flex: 1, background: 'var(--color-rule)', borderRadius: 'var(--radius-sm)', height: 12, overflow: 'hidden' }}>
                 <div data-testid={`toprisk-${r.id}`} style={{ width: `${(r.count / maxCount) * 100}%`, minWidth: 8, height: '100%', background: `var(--sev-${r.sev})` }} />
               </div>
-              <span style={{ width: 60, textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 11, color: `var(--sev-${r.sev})` }}>{t(SEVERITY_LABEL_KEY[r.sev])} {r.count}</span>
+              <span style={{ width: 60, textAlign: 'right', fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', color: `var(--sev-${r.sev})`, fontVariantNumeric: 'tabular-nums' }}>{t(SEVERITY_LABEL_KEY[r.sev])} {r.count}</span>
             </div>
           ))}
         </div>

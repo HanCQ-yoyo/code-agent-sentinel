@@ -24,9 +24,14 @@ CLAUDE.md
 .agents/
 skills-lock.json
 design.md
+.hallmark/
 
 # 编辑器 / 系统
 .DS_Store
 *.swp
 .history/
 .playwright-mcp/
+
+# Playwright e2e 产物
+test-results/
+web/test-results/

@@ -1,11 +1,13 @@
 // AgentIcon:agent 展示图标(行内)。claude-code 用品牌色 SVG logo(web/src/logo/claudecode-color.svg),
-// 未知 agent 回退方块符号。统一替代 agentMeta.icon 的 emoji,与 Anthropic/Claude 品牌橙(#D97757)一致。
+// 未知 agent 回退方块符号。统一替代 agentMeta.icon 的 emoji。
 //
 // 用 ReactNode 而非 string:antd Select/Tabs 的 label 接受 ReactNode,行内渲染也能对齐基线。
 // SVG 内联(非 <img>):尺寸随 font-size 缩放(1em),与文字同行高度对齐。
+// 品牌橙走 --agent-claude token(design.md:品牌身份色,与 accent 平级,不进 category),
+// 不再硬编码 #D97757。
 import type { CSSProperties } from 'react'
 
-// Claude Code 品牌 logo path(源自 web/src/logo/claudecode-color.svg,fill 固定 #D97757)。
+// Claude Code 品牌 logo path(源自 web/src/logo/claudecode-color.svg,fill 用 --agent-claude token)。
 const CLAUDE_CODE_PATH =
   'M20.998 10.949H24v3.102h-3v3.028h-1.487V20H18v-2.921h-1.487V20H15v-2.921H9V20H7.488v-2.921H6V20H4.487v-2.921H3V14.05H0V10.95h3V5h17.998v5.949zM6 10.949h1.488V8.102H6v2.847zm10.51 0H18V8.102h-1.49v2.847z'
 
@@ -31,7 +33,7 @@ export function AgentIcon({ id, size = '1em', style }: Props) {
         aria-label="Claude Code"
       >
         <title>Claude Code</title>
-        <path clipRule="evenodd" d={CLAUDE_CODE_PATH} fill="#D97757" fillRule="evenodd" />
+        <path clipRule="evenodd" d={CLAUDE_CODE_PATH} fill="var(--agent-claude)" fillRule="evenodd" />
       </svg>
     )
   }
