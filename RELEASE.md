@@ -12,6 +12,20 @@
 
 ---
 
+## Codex CLI 支持
+
+- **合入日期**:2026-07-24
+- **合入 SHA**:待合并(分支 `worktree-codex-agent-support`,基于 main `8acd561`)
+
+### 升级
+
+- 新增 OpenAI Codex CLI 配置资产支持(config.toml / AGENTS.md / prompts / hooks.json)
+- setup 自动探测 ~/.codex/config.toml,可勾选启用
+- 多 agent 聚合:claude-code 与 codex 并存,各自独立扫描
+- 新增 2 条 Codex baseline 规则(danger-full-access / approval-never)
+
+---
+
 ## DCG 规则引擎搬运(危险命令语义解析 + 252 条规则)
 
 - **合入日期**:2026-07-23 ~ 2026-07-24

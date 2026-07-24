@@ -6,7 +6,7 @@ English | [中文](README.zh-CN.md)
 
 ## Features
 
-- **Asset discovery & parsing**: reads `~/.claude/` and project `.claude/` — settings, permissions, hooks, MCP servers, skills, commands, agents, plugins, CLAUDE.md/memory, keybindings, scripts.
+- **Asset discovery & parsing**: reads `~/.claude/` and project `.claude/` — settings, permissions, hooks, MCP servers, skills, commands, agents, plugins, CLAUDE.md/memory, keybindings, scripts. Supports multiple code agents: **Claude Code** (`~/.claude/`) and **OpenAI Codex CLI** (`~/.codex/config.toml`, `AGENTS.md`, `prompts/`, `hooks.json`). `sentinel setup` auto-detects installed agents; the dashboard aggregates multiple agents with independent scans.
 - **Security detection**: unified rule engine (63 built-in rules) + prompt-injection scanning with deobfuscation + secret scanning (gitleaks) + dependency audit (govulncheck / npm-audit). Missing scanner binaries degrade gracefully.
 - **Suppressions & baseline**: silence known findings via `suppressions.yaml`; snapshot accepted fingerprints in `baseline.json` (create / prune from CLI or API).
 - **Health score**: `Score = 100 × (1 − Σ(R(asset)·w(asset)) / (Rmax · Σ w(asset)))`, Rmax=10, 0–100, 5-tier — explainable, monotone, restorable.

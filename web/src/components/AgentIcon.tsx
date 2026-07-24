@@ -37,6 +37,23 @@ export function AgentIcon({ id, size = '1em', style }: Props) {
       </svg>
     )
   }
+  if (id === 'codex') {
+    return (
+      <svg
+        height={size}
+        width={size}
+        viewBox="0 0 24 24"
+        xmlns="http://www.w3.org/2000/svg"
+        style={{ display: 'inline-block', verticalAlign: 'middle', marginRight: '0.2em', lineHeight: 1, ...style }}
+        role="img"
+        aria-label="Codex CLI"
+      >
+        <title>Codex CLI</title>
+        {/* OpenAI 绿极简标识:圆形。后续可提取 --agent-codex token 进 Hallmark 设计系统。 */}
+        <circle cx="12" cy="12" r="10" fill="#10a37f" />
+      </svg>
+    )
+  }
   // 未知 agent:回退方块(与旧 agentMeta '▪' 一致),避免空白。
   return <span style={{ display: 'inline-block', width: size, verticalAlign: 'middle', marginRight: '0.2em', ...style }}>▪</span>
 }

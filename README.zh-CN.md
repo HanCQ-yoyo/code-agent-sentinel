@@ -6,7 +6,7 @@
 
 ## 核心能力
 
-- **资产发现与解析**:扫描 `~/.claude/` 与项目 `.claude/`,覆盖 settings、permissions、hooks、MCP servers、skills、commands、agents、plugins、CLAUDE.md/memory、keybindings、scripts 等 11 类资产。
+- **资产发现与解析**:扫描 `~/.claude/` 与项目 `.claude/`,覆盖 settings、permissions、hooks、MCP servers、skills、commands、agents、plugins、CLAUDE.md/memory、keybindings、scripts 等 11 类资产。支持多种 code agent:**Claude Code**(`~/.claude/`)与 **OpenAI Codex CLI**(`~/.codex/config.toml`、`AGENTS.md`、`prompts/`、`hooks.json`)。`sentinel setup` 自动探测已安装 agent;看板支持多 agent 聚合、各自独立扫描。
 - **安全检测**:统一规则引擎(63 条内置规则)+ 提示注入扫描(含反混淆)+ 密钥扫描(gitleaks)+ 依赖漏洞(govulncheck / npm-audit)。子进程缺失时优雅降级。
 - **抑制与 baseline**:`suppressions.yaml` 静默已知 finding;`baseline.json` 快照已接受指纹(CLI 或 API create / prune)。
 - **健康分**:`Score = 100 × (1 − Σ(R(asset)·w(asset)) / (Rmax · Σ w(asset)))`,Rmax=10,0–100 五档,可解释 / 单调 / 可还原。
