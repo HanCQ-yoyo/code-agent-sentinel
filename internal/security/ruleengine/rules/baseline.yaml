@@ -80,3 +80,15 @@ rules:
         - { field: raw, op: contains, value: "skipDangerousModePermissionPrompt" }
         - { field: raw, op: regex_match, value: "(?i)(WebFetch|curl|wget|bash)" }
     remediation: "关闭 skipDangerousModePermissionPrompt,或移除网络/写命令"
+  - id: baseline.codex-danger-full-access
+    severity: critical
+    description: "Codex sandbox_mode=danger-full-access,无沙箱执行任意命令(等同 Claude --dangerously-skip-permissions)"
+    asset_type: settings
+    match: { field: raw, op: regex_match, value: "sandbox_mode\\s*=\\s*\"danger-full-access\"" }
+    remediation: "将 sandbox_mode 改为 workspace-write 或 read-only"
+  - id: baseline.codex-approval-never
+    severity: high
+    description: "Codex approval_policy=never,永不请求审批自动执行所有操作"
+    asset_type: settings
+    match: { field: raw, op: regex_match, value: "approval_policy\\s*=\\s*\"never\"" }
+    remediation: "将 approval_policy 改为 untrusted 或 on-failure"

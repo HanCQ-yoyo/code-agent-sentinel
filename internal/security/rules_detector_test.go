@@ -155,9 +155,9 @@ func TestRulesDetectorMeta(t *testing.T) {
 	if len(m.Engines) != 1 || m.Engines[0].Kind != "embedded" || !m.Engines[0].Available {
 		t.Errorf("Engines = %+v", m.Engines)
 	}
-	// 11 baseline + 46 injection + 6 skill + 12 destructive.git + 26 destructive.filesystem (Task 5) + 112 destructive.database (Task 6) + 21 destructive.containers + 18 destructive.package_managers (Task 7) = 252 条内置规则
-	if len(m.Rules) != 252 {
-		t.Errorf("Rules 数 = %d, want 252 (11 baseline + 46 injection + 6 skill + 12 destructive.git + 26 destructive.filesystem + 112 destructive.database + 21 destructive.containers + 18 destructive.package_managers)", len(m.Rules))
+	// 13 baseline + 46 injection + 6 skill + 12 destructive.git + 26 destructive.filesystem (Task 5) + 112 destructive.database (Task 6) + 21 destructive.containers + 18 destructive.package_managers (Task 7) = 254 条内置规则
+	if len(m.Rules) != 254 {
+		t.Errorf("Rules 数 = %d, want 254 (13 baseline + 46 injection + 6 skill + 12 destructive.git + 26 destructive.filesystem + 112 destructive.database + 21 destructive.containers + 18 destructive.package_managers)", len(m.Rules))
 	}
 	if m.Covers != nil {
 		t.Errorf("Covers 应为 nil, got %v", m.Covers)
@@ -890,5 +890,82 @@ func TestRulesDetector_StrictRoutingForNonDestructive(t *testing.T) {
 	}
 	if !foundInjection {
 		t.Errorf("injection.tm1 asset_type=script,应评估 AssetScript 并命中,但无 injection.* finding: %+v", scriptFindings)
+	}
+}
+
+// Task 4: Codex baseline 规则(danger-full-access / approval-never)。
+// Codex 的 config.toml 经 Task 2 解析成 settings 资产,Fields["raw"] 为整个 toml 文本,
+// 规则按 field: raw + op: regex_match 全文本匹配。
+
+// TestCodexBaselineRulesDangerFullAccess 验证 sandbox_mode="danger-full-access" 命中 critical 规则。
+func TestCodexBaselineRulesDangerFullAccess(t *testing.T) {
+	home := newRulesHome(t)
+	d := NewRulesDetector(home, nil)
+	// config.toml 文本作为 settings 资产的 raw(规则按 field: raw 全文本匹配)
+	tomlText := `model = "gpt-5-codex"
+sandbox_mode = "danger-full-access"
+approval_policy = "on-failure"
+`
+	a := configengine.Asset{
+		Type:       configengine.AssetSettings,
+		Scope:      configengine.ScopeGlobal,
+		SourcePath: "/fake/config.toml",
+		Name:       "config",
+		Content:    tomlText,
+		Fields:     map[string]any{"raw": tomlText, "sandbox_mode": "danger-full-access"},
+	}
+	findings, err := d.Scan(context.Background(), []configengine.Asset{a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasRuleID(findings, "baseline.codex-danger-full-access") {
+		t.Fatalf("应命中 baseline.codex-danger-full-access: %+v", findings)
+	}
+}
+
+// TestCodexBaselineRulesApprovalNever 验证 approval_policy="never" 命中 high 规则。
+func TestCodexBaselineRulesApprovalNever(t *testing.T) {
+	home := newRulesHome(t)
+	d := NewRulesDetector(home, nil)
+	tomlText := `model = "gpt-5-codex"
+approval_policy = "never"
+`
+	a := configengine.Asset{
+		Type:       configengine.AssetSettings,
+		Scope:      configengine.ScopeGlobal,
+		SourcePath: "/fake/config.toml",
+		Name:       "config",
+		Content:    tomlText,
+		Fields:     map[string]any{"raw": tomlText, "approval_policy": "never"},
+	}
+	findings, err := d.Scan(context.Background(), []configengine.Asset{a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasRuleID(findings, "baseline.codex-approval-never") {
+		t.Fatalf("应命中 baseline.codex-approval-never: %+v", findings)
+	}
+}
+
+// TestCodexBaselineRulesNoFalsePositiveOnClaude 验证 Claude settings.json 的 raw
+// 不含 Codex TOML 串,两条 Codex 规则都不应误报。
+func TestCodexBaselineRulesNoFalsePositiveOnClaude(t *testing.T) {
+	home := newRulesHome(t)
+	d := NewRulesDetector(home, nil)
+	// Claude settings.json 的 raw 不含这些串,不应误报
+	a := configengine.Asset{
+		Type:       configengine.AssetSettings,
+		Scope:      configengine.ScopeGlobal,
+		SourcePath: "/fake/settings.json",
+		Name:       "settings",
+		Content:    `{"model":"opus"}`,
+		Fields:     map[string]any{"raw": `{"model":"opus"}`},
+	}
+	findings, err := d.Scan(context.Background(), []configengine.Asset{a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if hasRuleID(findings, "baseline.codex-danger-full-access") || hasRuleID(findings, "baseline.codex-approval-never") {
+		t.Fatalf("Claude settings 不应触发 Codex 规则: %+v", findings)
 	}
 }
