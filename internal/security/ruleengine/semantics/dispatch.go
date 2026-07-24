@@ -116,7 +116,25 @@ func snowflakeSemanticDecision(command string) SemanticResult {
 // TABLE/SCHEMA 等目标 keyword,故无法从 DestructiveTokens 序列判定 DROP 的对象类型。
 // 这里在原始 SQL 文本上做正则提取(绕过 lexer 的 token 保留限制),已排除注释/字符串内
 // 的误命中由 ScanSQL 的 DestructiveTokens 把关(调用者仅在 DestructiveTokens 非空时进入本函数)。
+//
+// 覆盖形式(lead + 紧邻目标 keyword):
+//   - DROP DATABASE/SCHEMA/TABLE
+//   - DELETE FROM
+//   - (UPDATE SET — 罕见,UPDATE 后紧接 SET,无表名;实际 UPDATE 形式由 snowUpdateTableSetRe 覆盖)
+//   - (TRUNCATE TABLE — 由 snowTruncateIdentRe 覆盖,亦覆盖无 TABLE 形式)
 var snowRuleTargetRe = regexp.MustCompile(`(?i)\b(DROP|TRUNCATE|DELETE|UPDATE)\s+(DATABASE|SCHEMA|TABLE|FROM|SET)\b`)
+
+// snowUpdateTableSetRe 匹配 `UPDATE <table> SET ...`:UPDATE 与 SET 之间夹一个表名标识符。
+// 这是 UPDATE 的实际常见形式(`UPDATE mytable SET col=1`),而 snowRuleTargetRe 只能匹配
+// `UPDATE SET`(无表名,罕见/非法)。修复最终 review C2 残留缺口。
+// `\S+` 而非 `[a-zA-Z_]\w*`:兼容双引号/反引号标识符(`UPDATE "my table" SET`)。
+var snowUpdateTableSetRe = regexp.MustCompile(`(?i)\bUPDATE\s+\S+\s+SET\b`)
+
+// snowTruncateIdentRe 匹配 `TRUNCATE <table>`(Snowflake 允许省略 TABLE 关键字,
+// 如 `TRUNCATE mytable`)。同时匹配 `TRUNCATE TABLE <table>`(TABLE 首字符是字母,亦命中)。
+// 修复最终 review C2 残留缺口:修前 snowRuleTargetRe 要求 TRUNCATE 后紧接 TABLE,
+// 导致 `TRUNCATE mytable` 落到 snowflake.drop 回退 → carrier 被扭曲为 high。
+var snowTruncateIdentRe = regexp.MustCompile(`(?i)\bTRUNCATE\s+[a-zA-Z_]`)
 
 // snowflakeRuleIDForSQL 把 SQL 文本里的破坏性构造映射到具体 dcg_rule_id,
 // 对齐 destructive_commands.yaml 的 snowflake.* 条目(修复最终 review C2)。
@@ -134,14 +152,30 @@ var snowRuleTargetRe = regexp.MustCompile(`(?i)\b(DROP|TRUNCATE|DELETE|UPDATE)\s
 //   - DROP DATABASE → snowflake.drop-database   (critical)
 //   - DROP SCHEMA   → snowflake.drop-schema      (critical)
 //   - DROP TABLE    → snowflake.drop-table       (critical)
-//   - TRUNCATE      → snowflake.truncate-table   (critical)
+//   - TRUNCATE TABLE → snowflake.truncate-table  (critical)
+//   - TRUNCATE <ident>(无 TABLE)→ snowflake.truncate-table(critical;Snowflake 允许省略 TABLE)
 //   - DELETE FROM   → snowflake.delete-all       (critical)
-//   - UPDATE ... SET → snowflake.update-all     (critical)
+//   - UPDATE SET     → snowflake.update-all      (critical;罕见,UPDATE 后紧接 SET)
+//   - UPDATE <table> SET → snowflake.update-all  (critical;UPDATE 的实际常见形式)
 //   - 其他(DROP 其他目标 / 无法细分)→ snowflake.drop(回退,保持旧行为)
 //
 // WHERE 子句区分(bounded-delete/bounded-update)由正则规则承担,语义层只负责给 Deny
 // 配正确 carrier,故任何 DELETE/UPDATE keyword(无论有无 WHERE)都映射到 delete-all/update-all。
 func snowflakeRuleIDForSQL(sql string) string {
+	// 先匹配 UPDATE <table> SET(实际常见形式,snowRuleTargetRe 不覆盖)。
+	// 注意须在 snowRuleTargetRe 之前:snowRuleTargetRe 能匹配 `UPDATE SET`(无表名),
+	// 但 `UPDATE mytable SET` 里 m[2] 会是 "mytable"(非 SET/ FROM 等)→ 不命中任何 case →
+	// 回退到 snowflake.drop。故先显式匹配 update-all 的两种形式。
+	if snowUpdateTableSetRe.MatchString(sql) {
+		return "snowflake.update-all"
+	}
+	// 再匹配 TRUNCATE <ident>(含 TRUNCATE TABLE <ident> 与 TRUNCATE <ident> 两种形式)。
+	// 放在 snowRuleTargetRe 之前:TRUNCATE 后无 TABLE 时 snowRuleTargetRe 不命中,
+	// 需由 snowTruncateIdentRe 兜底。TRUNCATE TABLE 形式两者均命中,这里先返回 truncate-table。
+	if snowTruncateIdentRe.MatchString(sql) {
+		return "snowflake.truncate-table"
+	}
+	// 通用匹配:DROP DATABASE/SCHEMA/TABLE、DELETE FROM、UPDATE SET(无表名罕见形式)。
 	m := snowRuleTargetRe.FindStringSubmatch(sql)
 	if m == nil {
 		return "snowflake.drop"
@@ -158,8 +192,6 @@ func snowflakeRuleIDForSQL(sql string) string {
 		case "TABLE":
 			return "snowflake.drop-table"
 		}
-	case "TRUNCATE":
-		return "snowflake.truncate-table"
 	case "DELETE":
 		return "snowflake.delete-all"
 	case "UPDATE":

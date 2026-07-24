@@ -285,3 +285,83 @@ func TestC2_SnowflakeDropSchemaCritical(t *testing.T) {
 		t.Errorf("C2:期望 semantic.snowflake.drop-schema finding,但无: %+v", findings)
 	}
 }
+
+// ── C2 残留缺口(最终 review re-review 补充用例)──
+//
+// 原 C2 修复(commit c33fca4)覆盖了 DROP DATABASE/SCHEMA/TABLE、TRUNCATE TABLE、
+// DELETE FROM、UPDATE SET(罕见,UPDATE 后紧接 SET)。但 re-review 发现 2 个常见 SQL 形式
+// 仍落 snowflake.drop 回退 → carrier 被扭曲为 high(应 critical):
+//   - `UPDATE <table> SET ...`(UPDATE 后夹表名再 SET,实际常见形式)
+//   - `TRUNCATE <table>`(Snowflake 允许省略 TABLE 关键字)
+//
+// snowRuleTargetRe 原版 `\b(DROP|TRUNCATE|DELETE|UPDATE)\s+(DATABASE|SCHEMA|TABLE|FROM|SET)\b`
+// 要求 leading keyword 紧邻目标 keyword,无法匹配上述 2 形式。修复:新增
+// snowUpdateTableSetRe 与 snowTruncateIdentRe,在 snowRuleTargetRe 之前显式匹配。
+
+// TestC2_SnowflakeUpdateTableSetCritical 验证 `UPDATE mytable SET x=1`(实际常见 UPDATE 形式):
+// 语义 RuleID="snowflake.update-all",severity critical(不是 high)。
+// 修前:snowRuleTargetRe 不匹配 `UPDATE mytable SET`(UPDATE 后是表名,非 SET),
+// snowflakeRuleIDForSQL 回退 snowflake.drop → pickSemanticCarrier strategy 2 = mongodb.stdin-unverified
+// (high)→ semantic finding severity 被扭曲为 high,且 Gate 1 continue 抑制了正确的
+// critical 正则规则 destructive.database.snowflake.update-all。
+func TestC2_SnowflakeUpdateTableSetCritical(t *testing.T) {
+	home := newRulesHome(t)
+	d := NewRulesDetector(home, nil)
+	assets := []configengine.Asset{{
+		ID:   "hook-snow-update-table-set",
+		Type: configengine.AssetHook,
+		Name: "hook",
+		Fields: map[string]any{
+			"command": "snow sql --query 'UPDATE mytable SET x=1'",
+		},
+	}}
+	findings, err := d.Scan(context.Background(), assets)
+	if err != nil {
+		t.Fatalf("Scan error: %v", err)
+	}
+	found := false
+	for _, f := range findings {
+		if f.RuleID == "semantic.snowflake.update-all" {
+			found = true
+			if f.Severity != SeverityCritical {
+				t.Errorf("C2 残留:semantic.snowflake.update-all severity = %s, want critical (snowUpdateTableSetRe 应让 carrier 精确命中 destructive.database.snowflake.update-all critical): %+v", f.Severity, f)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("C2 残留:期望 semantic.snowflake.update-all finding,但无(UPDATE mytable SET 应命中 update-all 而非 snowflake.drop 回退): %+v", findings)
+	}
+}
+
+// TestC2_SnowflakeTruncateNoTableKeywordCritical 验证 `TRUNCATE mytable`(省略 TABLE 关键字,
+// Snowflake 允许):语义 RuleID="snowflake.truncate-table",severity critical(不是 high)。
+// 修前:snowRuleTargetRe 要求 `TRUNCATE\s+TABLE`,不匹配 `TRUNCATE mytable`,
+// snowflakeRuleIDForSQL 回退 snowflake.drop → carrier 被扭曲为 high。
+func TestC2_SnowflakeTruncateNoTableKeywordCritical(t *testing.T) {
+	home := newRulesHome(t)
+	d := NewRulesDetector(home, nil)
+	assets := []configengine.Asset{{
+		ID:   "hook-snow-truncate-notable",
+		Type: configengine.AssetHook,
+		Name: "hook",
+		Fields: map[string]any{
+			"command": "snow sql --query 'TRUNCATE mytable'",
+		},
+	}}
+	findings, err := d.Scan(context.Background(), assets)
+	if err != nil {
+		t.Fatalf("Scan error: %v", err)
+	}
+	found := false
+	for _, f := range findings {
+		if f.RuleID == "semantic.snowflake.truncate-table" {
+			found = true
+			if f.Severity != SeverityCritical {
+				t.Errorf("C2 残留:semantic.snowflake.truncate-table severity = %s, want critical (snowTruncateIdentRe 应让 carrier 精确命中 destructive.database.snowflake.truncate-table critical): %+v", f.Severity, f)
+			}
+		}
+	}
+	if !found {
+		t.Errorf("C2 残留:期望 semantic.snowflake.truncate-table finding,但无(TRUNCATE mytable 无 TABLE 关键字应仍命中 truncate-table 而非 snowflake.drop 回退): %+v", findings)
+	}
+}
