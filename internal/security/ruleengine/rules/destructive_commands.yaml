@@ -15,7 +15,7 @@
 # 因 RulesDetector.Covers() 返回 nil(全资产路由),规则按 asset_type 字段自动路由。
 
 rules:
-  # ===== git 域(源 dcg core/git.rs:4207-4462,12 dest + 6 safe→post_exclude)=====
+  # ===== git 域(源 dcg core/git.rs:4207-4462,12 dest + 5 safe→post_exclude)=====
   # severity 直接映射 dcg 枚举(reset-hard/clean-force/push-force-*/stash-clear=Critical;
   # checkout-*/restore-*/reset-merge/branch-force-delete=High;stash-drop=Medium)。
   # 正则适配:[[:alnum:]_]→\w;(?:^|[^[:alnum:]_-])→(?:^|[^\w-]);YAML 双引号内 \\。
@@ -178,7 +178,7 @@ rules:
         - { field: allow, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*stash\\s+clear\\b" }
     metadata: { source: dcg, domain: git, dcg_rule_id: "git.stash-clear" }
     remediation: "改用 git stash drop stash@{n} 逐条删除,先 git stash list 检查"
-  # ===== filesystem 域(源 dcg core/filesystem.rs,26 dest + 32 safe→post_exclude)=====
+  # ===== filesystem 域(源 dcg core/filesystem.rs,26 dest + 20 safe→post_exclude)=====
   # severity 直接映射 dcg 枚举(见各规则注释)。
   # 正则适配:dcg 原始 regex 经 sentinel 适配——root-home 规则扩展 [^|;&\s]* 消费路径 token,
   # 使 hitCtx 包含完整路径,从而 post_exclude 可区分 /tmp(安全)与 /etc(危险)。
@@ -2491,16 +2491,16 @@ rules:
 #   git:            12 dest + 5 post_exclude(checkout-discard / checkout-ref-discard /
 #                   restore-worktree / restore-worktree-explicit / clean-force)
 #   filesystem:     26 dest + 20 post_exclude(rm/find/unlink/truncate/shred/tar/dd/mv 各 2)
-#   database:       112 dest + 3 post_exclude
-#                     mongodb 6+0 / mysql 11+1 / postgresql 8+0 / redis 14+1 /
+#   database:       112 dest + 1 post_exclude(supabase-db-push)
+#                     mongodb 6+0 / mysql 11+0 / postgresql 8+0 / redis 14+0 /
 #                     snowflake 50+0 / sqlite 5+0 / supabase 18+1
 #   containers:     21 dest + 0 post_exclude(正则自带 --dry-run 负向先行断言)
 #                     docker 9 / podman 8 / compose 4
 #   package_managers: 18 dest + 0 post_exclude(正则自带 --dry-run 负向先行断言)
-#   合计:189 dest + 28 post_exclude = 217 条规则(含 safe→post_exclude 映射)
+#   合计:189 dest + 26 post_exclude = 215 条规则(含 safe→post_exclude 映射)
 #
 # safe_pattern 说明:
-#   - dcg safe_pattern 中有对应 dest 规则的,映射为该 dest 规则的 post_exclude(28 条)。
+#   - dcg safe_pattern 中有对应 dest 规则的,映射为该 dest 规则的 post_exclude(26 条)。
 #   - 无对应 dest 规则的 safe_pattern(如 pg-dump-no-clean / sqlite-explain)不转 post_exclude:
 #     destructive 正则本身只匹配破坏性 SQL 关键字,安全形态不会命中,无需排除。
 #   - containers / package_managers 的 safe_pattern 多为 --dry-run,dest 正则自带

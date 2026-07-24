@@ -199,8 +199,16 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 		}
 
 		for _, r := range allRules {
-			// 规则按 asset_type 路由(Covers=nil → 全资产传入,内部按类型分发)
-			if string(r.AssetType) != string(a.Type) {
+			// 规则按 asset_type 路由(Covers=nil → 全资产传入,内部按类型分发)。
+			// 修复 review Important #1:原实现严格 `r.AssetType != a.Type` 路由,但 destructive
+			// 域规则全部 asset_type=hook + or-tree 覆盖 command/content/allow 字段,严格路由使其
+			// 只评估 AssetHook,AssetScript/Skill/Command/Agent/Memory/Permissions 的 rm -rf / 不会被
+			// destructive.* 精确规则检测(仅 injection.tm1 粗住 AssetScript,其余无覆盖)。
+			// 放宽:destructive 域规则(metadata.source=dcg 且 metadata.domain 属 destructive 五域)
+			// 额外评估所有 command-bearing 资产类型(hook/mcp_server/script/skill/command/agent/
+			// memory/permissions),or-tree 内部按字段路由自然匹配。
+			// injection/baseline/skill 规则仍严格路由(它们 asset_type=script/hook/settings 靶向特定资产)。
+			if !ruleAppliesToAsset(r, a.Type) {
 				continue
 			}
 			// 项目规则隔离:ProjectPath 非空 → 只对该项目(SourcePath 在项目根下)的资产生效
@@ -340,6 +348,48 @@ func startsWithDotDot(rel string) bool {
 	return len(rel) >= 3 && rel[0] == '.' && rel[1] == '.' && (rel[2] == filepath.Separator || rel[2] == '/')
 }
 
+// ruleAppliesToAsset 判断规则是否对指定 asset 类型生效(路由)。
+//
+// 修复 review Important #1(destructive 域 asset_type=hook 覆盖缺口):
+//   - 严格路由:所有非 destructive 域规则(injection/baseline/skill 等)按 r.AssetType == a.Type
+//     精确匹配(它们 asset_type=script/hook/settings 靶向特定资产)。
+//   - 放宽路由:destructive 域规则(metadata.source=dcg 且 metadata.domain 属五域之一
+//     git/filesystem/database/containers/package_managers)虽声明 asset_type=hook,
+//     其 or-tree 覆盖 command/content/allow 三字段 → 额外评估所有 command-bearing 资产类型
+//     (hook/mcp_server/script/skill/command/agent/memory/permissions)。
+//     使 AssetScript/Skill/Command/Agent/Memory/Permissions 内的 rm -rf / 能被 destructive.*
+//     精确规则检测(原严格路由使其只评估 AssetHook,or-tree content/allow 分支成死代码)。
+//   - 注:放宽后 destructive 与 injection.tm1(asset_type=script)可能在同一 AssetScript 上
+//     双触发(不同 severity/remediation),属 defense-in-depth,可接受。
+func ruleAppliesToAsset(r ruleengine.Rule, assetType configengine.AssetType) bool {
+	// 精确匹配:所有规则的原有行为(asset_type 相同)。
+	if string(r.AssetType) == string(assetType) {
+		return true
+	}
+	// 放宽:destructive 域规则额外评估 command-bearing 资产。
+	src, _ := r.Metadata["source"].(string)
+	domain, _ := r.Metadata["domain"].(string)
+	if src != "dcg" {
+		return false
+	}
+	switch domain {
+	case "git", "filesystem", "database", "containers", "package_managers":
+	default:
+		return false
+	}
+	// 仅当规则声明 asset_type=hook(destructive 规则的统一声明)且目标类型属 command-bearing。
+	if r.AssetType != string(configengine.AssetHook) {
+		return false
+	}
+	switch assetType {
+	case configengine.AssetHook, configengine.AssetMCPServer,
+		configengine.AssetScript, configengine.AssetSkill, configengine.AssetCommand,
+		configengine.AssetAgent, configengine.AssetMemory, configengine.AssetPermissions:
+		return true
+	}
+	return false
+}
+
 // rulesForTest 仅供测试:暴露 baseRules 供测试算 fingerprint(规则结构稳定)。
 // 非导出方法,不进公开 API。
 func (d *RulesDetector) rulesForTest() []ruleengine.Rule {
@@ -388,7 +438,7 @@ func pickSemanticCarrier(rules []ruleengine.Rule, a configengine.Asset, semDenyR
 	if semRuleID != "" {
 		for i := range rules {
 			r := &rules[i]
-			if string(r.AssetType) != string(a.Type) {
+			if !ruleAppliesToAsset(*r, a.Type) {
 				continue
 			}
 			if r.ProjectPath != "" && !pathInProject(a.SourcePath, r.ProjectPath) {
@@ -402,7 +452,7 @@ func pickSemanticCarrier(rules []ruleengine.Rule, a configengine.Asset, semDenyR
 	// 策略 2:回退到该域首条 asset_type 匹配规则。
 	for i := range rules {
 		r := &rules[i]
-		if string(r.AssetType) != string(a.Type) {
+		if !ruleAppliesToAsset(*r, a.Type) {
 			continue
 		}
 		if r.ProjectPath != "" && !pathInProject(a.SourcePath, r.ProjectPath) {
