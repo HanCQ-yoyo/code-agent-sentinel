@@ -47,8 +47,9 @@
   --cat-5: oklch(55% 0.160 300); /* 紫  */
   --cat-6: oklch(68% 0.110 195); /* 青  */
 
-  /* 品牌身份色(Claude 橙,仅 agent 图标,与 accent 平级) */
+  /* 品牌身份色(agent 图标专用,与 accent 平级) */
   --agent-claude: oklch(68% 0.130 41);
+  --agent-codex: oklch(70% 0.130 165);
 
   /* 字号阶梯(major third,从 14px 正文起) */
   --fs-xs:   11px;
@@ -119,6 +120,7 @@
   --cat-6: oklch(74% 0.110 195);
 
   --agent-claude: oklch(72% 0.130 41);
+  --agent-codex: oklch(74% 0.130 165);
 }
 
 /* 兼容旧 token 名别名 —— 组件迁移过渡期:旧 --bg / --text 等名映射到新 --color-*,

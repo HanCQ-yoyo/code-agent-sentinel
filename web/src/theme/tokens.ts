@@ -39,8 +39,9 @@ export interface TokenSet {
   cat4: string
   cat5: string
   cat6: string
-  // 品牌身份色(Claude 橙,仅 agent 图标,与 accent 平级,不进 category)
+  // 品牌身份色(agent 图标专用,与 accent 平级,不进 category)
   agentClaude: string
+  agentCodex: string
   fontSans: string
   fontMono: string
 }
@@ -82,6 +83,7 @@ export const tokens: Record<Mode, TokenSet> = {
     cat5: 'oklch(55% 0.160 300)',
     cat6: 'oklch(68% 0.110 195)',
     agentClaude: 'oklch(68% 0.130 41)',
+    agentCodex: 'oklch(70% 0.130 165)',
     fontSans,
     fontMono,
   },
@@ -116,6 +118,7 @@ export const tokens: Record<Mode, TokenSet> = {
     cat5: 'oklch(62% 0.150 300)',
     cat6: 'oklch(74% 0.110 195)',
     agentClaude: 'oklch(72% 0.130 41)',
+    agentCodex: 'oklch(74% 0.130 165)',
     fontSans,
     fontMono,
   },
