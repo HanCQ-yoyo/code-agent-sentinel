@@ -202,6 +202,11 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	}
 	histPath := filepath.Join(home, ".claude-sentinel", "history")
 	hist := history.NewStore(histPath)
+	// editor 绑定到首个 agent 的 Engine(engAgents[0]):P2 写编辑仅针对 Claude 建模,
+	// editable.go 的 findAsset/preview/commit 走 e.Engine.Discover()。在 Codex 排首位的混合
+	// 部署里,编辑 Claude 资产会因 Engine 指向 Codex 清单而 ErrNotFound——用户可经
+	// `sentinel setup` 把 claude-code 排首位规避。扫描/看板/健康分走 Runner.EngineFor(agentID)
+	// 按 agent 多路复用,不受此限。后续若加 Codex 编辑,需把 editor 也接到 EngineFor。
 	ed := editor.New(eng, cfg.BackupDir, cfg.MaxBackups)
 	srv := api.NewServer(eng, orch, cfg, token, hist, engAgents, ed)
 	srv.ConfigPath = cfgPath
