@@ -1,12 +1,10 @@
 import { useState, useEffect } from 'react'
-import { Modal, Radio, Select, Checkbox, Space, Typography, Table, Tag } from 'antd'
+import { Modal, Radio, Select, Checkbox, Typography, Table, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
 import { AgentIcon } from './AgentIcon'
 import type { Agent } from '../types'
-
-const { Text } = Typography
 
 interface Props {
   open: boolean
@@ -46,7 +44,7 @@ export function RescanModal({ open, onClose, initialScope }: Props) {
       ),
     },
     { title: t('rescan.colID'), dataIndex: 'id', key: 'id',
-      render: (id: string) => <Text type="secondary" style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{id}</Text> },
+      render: (id: string) => <Typography.Text type="secondary" style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }}>{id}</Typography.Text> },
     { title: t('rescan.colStatus'), dataIndex: 'scan_enabled', key: 'status', width: 80,
       render: (on: boolean) => on
         ? <Tag color="green">{t('rescan.statusOn')}</Tag>
@@ -61,27 +59,37 @@ export function RescanModal({ open, onClose, initialScope }: Props) {
     onClose()
   }
 
+  // 三段分区标题:与 AssetDetailPanel 的 .section-label 同款(muted uppercase + hairline),
+  // 把原 Space vertical 平铺改成「范围 / 目标 Agent / 检测器」三段分层(design.md #7:消除堆叠感)。
+  const SectionLabel = ({ children }: { children: React.ReactNode }) => (
+    <div className="section-label" style={{ marginBottom: 8 }}>{children}</div>
+  )
+
   return (
     <Modal open={open} title={t('rescan.title')} onCancel={onClose} onOk={start} okText={t('rescan.start')} confirmLoading={loading} cancelText={t('common.cancel')} width={560}>
-      <Space direction="vertical" size={12} style={{ width: '100%' }}>
-        <div>
-          <Text strong>{t('rescan.scope')}</Text>
-          <Radio.Group value={scopeType} onChange={(e) => setScopeType(e.target.value)} style={{ marginLeft: 8 }}>
-            <Radio value="global">{t('rescan.scopeAll')}</Radio>
-            <Radio value="user">{t('rescan.scopeUser')}</Radio>
-            <Radio value="project">{t('rescan.scopeProject')}</Radio>
-          </Radio.Group>
-        </div>
-        {scopeType === 'project' ? (
-          <Select style={{ width: '100%' }} placeholder={t('rescan.selectProject')} value={scopePath}
-            options={(projects ?? []).map(p => ({ value: p.path, label: p.name }))} onChange={setScopePath} />
-        ) : null}
-        <div>
-          <Text strong>{t('rescan.agent')}</Text>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* 范围 */}
+        <section>
+          <SectionLabel>{t('rescan.scope')}</SectionLabel>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <Radio.Group value={scopeType} onChange={(e) => setScopeType(e.target.value)}>
+              <Radio value="global">{t('rescan.scopeAll')}</Radio>
+              <Radio value="user">{t('rescan.scopeUser')}</Radio>
+              <Radio value="project">{t('rescan.scopeProject')}</Radio>
+            </Radio.Group>
+            {scopeType === 'project' ? (
+              <Select style={{ flex: 1, minWidth: 180 }} placeholder={t('rescan.selectProject')} value={scopePath}
+                options={(projects ?? []).map(p => ({ value: p.path, label: p.name }))} onChange={setScopePath} />
+            ) : null}
+          </div>
+        </section>
+
+        {/* 目标 Agent:行选中背景走 Table.rowSelectedBg(accent-soft,antdTheme 已设),不再泄漏暗色黑底。 */}
+        <section>
+          <SectionLabel>{t('rescan.agent')}</SectionLabel>
           <Table<Agent>
             size="small" rowKey="id" pagination={false} scroll={{ y: 200 }}
             dataSource={agents?.agents ?? []} columns={columns}
-            style={{ marginTop: 4 }}
             rowSelection={{
               selectedRowKeys: agentIDs,
               onChange: (keys) => setAgentIDs(keys as string[]),
@@ -89,12 +97,14 @@ export function RescanModal({ open, onClose, initialScope }: Props) {
               getCheckboxProps: (r: Agent) => ({ disabled: !r.scan_enabled }),
             }}
           />
-        </div>
-        <div>
-          <Text strong>{t('rescan.detectors')}</Text>
-          <Checkbox.Group value={detIDs} onChange={(v) => setDetIDs(v as string[])} options={availDetectors} style={{ display: 'block', marginTop: 4 }} />
-        </div>
-      </Space>
+        </section>
+
+        {/* 检测器 */}
+        <section>
+          <SectionLabel>{t('rescan.detectors')}</SectionLabel>
+          <Checkbox.Group value={detIDs} onChange={(v) => setDetIDs(v as string[])} options={availDetectors} style={{ display: 'block' }} />
+        </section>
+      </div>
     </Modal>
   )
 }
