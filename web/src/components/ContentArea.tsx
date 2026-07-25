@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState, type ReactNode } from 'react'
+import { lazy, Suspense, useState, type CSSProperties, type ReactNode } from 'react'
 import { Card, Segmented, Spin, Empty, Space, Descriptions, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 import type { Asset } from '../types'
@@ -60,6 +60,7 @@ export function ContentArea({
   highlights,
   fill,
   headerActions,
+  borderless,
 }: {
   asset: Asset
   theme: 'light' | 'dark'
@@ -76,6 +77,10 @@ export function ContentArea({
   // markdown 视图里排在「预览/源码」Segmented 左侧;script/structured 等无 Segmented 的视图里
   // 独占 extra。调用方不传则不渲染(如全屏 Modal 内复用时不需要再嵌编辑/全屏按钮)。
   headerActions?: ReactNode
+  // borderless:文档流详情抽屉用。true 时内容区不再渲染 antd Card(自带厚边框 + Card head),
+  // 改为轻量 <section> + .section-label 标题(与属性/风险分区同一套分区标题语汇),消除 box-in-box。
+  // 内联默认 false(Card 风格不变);仅 AssetDetailPanel 经 AssetEditor 透传 true。
+  borderless?: boolean
 }) {
   const { t } = useTranslation()
   // 编辑态默认源码视图(让用户进入编辑即可直接修改,无需手动切「源码」)。
@@ -103,45 +108,59 @@ export function ContentArea({
     </Space>
   ) : isMarkdown ? previewSourceSeg : undefined
 
-  // markdown:有 content 才渲染预览/源码;编辑态(content 可为空)也进入此分支
-  if (isMarkdown && (onChange || asset.content)) {
+  // 内容区容器:默认 antd Card(自带边框 + Card head);borderless 时换轻量 <section>,
+  // 标题走 .section-label(与属性/风险分区统一),消除抽屉内 box-in-box。
+  // 内联(非 borderless)保持原 Card 行为不变。
+  const wrap = (children: ReactNode, opts: { bodyStyle?: CSSProperties; cardStyle?: CSSProperties }) => {
+    if (borderless) {
+      return (
+        <section className="content-area-section" style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column', ...opts.cardStyle }}>
+          <div className="section-label content-area-label" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+            <span>{t('content.title')}</span>
+            {cardExtra ? <span style={{ marginLeft: 'auto' }}>{cardExtra}</span> : null}
+          </div>
+          <div style={{ flex: 1, ...opts.bodyStyle }}>{children}</div>
+        </section>
+      )
+    }
     return (
       <Card
         size="small"
         title={t('content.title')}
-        style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }}
-        styles={{ body: { flex: 1, padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' } }}
         extra={cardExtra}
+        style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column', ...opts.cardStyle }}
+        styles={{ body: { flex: 1, ...opts.bodyStyle } }}
       >
-        {view === 'preview' ? (
-          <div style={{ padding: 12, flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
-            <MarkdownPreview content={asset.content ?? ''} />
-          </div>
-        ) : (
-          <div style={{ padding: 12, ...(fill ? { flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' } : {}) }}>
-            <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
-              <MonacoViewer value={asset.content ?? ''} language="markdown" theme={theme} readOnly={readOnly} onChange={onChange} highlights={highlights} height={fill ? '100%' : undefined} />
-            </Suspense>
-          </div>
-        )}
+        {children}
       </Card>
+    )
+  }
+
+  // markdown:有 content 才渲染预览/源码;编辑态(content 可为空)也进入此分支
+  if (isMarkdown && (onChange || asset.content)) {
+    return wrap(
+      view === 'preview' ? (
+        <div style={{ padding: 12, flex: 1, overflow: 'auto', display: 'flex', flexDirection: 'column' }}>
+          <MarkdownPreview content={asset.content ?? ''} />
+        </div>
+      ) : (
+        <div style={{ padding: 12, height: '100%', ...(fill ? { flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' } : {}) }}>
+          <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
+            <MonacoViewer value={asset.content ?? ''} language="markdown" theme={theme} readOnly={readOnly} onChange={onChange} highlights={highlights} height={fill ? '100%' : undefined} />
+          </Suspense>
+        </div>
+      ),
+      { bodyStyle: { padding: 0, overflow: 'hidden', display: 'flex', flexDirection: 'column' } },
     )
   }
 
   // script:Monaco(按扩展名选语言);编辑态(content 可为空)也进入此分支
   if (isScript && (onChange || asset.content)) {
-    return (
-      <Card
-        size="small"
-        title={t('content.title')}
-        extra={cardExtra}
-        style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }}
-        styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
-      >
-        <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
-          <MonacoViewer value={asset.content ?? ''} language={langByExt(asset.source_path)} theme={theme} readOnly={readOnly} onChange={onChange} highlights={highlights} height={fill ? '100%' : undefined} />
-        </Suspense>
-      </Card>
+    return wrap(
+      <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
+        <MonacoViewer value={asset.content ?? ''} language={langByExt(asset.source_path)} theme={theme} readOnly={readOnly} onChange={onChange} highlights={highlights} height={fill ? '100%' : undefined} />
+      </Suspense>,
+      { bodyStyle: { padding: 12, overflow: 'hidden' } },
     )
   }
 
@@ -156,18 +175,11 @@ export function ContentArea({
     const value = onChange ? (asset.content ?? '') : (asset.content ?? '')
     // 有原文件文本:Monaco JSON 源码。
     if (value !== '') {
-      return (
-        <Card
-          size="small"
-          title={t('content.title')}
-          extra={cardExtra}
-          style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }}
-          styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
-        >
-          <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
-            <MonacoViewer value={value} language="json" theme={theme} readOnly={readOnly} onChange={onChange} highlights={highlights} height={fill ? '100%' : undefined} />
-          </Suspense>
-        </Card>
+      return wrap(
+        <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
+          <MonacoViewer value={value} language="json" theme={theme} readOnly={readOnly} onChange={onChange} highlights={highlights} height={fill ? '100%' : undefined} />
+        </Suspense>,
+        { bodyStyle: { padding: 12, overflow: 'hidden' } },
       )
     }
     // 无原文件文本:结构化字段 KV 视图(MCP server 来自 .claude.json / plugin)。
@@ -175,64 +187,43 @@ export function ContentArea({
     const fields = asset.fields ?? {}
     const entries = Object.entries(fields).filter(([k]) => k !== 'raw')
     if (entries.length === 0) {
-      return <Card size="small" title={t('content.title')} extra={cardExtra}><Empty description={t('content.emptyNoFields')} /></Card>
+      return wrap(<Empty description={t('content.emptyNoFields')} />, { bodyStyle: { padding: 12 } })
     }
-    return (
-      <Card
-        size="small"
-        title={t('content.title')}
-        extra={cardExtra}
-        style={{ flex: 1, minHeight: 240, overflow: 'auto' }}
-        styles={{ body: { padding: 12 } }}
-      >
-        <div data-testid="structured-kv">
-          <Descriptions size="small" column={1} bordered>
-            {entries.map(([k, v]) => (
-              <Descriptions.Item key={k} label={<Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{k}</Typography.Text>}>
-                <Typography.Text style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{formatFieldValue(v)}</Typography.Text>
-              </Descriptions.Item>
-            ))}
-          </Descriptions>
-        </div>
-      </Card>
+    return wrap(
+      <div data-testid="structured-kv">
+        <Descriptions size="small" column={1} bordered>
+          {entries.map(([k, v]) => (
+            <Descriptions.Item key={k} label={<Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{k}</Typography.Text>}>
+              <Typography.Text style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{formatFieldValue(v)}</Typography.Text>
+            </Descriptions.Item>
+          ))}
+        </Descriptions>
+      </div>,
+      { bodyStyle: { padding: 12 }, cardStyle: { overflow: 'auto' } },
     )
   }
 
   // 空 content + 空 fields(或 type 不在已知集合)
   if (!asset.content && (!asset.fields || Object.keys(asset.fields).length === 0)) {
-    return <Card size="small" title={t('content.title')} extra={cardExtra}><Empty description={t('content.emptyNoContent')} /></Card>
+    return wrap(<Empty description={t('content.emptyNoContent')} />, { bodyStyle: { padding: 12 } })
   }
 
   // 兜底:有 content 但 type 非 markdown/script(罕见),按 plaintext Monaco
   if (asset.content) {
-    return (
-      <Card
-        size="small"
-        title={t('content.title')}
-        extra={cardExtra}
-        style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }}
-        styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
-      >
-        <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
-          <MonacoViewer value={asset.content} language="plaintext" theme={theme} readOnly={readOnly} onChange={onChange} highlights={highlights} />
-        </Suspense>
-      </Card>
+    return wrap(
+      <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
+        <MonacoViewer value={asset.content} language="plaintext" theme={theme} readOnly={readOnly} onChange={onChange} highlights={highlights} />
+      </Suspense>,
+      { bodyStyle: { padding: 12, overflow: 'hidden' } },
     )
   }
 
   // 兜底:有 fields 但 type 非 structured
   const value = JSON.stringify(asset.fields ?? {}, null, 2)
-  return (
-    <Card
-      size="small"
-      title={t('content.title')}
-      extra={cardExtra}
-      style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }}
-      styles={{ body: { flex: 1, padding: 12, overflow: 'hidden' } }}
-    >
-      <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
-        <MonacoViewer value={value} language="json" theme={theme} readOnly={readOnly} onChange={onChange} highlights={highlights} />
-      </Suspense>
-    </Card>
+  return wrap(
+    <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
+      <MonacoViewer value={value} language="json" theme={theme} readOnly={readOnly} onChange={onChange} highlights={highlights} height={fill ? '100%' : undefined} />
+    </Suspense>,
+    { bodyStyle: { padding: 12, overflow: 'hidden' } },
   )
 }

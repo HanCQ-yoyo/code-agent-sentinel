@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Card, Segmented, Input, Select, Spin, Alert, Typography, Tabs, Splitter, Modal, Tag, Button, Dropdown } from 'antd'
+import { Card, Segmented, Input, Select, Spin, Alert, Typography, Tabs, Splitter, Modal, Tag, Button, Dropdown, Tooltip } from 'antd'
 import { UnorderedListOutlined, ApartmentOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
@@ -22,7 +22,7 @@ type View = 'list' | 'tree'
 function FilterGroup({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-      <Typography.Text style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-dim)', textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+      <Typography.Text style={{ fontSize: 'var(--fs-sm)', color: 'var(--color-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 500, whiteSpace: 'nowrap' }}>
         {label}
       </Typography.Text>
       {children}
@@ -281,19 +281,18 @@ export default function Assets() {
   // 在各视图 Card 顶部渲染一次。原实现筛选在 Card 外,与 History/Findings/RulesTable 不统一。
   const filterRow = (
     <div className="filter-toolbar">
-      {/* 视图切换(互斥模式:list/tree 二选一):带 icon 的 Segmented,FilterGroup 标「视图」。 */}
-      <FilterGroup label={t('assets.viewLabel')}>
-        <Segmented
-          className="view-segmented"
-          size="small"
-          value={view}
-          onChange={(v) => setView(v as View)}
-          options={[
-            { value: 'list', label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><UnorderedListOutlined /> {t('assets.viewList')}</span> },
-            { value: 'tree', label: <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}><ApartmentOutlined /> {t('assets.viewTree')}</span> },
-          ]}
-        />
-      </FilterGroup>
+      {/* 视图切换:list/tree 两个纯图标按钮(Segmented 仅 icon,无「视图」文案、无文字)。
+          Tooltip 承载可发现性;选中态由 Segmented 选中样式(accent 实色)表达当前视图。 */}
+      <Segmented
+        className="view-segmented"
+        size="small"
+        value={view}
+        onChange={(v) => setView(v as View)}
+        options={[
+          { value: 'list', label: <Tooltip title={t('assets.viewList')}><UnorderedListOutlined /></Tooltip> },
+          { value: 'tree', label: <Tooltip title={t('assets.viewTree')}><ApartmentOutlined /></Tooltip> },
+        ]}
+      />
       {/* 标签筛选(属性过滤:全部/配置/运行时):Segmented,标「标签」,同时作用于列表与树。 */}
       <FilterGroup label={t('assets.tagLabel')}>
         <Segmented

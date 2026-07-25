@@ -195,11 +195,13 @@ test('发现页扫描后展示 finding 行', async ({ page }) => {
   await page.getByRole('menuitem', { name: /风险管理/ }).click()
   // fixture 含 Bash(*) → 至少一条 finding
   await expect(page.locator('[data-testid="finding-row"]').first()).toBeVisible({ timeout: 15000 })
-  // 点击行打开风险详情抽屉:断言抽屉容器 + 风险信息区 + 资产区(asset-detail-name)均渲染。
+  // 点击行打开风险详情抽屉:断言抽屉容器 + 风险信息区 + 资产区(资产文件路径 + 内容)均渲染。
+  // 资产区精简后只剩「资产文件路径」+ 内容(不再用 AssetDetailPanel 的 asset-detail-name testid)。
   await page.locator('[data-testid="finding-row"]').first().click()
   await expect(page.locator('.finding-drawer')).toBeVisible({ timeout: 10000 })
   await expect(page.getByText('风险信息')).toBeVisible()
-  await expect(page.getByTestId('asset-detail-name')).toBeVisible({ timeout: 10000 })
+  await expect(page.locator('.finding-drawer').getByText('资产文件路径')).toBeVisible({ timeout: 10000 })
+  await expect(page.locator('.finding-drawer .monaco-editor, .finding-drawer .markdown-preview').first()).toBeVisible({ timeout: 15000 })
 })
 
 test('md 资产预览渲染 markdown', async ({ page }) => {
@@ -318,9 +320,9 @@ test('文件树无资产文件可打开原始内容', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
   await page.getByRole('menuitem', { name: /资产/i }).click()
   await expect(page.locator('[data-testid="asset-row"]').first()).toBeVisible({ timeout: 10000 })
-  // 切到文件树视图
+  // 切到文件树视图:view-segmented 是纯图标(list/tree 两个选项),无文字 → 点第 2 项(tree)。
   const viewSeg = page.locator('.view-segmented')
-  await viewSeg.getByText('文件树', { exact: true }).click()
+  await viewSeg.locator('.ant-segmented-item').nth(1).click()
   // 树渲染:根节点可见(antd Tree title)
   await expect(page.locator('.ant-tree-list')).toBeVisible({ timeout: 10000 })
 })

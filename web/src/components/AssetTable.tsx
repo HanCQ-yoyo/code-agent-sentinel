@@ -51,7 +51,12 @@ export function AssetTable({ assets, findings = [], onSelect, favorites, onToggl
   const { t } = useTranslation()
   const columns: ColumnsType<Asset> = [
     {
-      title: t('assetTable.colFav'),
+      // 列标题不显示星号字符:① 行星标是 StarOutlined/StarFilled 图标,标题用 ★ 文本字符
+      // 与图标字形不同 → 永远无法对齐;② 孤零零一个 ★ 字符在窄列里也偏丑。
+      // 改为空标题 + 仅屏幕阅读器可见的标签(antd title 接收 ReactNode)。
+      // 收藏语义本身已由行星标按钮(Tooltip + aria-label)与置顶行 accent 竖条传达,
+      // 列标题无需重复一个可视符号。
+      title: <span className="sr-only">{t('assetTable.colFav')}</span>,
       width: 40,
       // 收藏列垂直顶对齐(col-fav):行高因 name/path 换行而不等(69/91/113…),
       // antd td 默认 vertical-align: middle → 星标随行高上下浮动,各行星标不在同一基线。

@@ -4,8 +4,10 @@ import { useTranslation } from 'react-i18next'
 import type { Finding, DetectorMeta, Asset } from '../types'
 import { apiGet } from '../api/client'
 import { useStore } from '../store'
+import { useTheme } from '../theme'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
-import { AssetDetailPanel } from './AssetDetailPanel'
+import { ContentArea } from './ContentArea'
+import { relativeClaudePath } from '../lib/path'
 import { formatDateTime } from '../lib/format'
 import { SEVERITY_LABEL_KEY } from '../lib/severity'
 import { detectorNameById, ruleNameById } from '../lib/i18n-names'
@@ -26,15 +28,18 @@ function findSyntax(detectors: DetectorMeta[], detectorId: string, ruleId: strin
   return r?.syntax
 }
 
-// 资产区:按 finding.asset_id 拉完整 Asset(含 content),复用 AssetDetailPanel 展示路径/hash/文件内容。
-// 直接走 apiGet(不经 store.wrap):wrap 吞所有错误返 undefined,会让 .catch 死代码、失败时误报「未找到资产」。
-// 此处需细粒度错误,故与 AssetDetail.tsx 同模式自管 err。
+// 资产区:按 finding.asset_id 拉完整 Asset(含 content),仅展示「资产文件路径 + 资产内容」两项。
+// 风险管理抽屉聚焦定位命中位置,不需要 AssetDetailPanel 的完整四分区(类型/scope/属性/风险列表/
+// 安全检查按钮等)——那些是资产发现页的视角,此处属冗余信息。直接走 apiGet(不经 store.wrap):
+// wrap 吞所有错误返 undefined,会让 .catch 死代码、失败时误报「未找到资产」。此处需细粒度错误,
+// 故与 AssetDetail.tsx 同模式自管 err。
 //
 // locations:从 finding 透传(后端 ruleengine.Location 序列化为 snake_case line/start_col/end_col,
 // 仅 RulesDetector 填充;子进程检测器 finding 无此字段)。在此边界映射为 camelCase highlights
-// 传给 AssetDetailPanel→AssetEditor→ContentArea→MonacoViewer(Monaco Range API 用 camelCase)。
+// 传给 ContentArea→MonacoViewer(Monaco Range API 用 camelCase),命中行高亮定位风险位置。
 function AssetSection({ assetId, locations, agentId }: { assetId: string, locations?: { line: number; start_col: number; end_col: number }[], agentId?: string }) {
   const { t } = useTranslation()
+  const { theme } = useTheme()
   const [asset, setAsset] = useState<Asset | null>(null)
   const [loading, setLoading] = useState(true)
   const [err, setErr] = useState<string | null>(null)
@@ -67,7 +72,23 @@ function AssetSection({ assetId, locations, agentId }: { assetId: string, locati
   if (loading) return <Spin style={{ display: 'block', margin: '40px auto' }} />
   if (err) return <Alert type="error" message={t('findingDrawer.loadFailed')} description={err} showIcon />
   if (!asset) return <Empty description={t('findingDrawer.notFound')} />
-  return <AssetDetailPanel asset={asset} highlights={highlights} agentID={agentId} />
+  // 仅展示资产文件路径 + 资产内容(borderless,只读,带命中位置高亮)。
+  // 去掉 AssetDetailPanel 的类型/scope 标签、属性、风险列表、安全检查按钮(风险管理抽屉不需要)。
+  // agentId 保留透传意义不再(无安全检查),留参数不动以免改动调用方签名。
+  void agentId
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 'var(--space-md)' }}>
+      <div>
+        <div className="asset-section-title">{t('findingDrawer.assetPath')}</div>
+        <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', wordBreak: 'break-all' }} title={asset.source_path}>{relativeClaudePath(asset.source_path)}</Typography.Text>
+      </div>
+      {/* .asset-detail-content 作用域:让 borderless ContentArea 的内容标题(.content-area-label)
+          走 .asset-section-title 同款大标题,与上方「资产文件路径」标题统一。 */}
+      <div className="asset-detail-content">
+        <ContentArea asset={asset} theme={theme} highlights={highlights} borderless readOnly />
+      </div>
+    </div>
+  )
 }
 
 export function FindingDrawer({ finding, detectors, startedAt, onClose }: FindingDrawerProps) {

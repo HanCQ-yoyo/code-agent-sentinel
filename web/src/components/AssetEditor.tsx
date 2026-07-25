@@ -17,10 +17,13 @@ import type { Asset, PreviewResult } from '../types'
 // 全屏:只读态点「全屏」开一个近全屏 Modal,内部复用 ContentArea(只读),在完整抽屉页
 // 展示资产内容。Markdown 预览/源码切换、Monaco 滚动等行为与内联一致,仅放大展示空间。
 //
+// borderless:透传给内联 ContentArea(文档流详情抽屉去 Card 边框,与属性/风险分区统一);
+// 全屏 Modal 内的 ContentArea 不传 borderless(全屏是独立窗式场景,保留 Card 边框合理)。
+//
 // useTheme() 返回 { theme, toggle },取 theme 字段(非对象)传给 ContentArea。
 // key={editing ? 'edit' : 'view'}:编辑态切换时强制 ContentArea 重挂载,
 // 使 Segmented view state 重置(编辑态默认源码、只读态默认预览)且 Monaco 以新 readOnly 加载。
-export function AssetEditor({ asset, highlights }: { asset: Asset, highlights?: { line: number; startCol: number; endCol: number }[] }) {
+export function AssetEditor({ asset, highlights, borderless }: { asset: Asset, highlights?: { line: number; startCol: number; endCol: number }[], borderless?: boolean }) {
   const { t } = useTranslation()
   const { theme } = useTheme()
   const { previewAssetEdit, commitAssetEdit } = useStore()
@@ -132,7 +135,7 @@ export function AssetEditor({ asset, highlights }: { asset: Asset, highlights?: 
   if (!editing) {
     return (
       <>
-        <ContentArea key="view" asset={asset} theme={theme} highlights={highlights} headerActions={headerActions} />
+        <ContentArea key="view" asset={asset} theme={theme} highlights={highlights} headerActions={headerActions} borderless={borderless} />
         {/* 全屏 Modal:近全屏(宽 96vw / 高 92vh),内部只读 ContentArea 撑满。
             key={asset.id}:切资产时重挂载,使 ContentArea 的 Segmented view 回默认(预览),
             避免上一资产的全屏视图态泄漏。body 无 padding,ContentArea 自带 Card 内边距。
@@ -166,6 +169,7 @@ export function AssetEditor({ asset, highlights }: { asset: Asset, highlights?: 
         onChange={setDraft}
         highlights={highlights}
         headerActions={headerActions}
+        borderless={borderless}
       />
       <DiffPreview
         open={previewOpen}

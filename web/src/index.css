@@ -324,14 +324,62 @@ body {
 }
 
 /* 分区标题(design.md #3):详情抽屉四分区(身份/属性/内容/风险)的小字 muted uppercase 标题,
-   串联层次、消除 4 块平铺的塌平。比 Typography.Title 轻,不抢内容区的视觉重量。 */
+   串联层次、消除 4 块平铺的塌平。比 Typography.Title 轻,不抢内容区的视觉重量。
+   fs-sm(12px)+600 字重 + uppercase + 字距,作为「分区标记」足够醒目又不喧宾夺主
+   (原 fs-xs 11px 太小,与下方 14px 内容差距过大,反而像被遗忘的角注)。 */
 .section-label {
-  font-size: var(--fs-xs);
+  font-size: var(--fs-sm);
   font-weight: 600;
-  color: var(--color-dim);
+  color: var(--color-muted);
   text-transform: uppercase;
   letter-spacing: 0.06em;
   padding-bottom: var(--space-xs);
-  margin-bottom: var(--space-xs);
+  margin-bottom: var(--space-sm);
   border-bottom: 1px solid var(--color-rule);
 }
+
+/* 屏幕阅读器专用:视觉隐藏但辅助技术可读。用于收藏列标题(不放可见星号字符,
+   语义由行星标按钮 aria-label + 置顶行 accent 竖条传达,列标题仅留 SR 标签)。 */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* 资产详情 · 分区标题(asset-section-title):属性 / 风险列表 / 资产内容 三段的统一标题。
+   fs-lg(20px)+700 加粗,明确大于「安全检查」按钮文字(fs-base 14px),作为可识别分区标题。
+   正常字身(非 uppercase):中文标题「属性/风险列表/资产内容」用正体更自然,uppercase 仅适合拉丁。
+   底部发丝线分隔标题与内容。层次靠标题字号 + 段间大间距,不靠嵌套框。 */
+.asset-section-title {
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  color: var(--color-ink);
+  letter-spacing: -0.01em;
+  padding-bottom: var(--space-sm);
+  margin-bottom: var(--space-md);
+  border-bottom: 1px solid var(--color-rule);
+}
+
+/* borderless 内容区:ContentArea(borderless=true)渲染 <section> + .content-area-label,
+   标题覆盖成 .asset-section-title 同款(fs-lg 700 + 发丝线),与属性/风险分区标题完全一致。 */
+.asset-detail-content .content-area-section {
+  min-height: 240px;
+}
+.asset-detail-content .content-area-label {
+  font-size: var(--fs-lg);
+  font-weight: 700;
+  color: var(--color-ink);
+  letter-spacing: -0.01em;
+  text-transform: none;
+  padding-bottom: var(--space-sm);
+  margin-bottom: var(--space-md);
+  border-bottom: 1px solid var(--color-rule);
+}
+
+

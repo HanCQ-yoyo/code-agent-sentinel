@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
-import { Table, Alert, Switch, Card } from 'antd'
+import { Table, Switch, Card, Typography, Tooltip } from 'antd'
+import { InfoCircleOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
 import type { Agent } from '../types'
@@ -9,15 +10,28 @@ import { AgentIcon } from '../components/AgentIcon'
 // agent 的*配置*(id/name/路径/Enabled 加载标志)只读——修改走 `sentinel setup` + 重启。
 // 但 per-agent 的*扫描开关*(ScanEnabled)是运行期覆盖(PUT /api/agents/:id),前端可在此切换:
 // 关闭后该 agent 不参与定时扫描(定时任务暂停);手动重扫描仍可强制指定。
+//
+// 只读提示:原用 antd Alert(大色块 + icon + 标题 + 描述,占空间过大)。改为一行内联小字提示——
+// InfoCircleOutlined + muted 文案 + 可复制命令 code 块,作为表格上方的脚注,不再喧宾夺主。
 export function SettingsAgents() {
   const { t } = useTranslation()
   const { agents, fetchAgents, saveAgentScanEnabled } = useStore()
   // 复用 TopBar 的守卫模式:agents 已加载(TopBar 早一步拉过)则不重复请求。
   useEffect(() => { if (!agents) fetchAgents() }, [agents, fetchAgents])
+  // 命令片段(`sentinel setup`)供复制:从 desc 文案里取反引号包裹的命令,无则回退整句。
+  const cmd = (t('settings.agentsReadonlyDesc').match(/`([^`]+)`/)?.[1]) ?? 'sentinel setup'
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <Alert type="info" showIcon message={t('settings.agentsReadonlyHint')} description={t('settings.agentsReadonlyDesc')} />
       <Card>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 'var(--space-md)', color: 'var(--color-muted)', fontSize: 'var(--fs-sm)' }}>
+          <InfoCircleOutlined style={{ color: 'var(--color-dim)' }} />
+          <span>{t('settings.agentsReadonlyHint')}</span>
+          <span style={{ color: 'var(--color-dim)' }}>·</span>
+          <span>{t('settings.agentsReadonlyDesc').replace(/`([^`]+)`/g, '')}</span>
+          <Tooltip title={t('common.copy')}>
+            <Typography.Text code copyable style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)' }}>{cmd}</Typography.Text>
+          </Tooltip>
+        </div>
         <Table
           size="small"
           dataSource={agents?.agents ?? []}

@@ -27,11 +27,12 @@
     "viewBatchHint": "View this scan's results grouped by batch in history"
   },
   "common": {
-    "global": "Global",
+    "global": "User",
     "loadFailed": "Load failed",
     "all": "All",
     "enabled": "Enabled",
     "cancel": "Cancel",
+    "copy": "Copy",
     "expand": "Expand",
     "none": "(none)",
     "yes": "Yes",
@@ -145,6 +146,7 @@
     "suppressedTag": "Suppressed",
     "active": "Active (not suppressed)",
     "assetInfo": "Asset Info",
+    "assetPath": "Asset File Path",
     "addSuppr": "Add to suppressions",
     "addBaseline": "Add to baseline",
     "noFingerprint": "Cannot suppress (no fingerprint)",
@@ -238,7 +240,7 @@
     "emptyNoContent": "This asset has no content"
   },
   "assetTable": {
-    "colFav": "★",
+    "colFav": "Favorite",
     "favUnpin": "Unpin",
     "favPin": "Pin",
     "colName": "Name",
@@ -269,6 +271,10 @@
     "mtime": "Modified",
     "riskListTitle": "Risk List",
     "riskEmpty": "No risks for this asset",
+    "scopeGlobal": "User",
+    "scopeProject": "Project",
+    "scopeManaged": "Managed",
+    "scopePlugin": "Plugin",
     "riskColName": "Finding Name",
     "riskColSeverity": "Severity",
     "riskColDetector": "Detector",

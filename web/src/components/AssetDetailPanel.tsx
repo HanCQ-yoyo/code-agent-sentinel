@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Typography, Alert, Table, Button, Modal, Checkbox, Space } from 'antd'
 import { useTranslation } from 'react-i18next'
 import type { ColumnsType } from 'antd/es/table'
-import type { Asset, Finding, DetectorMeta, Severity } from '../types'
+import type { Asset, Finding, DetectorMeta } from '../types'
 import { Badge, type BadgeTone } from './Badge'
 import { relativeClaudePath } from '../lib/path'
 import { AssetEditor } from './AssetEditor'
@@ -13,13 +13,12 @@ import { useStore } from '../store'
 // AssetDetailPanel:资产详情。三消费方(Assets 列表抽屉 50% / 树右栏 480px sticky / /assets/:id 全页)
 // 共用此组件,签名 { asset, findings?, detectors? }。
 //
-// 四分区层次重排(design.md #3):身份 → 属性 → 风险 → 内容。
-// 用 .section-label(muted uppercase + hairline)串联四块,消除原 4 块平铺的层次塌平。
-//  - meta 区弃 Descriptions bordered 重表格,改 <dl> 轻量键值对(label muted + value mono)。
-//  - risk section 保留 <div data-testid="asset-risk-list"> 容器(e2e testid 钩子,容器元素不动),
-//    仅把 Typography.Title 换成 section-label,与 meta 区标题统一。
-// 注:e2e 516(资产风险列)在 main HEAD 上即为本就存在的扫描时序 flake(findings 在 drawer 打开时
-// 未及时就绪),与本组件结构无关 —— 见排查记录。故此处放开做完整四分区,不为此牺牲层次。
+// 四段层次(用户指定):基本信息 → 属性 → 风险列表 → 资产内容。
+// 段间用足够间距(var(--space-xl))区分,体现「不同内容块」的层次感(原版间距太小、层次塌平)。
+// 三段内容标题(属性/风险列表/资产内容)用同一套 .asset-section-title(fs-lg 20px + 700 加粗),
+// 比「安全检查」按钮文字(fs-base 14px)大,作为可识别的分区标题。内容区 borderless 让标题统一。
+//
+// 注:testid(asset-detail-name / asset-risk-list)保留不动(e2e 钩子)。
 export function AssetDetailPanel({ asset, highlights, findings, detectors, agentID }: { asset: Asset, highlights?: { line: number; startCol: number; endCol: number }[], findings?: Finding[], detectors?: DetectorMeta[], agentID?: string }) {
   const { t } = useTranslation()
   const { runScan, detectors: storeDetectors } = useStore()
@@ -35,7 +34,6 @@ export function AssetDetailPanel({ asset, highlights, findings, detectors, agent
     await runScan(agentID ? [agentID] : [], det, { type: 'asset-id', path: asset.id })
     setCheckOpen(false)
   }
-  const isMarkdown = ['memory', 'skill', 'command', 'agent'].includes(asset.type)
 
   const assetFindings = (findings ?? []).filter((f) => f.asset_id === asset.id)
   const sortedFindings = [...assetFindings].sort((a, b) => SEVERITY_ORDER.indexOf(a.severity) - SEVERITY_ORDER.indexOf(b.severity))
@@ -48,60 +46,77 @@ export function AssetDetailPanel({ asset, highlights, findings, detectors, agent
     },
     { title: t('assetDetail.riskColSeverity'), width: 80, render: (_: unknown, f: Finding) => <Badge tone={`sev-${f.severity}` as BadgeTone}>{t(SEVERITY_LABEL_KEY[f.severity])}</Badge> },
     { title: t('assetDetail.riskColDetector'), width: 140, ellipsis: true, render: (_: unknown, f: Finding) => (
-      <Typography.Text style={{ fontSize: 12 }}>{detectorNameById(detectors ?? [], f.detector_id)}</Typography.Text>
+      <Typography.Text style={{ fontSize: 'var(--fs-xs)' }}>{detectorNameById(detectors ?? [], f.detector_id)}</Typography.Text>
     ) },
     { title: t('assetDetail.riskColRule'), width: 200, ellipsis: true, render: (_: unknown, f: Finding) => (
-      <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{f.rule_id}</Typography.Text>
+      <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)' }}>{f.rule_id}</Typography.Text>
     ) },
   ]
 
+  // scope badge 文案走翻译(global 显示「用户级」,与 tab 文案一致,而非裸 scope 字符串)。
+  const scopeLabelKey: Record<string, string> = {
+    global: 'assetDetail.scopeGlobal',
+    project: 'assetDetail.scopeProject',
+    managed: 'assetDetail.scopeManaged',
+    plugin: 'assetDetail.scopePlugin',
+  }
+  const scopeText = scopeLabelKey[asset.scope] ? t(scopeLabelKey[asset.scope]) : asset.scope
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
-      {/* ① 身份区:资产名 + type/scope badge + description 副标题 + 右侧「安全检测」操作(操作归位 header)。 */}
-      <div>
-        <h2 data-testid="asset-detail-name" style={{ color: 'var(--color-ink)', margin: '0 0 4px', fontSize: 'var(--fs-xl)', fontWeight: 700, letterSpacing: '-0.01em' }}>{asset.name}</h2>
-        {isMarkdown && typeof description === 'string' && description ? (
-          <Typography.Text style={{ display: 'block', marginBottom: 8, color: 'var(--color-muted)' }}>{description}</Typography.Text>
-        ) : null}
-        <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+    <div className="asset-detail asset-detail-flow" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+      {/* ① 基本信息:资产名(左)+ 类型/scope 标签(名右)+ 「安全检查」按钮(最右,primary 配色同顶栏);
+          名下一行:资产文件路径(mono);再下一行:描述(若有)。 */}
+      <header style={{ paddingBottom: 'var(--space-xl)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', flexWrap: 'wrap' }}>
+          <h2 data-testid="asset-detail-name" style={{ color: 'var(--color-ink)', margin: 0, fontSize: 'var(--fs-lg)', fontWeight: 700, letterSpacing: '-0.01em', lineHeight: 1.3, minWidth: 0, wordBreak: 'break-word' }}>{asset.name}</h2>
+          {/* 类型 + scope 标签紧贴资产名右侧。 */}
           <Badge tone="neutral">{asset.type}</Badge>
-          <Badge tone={`scope-${asset.scope}` as BadgeTone}>{asset.scope}</Badge>
-          <Button size="small" style={{ marginLeft: 'auto' }} onClick={openCheck}>{t('rescan.check')}</Button>
+          <Badge tone={`scope-${asset.scope}` as BadgeTone}>{scopeText}</Badge>
+          {/* 安全检查按钮:primary(accent 实色 + onAccent 字),与顶部导航栏安全检测按钮配色一致;
+              marginLeft:auto 推到行最右,与「资产详情」标题靠右对齐。 */}
+          <Button type="primary" size="small" style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }} onClick={openCheck}>{t('rescan.check')}</Button>
         </div>
-      </div>
+        {/* 资产文件路径:名下一行,mono 小字 dim。 */}
+        <Typography.Text style={{ display: 'block', marginTop: 'var(--space-xs)', fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', color: 'var(--color-dim)', wordBreak: 'break-all' }} title={asset.source_path}>{relativeClaudePath(asset.source_path)}</Typography.Text>
+        {/* 描述:路径下一行(若有)。 */}
+        {typeof description === 'string' && description ? (
+          <Typography.Text style={{ display: 'block', marginTop: 'var(--space-xs)', color: 'var(--color-muted)' }}>{description}</Typography.Text>
+        ) : null}
+      </header>
 
       {asset.parse_error ? (
-        <Alert type="error" message={t('assetDetail.parseError')} description={asset.parse_error} showIcon />
+        <Alert type="error" message={t('assetDetail.parseError')} description={asset.parse_error} showIcon style={{ marginBottom: 'var(--space-xl)' }} />
       ) : null}
 
-      {/* ② 属性区:路径/hash/mtime 轻量键值对。弃 Descriptions bordered 重表格,改 <dl> + section-label,
-          label muted 小字 + value mono,像文档 meta 块,层次在文字本身而非容器框。 */}
-      <section>
-        <div className="section-label">{t('assetDetail.metaTitle')}</div>
-        <dl style={{ margin: '4px 0 0', display: 'flex', flexDirection: 'column', gap: 4 }}>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
-            <dt style={{ width: 64, flexShrink: 0, fontSize: 'var(--fs-xs)', color: 'var(--color-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('assetDetail.path')}</dt>
-            <dd style={{ margin: 0, flex: 1, minWidth: 0 }}><Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', wordBreak: 'break-all' }}>{relativeClaudePath(asset.source_path)}</Typography.Text></dd>
+      {/* ② 属性:hash + 修改时间一行内联 mono 条(保持现格式)。标题 .asset-section-title 放大加粗。 */}
+      <section style={{ paddingBottom: 'var(--space-xl)' }}>
+        <div className="asset-section-title">{t('assetDetail.metaTitle')}</div>
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-md)', rowGap: 'var(--space-xs)' }}>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+            <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('assetDetail.path')}</span>
+            <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', wordBreak: 'break-all' }}>{relativeClaudePath(asset.source_path)}</Typography.Text>
           </div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
-            <dt style={{ width: 64, flexShrink: 0, fontSize: 'var(--fs-xs)', color: 'var(--color-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('assetDetail.hash')}</dt>
-            <dd style={{ margin: 0, flex: 1, minWidth: 0 }}><Typography.Text code copyable style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)' }}>{asset.hash}</Typography.Text></dd>
+          <span style={{ color: 'var(--color-rule-2)' }}>·</span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+            <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('assetDetail.hash')}</span>
+            <Typography.Text code copyable style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)' }}>{asset.hash}</Typography.Text>
           </div>
-          <div style={{ display: 'flex', gap: 12, alignItems: 'baseline' }}>
-            <dt style={{ width: 64, flexShrink: 0, fontSize: 'var(--fs-xs)', color: 'var(--color-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('assetDetail.mtime')}</dt>
-            <dd style={{ margin: 0, flex: 1, minWidth: 0 }}><span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', fontVariantNumeric: 'tabular-nums' }}>{asset.mtime ?? '--'}</span></dd>
+          <span style={{ color: 'var(--color-rule-2)' }}>·</span>
+          <div style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+            <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('assetDetail.mtime')}</span>
+            <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', fontVariantNumeric: 'tabular-nums' }}>{asset.mtime ?? '--'}</span>
           </div>
-        </dl>
+        </div>
       </section>
 
-      {/* ③ 风险区:保留 <div data-testid="asset-risk-list"> 容器(e2e testid 钩子,容器元素不变),
-          标题用 section-label 与 meta 区统一。findings 未传时不渲染;传了但无风险显示空态。 */}
+      {/* ③ 风险列表:4 列表格(风险名称/级别/检测器/规则)。标题与属性同一套 .asset-section-title。
+          保留 <div data-testid="asset-risk-list"> 容器(e2e 钩子不动)。findings 未传不渲染。 */}
       {findings ? (
-        <div data-testid="asset-risk-list">
-          <div className="section-label" style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+        <div data-testid="asset-risk-list" style={{ paddingBottom: 'var(--space-xl)' }}>
+          <div className="asset-section-title" style={{ display: 'flex', alignItems: 'baseline', gap: 'var(--space-sm)' }}>
             <span>{t('assetDetail.riskListTitle')}</span>
             {assetFindings.length > 0 ? (
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', color: 'var(--color-dim)', fontVariantNumeric: 'tabular-nums' }}>{assetFindings.length}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)', color: 'var(--color-dim)', fontVariantNumeric: 'tabular-nums' }}>{assetFindings.length}</span>
             ) : null}
           </div>
           <Table<Finding>
@@ -115,8 +130,12 @@ export function AssetDetailPanel({ asset, highlights, findings, detectors, agent
         </div>
       ) : null}
 
-      {/* ④ 内容区:资产文件内容 ContentArea。key={asset.id} 切资产重挂载,避免视图/草稿泄漏。 */}
-      <AssetEditor key={asset.id} asset={asset} highlights={highlights} />
+      {/* ④ 资产内容:borderless ContentArea。AssetEditor 透传 borderless=true,内容区标题走
+          .asset-section-title(与属性/风险同款,见 index.css .content-area-label 覆盖),
+          消除 box-in-box。key={asset.id} 切资产重挂载,避免视图/草稿泄漏。 */}
+      <div className="asset-detail-content" style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }}>
+        <AssetEditor key={asset.id} asset={asset} highlights={highlights} borderless />
+      </div>
 
       {/* 安全检查:scope=asset-id 按 ID 单扫。getContainer={false} 渲染进 Drawer DOM 树。 */}
       <Modal

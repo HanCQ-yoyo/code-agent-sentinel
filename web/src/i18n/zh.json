@@ -27,11 +27,12 @@
     "viewBatchHint": "在历史记录中按批次分组查看本次扫描结果"
   },
   "common": {
-    "global": "全局",
+    "global": "用户级",
     "loadFailed": "加载失败",
     "all": "全部",
     "enabled": "启用",
     "cancel": "取消",
+    "copy": "复制",
     "expand": "展开",
     "none": "(无)",
     "yes": "是",
@@ -145,6 +146,7 @@
     "suppressedTag": "已抑制",
     "active": "活跃(未抑制)",
     "assetInfo": "资产信息",
+    "assetPath": "资产文件路径",
     "addSuppr": "添加到 suppressions",
     "addBaseline": "加入 baseline",
     "noFingerprint": "无法抑制(无指纹)",
@@ -238,7 +240,7 @@
     "emptyNoContent": "该资产无内容"
   },
   "assetTable": {
-    "colFav": "★",
+    "colFav": "收藏",
     "favUnpin": "取消置顶",
     "favPin": "置顶",
     "colName": "名称",
@@ -269,6 +271,10 @@
     "mtime": "修改时间",
     "riskListTitle": "风险列表",
     "riskEmpty": "该资产暂无风险",
+    "scopeGlobal": "用户级",
+    "scopeProject": "项目级",
+    "scopeManaged": "托管",
+    "scopePlugin": "插件",
     "riskColName": "风险名称",
     "riskColSeverity": "级别",
     "riskColDetector": "检测器",
