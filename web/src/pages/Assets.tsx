@@ -38,7 +38,7 @@ const FAV_KEY = 'sentinel_favorites' // 仅作首次迁移:把旧 localStorage �
 export default function Assets() {
   const { t } = useTranslation()
   const {
-    assets, fetchAssets, scan, error, tree, projects, activeProjectTab,
+    assets, fetchAssets, error, tree, projects, activeProjectTab,
     fetchProjects, fetchTree, setActiveProjectTab,
     fetchAgents, agents, fetchDirTags, dirTagsDefaults, dirTagsOverrides,
     saveDirTags, selectedTagFilter, setSelectedTagFilter,
@@ -47,6 +47,12 @@ export default function Assets() {
     detectors, fetchDetectors,
     scanEnabledAgents,
     openRescan,
+    // 风险数据源:与 Findings 页同源(/api/findings),按当前 L1 agent tab 拉「该 agent 最近扫描」的
+    // findings。旧实现读 scan?.findings,但本页从不主动拉 scan(scan 仅由 Dashboard/runScan 填充,
+    // 聚合模式还会被 fetchDashboard 置 null)→ 直接进资产发现页时风险列/树圆点/抽屉风险列表全空,
+    // 与风险管理页(/api/findings?agent=all)数据不一致。改 fetchFindings(activeAgent) 后,风险数据
+    // 与当前 L1 agent tab 维度一致,精确匹配该 agent 的资产,不再受 scan 残留或跨 agent 串台影响。
+    findings, fetchFindings,
   } = useStore()
   const [view, setView] = useState<View>('list')
   const [type, setType] = useState('')
@@ -88,9 +94,12 @@ export default function Assets() {
     if (!activeAgent) return
     fetchAssets(activeAgent)
     fetchProjects(activeAgent)
+    // 风险数据:按 activeAgent 拉该 agent 最近扫描的 findings(与 Findings 页同源 /api/findings)。
+    // 不读 scan?.findings(scan 不由本页维护,聚合模式会被置 null,直接进页时风险列为空)。
+    fetchFindings(activeAgent)
     // 切 agent → 重置 L2 到 global(切到新 agent 后旧项目 tab 路径可能不存在)。
     setActiveProjectTab({ kind: 'global' })
-  }, [activeAgent, fetchAssets, fetchProjects, setActiveProjectTab])
+  }, [activeAgent, fetchAssets, fetchProjects, fetchFindings, setActiveProjectTab])
 
   // 切换 L2 标签页 → 重新拉对应项目的文件树。与上面 activeAgent effect 分离:
   // 原先 activeProjectTab 进了同一 effect deps,导致每次点标签页都重跑 fetchProjects,
@@ -350,14 +359,14 @@ export default function Assets() {
           {filterRow}
           <AssetTable
             assets={list}
-            findings={scan?.findings}
+            findings={findings}
             onSelect={setSelected}
             favorites={favSet}
             onToggleFavorite={toggleFavorite}
             dirTagsDefaults={dirTagsDefaults}
             dirTagsOverrides={dirTagsOverrides}
           />
-          <AssetDrawer asset={selectedAsset ?? null} findings={scan?.findings} detectors={detectors} agentID={activeAgent} onClose={() => setSelected(null)} />
+          <AssetDrawer asset={selectedAsset ?? null} findings={findings} detectors={detectors} agentID={activeAgent} onClose={() => setSelected(null)} />
         </Card>
       ) : (
         <Card>
@@ -371,7 +380,7 @@ export default function Assets() {
                 <AssetTree
                   tree={tree}
                   assets={tabFiltered}
-                  findings={scan?.findings}
+                  findings={findings}
                   onSelect={setSelected}
                   onOpenRaw={(p) => { setSelected(null); setRawPath(p) }}
                   rootAbs={rootAbs}
@@ -388,7 +397,7 @@ export default function Assets() {
           <Splitter.Panel>
             <Card style={{ height: '100%', overflow: 'auto' }}>
               {selectedAsset ? (
-                <AssetDetailPanel asset={selectedAsset} findings={scan?.findings} detectors={detectors} agentID={activeAgent} />
+                <AssetDetailPanel asset={selectedAsset} findings={findings} detectors={detectors} agentID={activeAgent} />
               ) : rawPath ? (
                 <RawFilePanel path={rawPath} />
               ) : (

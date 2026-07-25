@@ -19,7 +19,12 @@
     "check": "Security Check",
     "checkTitle": "Security Check",
     "checkHint": "Run selected detectors on this asset only",
-    "rescanThisProject": "Rescan this project"
+    "rescanThisProject": "Rescan this project",
+    "doneTitle": "Security scan complete",
+    "doneDesc": "Scanned {{agents}} agent(s) · batch {{batch}}",
+    "doneDescWithError": "Scanned {{agents}} agent(s) ({{failed}} failed) · batch {{batch}}",
+    "viewHistory": "View history",
+    "viewBatchHint": "View this scan's results grouped by batch in history"
   },
   "common": {
     "global": "Global",

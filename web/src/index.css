@@ -305,11 +305,21 @@ body {
   color: var(--color-accent);
 }
 
-/* 收藏行高亮(design.md #2):左侧 3px accent 竖条 + 行底微 tint,一眼区分收藏项。
-   antd Table 行 td 有 border-bottom,用 box-shadow inset 画左条避免破坏表格边框。 */
+/* 收藏列顶对齐:AssetTable 第一列(星标)。行高因 name/path 换行不等,
+   antd td 默认 vertical-align: middle 会让星标随行高上下浮动、各行星标不在同一基线;
+   顶对齐后星标恒贴 td 内容区顶部,置顶行与普通行星标上下对齐。 */
+.ant-table-tbody .col-fav {
+  vertical-align: top;
+}
+
+/* 收藏行高亮(design.md #2):行底微 tint + 仅第一列(收藏星标列)左侧 accent 竖条,
+   作为「已置顶」标记;其余列不画竖线。
+   antd Table 行 td 有 border-bottom,用 box-shadow inset 画竖条避免破坏表格边框。 */
 .asset-row-fav > td {
   background: var(--color-accent-soft) !important;
-  /* 左侧 accent 竖条:inset box-shadow,3px 宽,占满行高。 */
+}
+.asset-row-fav > td:first-child {
+  /* 仅第一列(收藏星标列)左侧 3px accent 竖条:inset box-shadow 不占布局空间,不影响星标位置。 */
   box-shadow: inset 3px 0 0 var(--color-accent);
 }
 

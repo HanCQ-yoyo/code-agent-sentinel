@@ -53,6 +53,10 @@ export function AssetTable({ assets, findings = [], onSelect, favorites, onToggl
     {
       title: t('assetTable.colFav'),
       width: 40,
+      // 收藏列垂直顶对齐(col-fav):行高因 name/path 换行而不等(69/91/113…),
+      // antd td 默认 vertical-align: middle → 星标随行高上下浮动,各行星标不在同一基线。
+      // 顶对齐后星标恒贴 td 内容区顶部,置顶行与普通行星标上下对齐。
+      onCell: () => ({ className: 'col-fav' }),
       // 收藏列(design.md #2):星标改图标按钮风格——hover 出 accent 底色圈,选中实色填充 accent。
       // 点击切换置顶(列排序 + 收藏优先排序由 dataSource 顺序保证)。
       render: (_: unknown, a: Asset) => {

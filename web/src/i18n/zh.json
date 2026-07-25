@@ -19,7 +19,12 @@
     "check": "安全检查",
     "checkTitle": "安全检查",
     "checkHint": "仅对该资产运行所选检测器",
-    "rescanThisProject": "重扫此项目"
+    "rescanThisProject": "重扫此项目",
+    "doneTitle": "安全检测完成",
+    "doneDesc": "已扫描 {{agents}} 个 Agent · 批次 {{batch}}",
+    "doneDescWithError": "已扫描 {{agents}} 个 Agent(其中 {{failed}} 个失败)· 批次 {{batch}}",
+    "viewHistory": "查看历史记录",
+    "viewBatchHint": "在历史记录中按批次分组查看本次扫描结果"
   },
   "common": {
     "global": "全局",

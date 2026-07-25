@@ -195,6 +195,7 @@ export interface AgentScanEntry {
 export interface AgentScanResult {
   agent_id: string
   scan_id?: string
+  batch_id?: string
   findings?: Finding[]
   health_score?: HealthScore
   finding_count?: number

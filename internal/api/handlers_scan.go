@@ -17,10 +17,12 @@ import (
 
 // AgentScanResult 是多 agent 循环扫描中单个 agent 的结果。
 // 成功时含 ScanResult 摘要字段;失败时 Error 非空,其余字段为零值。
-// 注:跨 agent 不聚合健康分(每 agent 独立评分),前端按需自取 results[i].HealthScore。
+// 注:跨 agent 不聚合健康分(每 agent 独立评分),前端按需取 results[i].HealthScore。
+// BatchID:同次 POST /api/scan 共享(见 handler 生成),前端用于扫描完成提示 + 引导跳历史按批次查看。
 type AgentScanResult struct {
 	AgentID     string                `json:"agent_id"`
 	ScanID      string                `json:"scan_id,omitempty"`
+	BatchID     string                `json:"batch_id,omitempty"`
 	Findings    []security.Finding    `json:"findings,omitempty"`
 	HealthScore *security.HealthScore `json:"health_score,omitempty"`
 	Count       int                   `json:"finding_count,omitempty"`
@@ -92,10 +94,11 @@ func (s *Server) postScan(c *gin.Context) {
 		cancel()
 		if err != nil {
 			// 单 agent 失败不中断整批:记录 error,继续下一个 agent,整体仍 200。
-			results = append(results, AgentScanResult{AgentID: aid, Error: err.Error()})
+			// BatchID 仍填上(同次扫描共享),前端可据此引导用户去历史查看该批次。
+			results = append(results, AgentScanResult{AgentID: aid, BatchID: batchID, Error: err.Error()})
 			continue
 		}
-		ar := AgentScanResult{AgentID: aid, Findings: res.Findings, Count: len(res.Findings), HealthScore: res.HealthScore}
+		ar := AgentScanResult{AgentID: aid, BatchID: batchID, Findings: res.Findings, Count: len(res.Findings), HealthScore: res.HealthScore}
 		if res.StartedAt != (time.Time{}) {
 			ar.ScanID = res.StartedAt.Format("2006-01-02-15-04-05")
 		}

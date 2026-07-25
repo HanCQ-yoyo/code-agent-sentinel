@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useSearchParams } from 'react-router-dom'
 import { Table, Button, Card, Row, Col, Spin, Empty, Typography, Alert, Popconfirm, Select, Switch, Tag, Collapse } from 'antd'
 import { ArrowLeftOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
@@ -27,6 +27,9 @@ function riskColor(score: number): string {
 export default function History() {
   const { t } = useTranslation()
   const { id } = useParams<{ id: string }>()
+  // ?batch=<id>:从 RescanModal 完成提示的「查看历史」按钮跳来,自动开启按批次分组 + 展开该批次。
+  const [searchParams] = useSearchParams()
+  const batchParam = searchParams.get('batch')
   const { history, agents, fetchHistory, fetchHistoryDetail, deleteHistory } = useStore()
   const [detail, setDetail] = useState<ScanRecord | null>(null)
   const [err, setErr] = useState('')
@@ -35,8 +38,10 @@ export default function History() {
   // 同一 <History /> 实例(无 remount key),若 useState 在 early return 之后,列表视图与详情视图
   // 的 hook 数量不一致 → "Rendered fewer hooks than expected" → 页面崩溃(白屏)。
   const [agentFilter, setAgentFilter] = useState<string>('')
-  // Task 12:按批次分组开关(列表视图)。默认关闭,保持原平铺 Table。
-  const [batchGroup, setBatchGroup] = useState(false)
+  // Task 12:按批次分组开关(列表视图)。带 ?batch= 跳入时默认开启(展开该批次)。
+  const [batchGroup, setBatchGroup] = useState(!!batchParam)
+  // 受控展开的 Collapse panel keys:?batch=xxx → 默认展开 [xxx],否则空(全收起)。
+  const [activeBatchKeys, setActiveBatchKeys] = useState<string[]>(batchParam ? [batchParam] : [])
   // Task 12:batch 详情视图 — 同批次各 agent 的 ScanRecord[](detail 是主入口,
   // siblings 是同 batch 其他 agent 的记录;若 detail.batch_id 为空 → siblings 为空,走单记录视图)。
   const [batchSiblings, setBatchSiblings] = useState<ScanRecord[]>([])
@@ -183,7 +188,7 @@ export default function History() {
       {filteredHistory.length === 0 ? <Empty description={(!agentFilter || history.length === 0) ? t('history.empty') : t('history.noMatchAgent')} /> : batchGroup ? (
         // 分组模式:每个 batch 一个 Collapse.Panel,标题 = 批次末8位 · N 个 Agent · 最早时间。
         // 无 batch_id 的单条记录各自成组,标题显示 scan id(不混入 batch 语义)。
-        <Collapse accordion={false}>
+        <Collapse accordion={false} activeKey={activeBatchKeys} onChange={(k) => setActiveBatchKeys(k as string[])}>
           {batchGroups.map((g) => {
             const agentCount = new Set(g.rows.map((r) => r.agent_id)).size
             const t0 = g.rows.map((r) => r.started_at).sort()[0]

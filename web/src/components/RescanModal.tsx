@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Modal, Radio, Select, Checkbox, Typography, Table, Tag } from 'antd'
+import { Modal, Radio, Select, Checkbox, Typography, Table, Tag, Button, notification } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useTranslation } from 'react-i18next'
+import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
 import { AgentIcon } from './AgentIcon'
 import type { Agent } from '../types'
@@ -15,6 +16,7 @@ interface Props {
 export function RescanModal({ open, onClose, initialScope }: Props) {
   const { t } = useTranslation()
   const { agents, scanEnabledAgents, projects, detectors, runScan, loading } = useStore()
+  const nav = useNavigate()
   const [scopeType, setScopeType] = useState('global')
   const [scopePath, setScopePath] = useState<string | undefined>(undefined)
   // 本地多选 agent 状态(非全局 selectedAgents 筛选器)。默认 = scanEnabledAgents。
@@ -55,8 +57,29 @@ export function RescanModal({ open, onClose, initialScope }: Props) {
     // 全选检测器=不传(后端全量);否则传逗号分隔 id 列表。
     const det = detIDs.length === (detectors ?? []).length ? undefined : detIDs.join(',')
     // agentIDs 已排除关闭的(Table 行选择 disabled),空 → 后端回退全部 scan_enabled。
-    await runScan(agentIDs, det, { type: scopeType, path: scopePath })
+    const res = await runScan(agentIDs, det, { type: scopeType, path: scopePath })
     onClose()
+    // 扫描完成提示(design.md microinteractions:用户显式要求的引导型反馈,非庆祝 toast)。
+    // notification 持久(不自动消失),带「查看历史」按钮跳 /history?batch=xxx,引导用户去看本次批次。
+    // res 可能 undefined(网络/鉴权错误,wrap 已写 store.error);此时不弹完成提示,让 error 兜底。
+    if (res && res.length > 0) {
+      const batch = res[0].batch_id
+      const failed = res.filter((r) => r.error).length
+      const desc = failed > 0
+        ? t('rescan.doneDescWithError', { agents: res.length, failed, batch: batch ? batch.slice(-8) : '--' })
+        : t('rescan.doneDesc', { agents: res.length, batch: batch ? batch.slice(-8) : '--' })
+      notification.success({
+        message: t('rescan.doneTitle'),
+        description: desc,
+        duration: 0, // 持久,直到用户关闭/点击跳转(引导型,不自动消失)
+        btn: batch ? (
+          <Button type="primary" size="small" onClick={() => { notification.destroy(); nav(`/history?batch=${encodeURIComponent(batch)}`) }}>
+            {t('rescan.viewHistory')}
+          </Button>
+        ) : undefined,
+        onClose: () => notification.destroy(),
+      })
+    }
   }
 
   // 三段分区标题:与 AssetDetailPanel 的 .section-label 同款(muted uppercase + hairline),
