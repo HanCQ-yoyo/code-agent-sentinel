@@ -170,3 +170,47 @@ func TestHealthInfoMixedReducibility(t *testing.T) {
 		}
 	}
 }
+
+func TestFindingWeightByStatus(t *testing.T) {
+	cases := []struct {
+		name string
+		f    Finding
+		want float64
+	}{
+		{"open high", Finding{Severity: SeverityHigh, Status: "open"}, 2.5},
+		{"open critical", Finding{Severity: SeverityCritical, Status: "open"}, 4.0},
+		{"in_progress high", Finding{Severity: SeverityHigh, Status: "in_progress"}, 1.25},
+		{"resolved high", Finding{Severity: SeverityHigh, Status: "resolved"}, 0.0},
+		{"false_positive medium", Finding{Severity: SeverityMedium, Status: "false_positive"}, 0.0},
+		{"accepted low", Finding{Severity: SeverityLow, Status: "accepted"}, 0.0},
+		{"empty status treats as open", Finding{Severity: SeverityHigh}, 2.5},
+		{"info stays zero", Finding{Severity: SeverityInfo, Status: "open"}, 0.0},
+	}
+	for _, c := range cases {
+		if got := findingWeight(c.f); got != c.want {
+			t.Errorf("%s: findingWeight = %v, want %v", c.name, got, c.want)
+		}
+	}
+}
+
+func TestComputeHealthResolvedNotDeducted(t *testing.T) {
+	// 一条 high finding 标 resolved → 不扣分,健康分 100
+	a := configengine.Asset{ID: "skill:x", Type: configengine.AssetSkill}
+	f := Finding{AssetID: "skill:x", Severity: SeverityHigh, Status: "resolved", Suppressed: true, Suppression: "state"}
+	hs := ComputeHealth([]configengine.Asset{a}, []Finding{f})
+	if hs.Score != 100 {
+		t.Errorf("Score = %d, want 100 (resolved not deducted)", hs.Score)
+	}
+}
+
+func TestComputeHealthInProgressHalfDeducted(t *testing.T) {
+	// 一条 high finding 标 in_progress → 0.5 系数扣分
+	a := configengine.Asset{ID: "skill:x", Type: configengine.AssetSkill}
+	f := Finding{AssetID: "skill:x", Severity: SeverityHigh, Status: "in_progress"}
+	// open high 系数 2.5,in_progress = 2.5*0.5 = 1.25
+	// w(skill)=1.5, Rmax=10, totalW=1.5 → 扣分 = 1.25*1.5/(10*1.5)*100 = 12.5 → Score=87 或 88(四舍五入)
+	hs := ComputeHealth([]configengine.Asset{a}, []Finding{f})
+	if hs.Score < 85 || hs.Score > 90 {
+		t.Errorf("Score = %d, want ~87 (in_progress half deducted)", hs.Score)
+	}
+}

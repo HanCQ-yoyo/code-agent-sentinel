@@ -28,18 +28,36 @@ var severityCoeff = map[Severity]float64{
 	SeverityInfo:     0.0, // 低置信度 finding 不影响健康分
 }
 
+// statusDiscount 是处置状态对健康分的折扣系数(显式常量,非魔法数字)。
+// open=全额;in_progress=0.5(已认领待处置);resolved/false_positive/accepted=0(不再扣分)。
+var statusDiscount = map[string]float64{
+	"open":           1.0,
+	"in_progress":    0.5,
+	"resolved":       0.0,
+	"false_positive": 0.0,
+	"accepted":       0.0,
+}
+
 // findingWeight 返回单条 finding 的有效严重度系数。
 // 未知 severity(map 中不存在)→ 兜底 0.5;info(显式 0.0)→ 保持 0.0。
-// 抑制 finding 打 0.3 折(决策 #12:残值 30% 扣分)。
+// 折扣纯由 Status 驱动(统一处置模型,取代旧 suppression 0.3)。
+// 空 Status(未扫描过的老记录)按 open 处理。
+// Suppressed=true 但 Status 空(迁移过渡期 applySuppression 仍设 Suppressed)→ 兜底 0.5(与旧 0.3 接近且保守)。
 func findingWeight(f Finding) float64 {
 	p, ok := severityCoeff[f.Severity]
 	if !ok {
 		p = 0.5 // 未知 severity 兜底
 	}
-	if f.Suppressed {
-		p *= 0.3
+	if f.Status == "" {
+		if f.Suppressed {
+			return p * 0.5 // 过渡期:旧 suppression 记录无 Status,保守折扣
+		}
+		return p // 空 Status 视为 open
 	}
-	return p
+	if disc, ok := statusDiscount[f.Status]; ok {
+		return p * disc
+	}
+	return p // 未知 Status 兜底全额
 }
 
 // ComputeHealth 按规格公式计算健康分。
