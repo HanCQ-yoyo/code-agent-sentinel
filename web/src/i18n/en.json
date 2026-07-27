@@ -1,5 +1,5 @@
 {
-  "nav": { "dashboard": "Dashboard", "assets": "Assets", "findings": "Findings", "history": "History", "settings": "Settings" },
+  "nav": { "dashboard": "Dashboard", "assets": "Assets", "findings": "Findings", "history": "Scan Tasks", "settings": "Settings" },
   "topbar": { "rescan": "Security Scan", "scanning": "Scanning…", "language": "Language", "theme": "Theme", "leafAsset": "Asset Details", "leafScan": "Scan Details", "dark": "Dark", "light": "Light" },
   "rescan": {
     "title": "Security Scan Config",
@@ -92,6 +92,15 @@
     "colFindings": "Findings",
     "colRiskCount": "Risk Count",
     "colDetectors": "Detectors",
+    "colScope": "Scope",
+    "colScopePath": "Target",
+    "scope": {
+      "global": "Global",
+      "user": "User",
+      "project": "Project",
+      "asset": "Asset",
+      "asset-id": "Asset ID"
+    },
     "colBatch": "Batch",
     "colAction": "Action",
     "confirmDelete": "Delete this scan record?",
@@ -104,7 +113,8 @@
     "batchNAgents": "{{count}} Agents",
     "batchTag": "Batch {{id}}",
     "batchAgentsCount": "{{count}} agents in this batch",
-    "singleAgentHint": "Single agent scan"
+    "singleAgentHint": "Single agent scan",
+    "batchSiblings": "Other agents in this batch"
   },
   "settings": {
     "binaryPath": "Binary path",

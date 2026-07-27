@@ -121,6 +121,11 @@ export interface ScanSummary {
   finding_count: number; detector_avail: number; detector_total: number; agent_id: string
   // Task 3:同一次 POST /api/scan?agents=a,b 的所有 agent 共享 batchID。
   batch_id?: string
+  // Task 16:检测范围与目标(对齐后端 ScanSummary.Scope/ScopePath)。
+  // scope: "global"|"user"|"project"|"asset"|"asset-id"(空归一化为 global)。
+  // scope_path: project=项目路径;asset=资产 source_path;global/user=空。
+  scope?: string
+  scope_path?: string
 }
 export interface AgentsResponse { agents: Agent[]; current: string }
 

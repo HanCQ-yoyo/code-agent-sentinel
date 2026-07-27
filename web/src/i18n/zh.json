@@ -1,5 +1,5 @@
 {
-  "nav": { "dashboard": "仪表盘", "assets": "资产发现", "findings": "风险管理", "history": "历史扫描", "settings": "系统设置" },
+  "nav": { "dashboard": "仪表盘", "assets": "资产发现", "findings": "风险管理", "history": "检测任务", "settings": "系统设置" },
   "topbar": { "rescan": "安全检测", "scanning": "检测中…", "language": "语言", "theme": "主题", "leafAsset": "资产详情", "leafScan": "扫描详情", "dark": "深", "light": "浅" },
   "rescan": {
     "title": "安全检测配置",
@@ -92,6 +92,15 @@
     "colFindings": "发现",
     "colRiskCount": "风险数量",
     "colDetectors": "检测器",
+    "colScope": "检测范围",
+    "colScopePath": "检测目标",
+    "scope": {
+      "global": "全局",
+      "user": "用户级",
+      "project": "项目",
+      "asset": "资产",
+      "asset-id": "资产 ID"
+    },
     "colBatch": "批次",
     "colAction": "操作",
     "confirmDelete": "确认删除此扫描记录?",
@@ -104,7 +113,8 @@
     "batchNAgents": "{{count}} 个 Agent",
     "batchTag": "批次 {{id}}",
     "batchAgentsCount": "本批次共 {{count}} 个 Agent",
-    "singleAgentHint": "单 Agent 扫描"
+    "singleAgentHint": "单 Agent 扫描",
+    "batchSiblings": "批次内其他 Agent"
   },
   "settings": {
     "binaryPath": "二进制路径",

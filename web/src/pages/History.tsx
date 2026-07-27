@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link, useSearchParams } from 'react-router-dom'
-import { Table, Button, Card, Row, Col, Spin, Empty, Typography, Alert, Popconfirm, Select, Switch, Tag, Collapse } from 'antd'
+import { Table, Button, Card, Row, Col, Spin, Empty, Typography, Alert, Popconfirm, Select, Switch, Tag, Collapse, Tooltip } from 'antd'
 import { ArrowLeftOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { useTranslation } from 'react-i18next'
@@ -85,13 +85,12 @@ export default function History() {
   if (id) {
     if (err) return <Alert type="error" message={t('common.loadFailed')} description={err} showIcon style={{ margin: 16 }} />
     if (!detail) return <Spin style={{ display: 'block', margin: '40px auto' }} />
-    // Task 12:batch 详情视图 — 同批次所有 agent 的记录合并展示。
-    // batchRecords = [detail, ...batchSiblings](主入口 + siblings);单记录(batch_id 空) → 只 detail。
-    // 健康分:每 agent 独立 HealthScoreCard(绝不跨 agent 聚合分数,遵循健康分公式硬原则)。
-    // Findings:合并所有 sibling 的 findings(每条已带 agent_id),复用 FindingTable(含 Agent 列)。
+    // Task 16:详情改 per-agent —— 不再合并 sibling findings。
+    // 健康分圆圈:batch 模式仍展示每 agent 一张(让用户看到批次全貌);Findings/SeverityChart 只用当前 detail。
+    // batchSiblings 保留 fetch,但仅用于下方轻量链接行(跳转到 sibling 详情,不再合并展示)。
     const batchRecords: ScanRecord[] = batchSiblings.length > 0 ? [detail, ...batchSiblings] : [detail]
     const isBatch = !!detail.batch_id && batchSiblings.length > 0
-    const mergedFindings = batchRecords.flatMap((r) => r.findings ?? [])
+    const detailFindings = detail.findings ?? []
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <Link to="/history"><Button type="link" icon={<ArrowLeftOutlined />}>{t('history.backToList')}</Button></Link>
@@ -111,10 +110,29 @@ export default function History() {
             )
           })}
         </div>
-        {/* SeverityChart:合并所有 batchRecords 的 findings(单记录 = detail.findings)。
-            batch 模式右侧补一张信息卡说明 agent 数(避免左 SeverityChart 单独占半行)。 */}
+        {/* Task 16:批次内其他 agent 的轻量链接行(不再合并 findings)。
+            isBatch && batchSiblings.length > 0 时展示,每条 sibling 一个 Link 跳转到其详情页。
+            圆圈行已含 detail 自身,这里只列 siblings(避免重复 detail)。 */}
+        {isBatch && batchSiblings.length > 0 && (
+          <Card size="small">
+            <div className="asset-section-title" style={{ marginBottom: 8 }}>{t('history.batchSiblings')}</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
+              {batchSiblings.map((sib) => {
+                const aid = sib.agent_id ?? ''
+                const m = agentMetaById(aid)
+                return (
+                  <Link key={sib.id} to={`/history/${sib.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                    <AgentIcon id={aid} /> {m.label}
+                  </Link>
+                )
+              })}
+            </div>
+          </Card>
+        )}
+        {/* SeverityChart:只用当前 detail 的 findings(per-agent,不跨 agent 合并)。
+            右侧信息卡说明当前 agent 身份(batch 模式)或单记录提示。 */}
         <Row gutter={16} align="stretch">
-          <Col xs={24} lg={12} style={{ display: 'flex' }}><SeverityChart findings={mergedFindings} /></Col>
+          <Col xs={24} lg={12} style={{ display: 'flex' }}><SeverityChart findings={detailFindings} /></Col>
           <Col xs={24} lg={12} style={{ display: 'flex' }}>
             <Card style={{ width: '100%' }} size="small">
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
@@ -125,7 +143,7 @@ export default function History() {
             </Card>
           </Col>
         </Row>
-        <FindingTable findings={mergedFindings} startedAt={detail.started_at} />
+        <FindingTable findings={detailFindings} startedAt={detail.started_at} />
       </div>
     )
   }
@@ -139,6 +157,19 @@ export default function History() {
     // Task 12:列名由「发现」(colFindings)改为「风险数量」(colRiskCount),语义更准确。
     { title: t('history.colRiskCount'), dataIndex: 'finding_count', width: 90 },
     { title: t('history.colDetectors'), width: 120, render: (_: unknown, h: ScanSummary) => <span style={{ fontFamily: 'var(--font-mono)' }}>{h.detector_avail}/{h.detector_total}</span> },
+    // Task 16:检测范围(scope)+ 检测目标(scope_path)两列,放在 Batch 列前。
+    // scope:global/user/project/asset/asset-id(空归一化为 global,走 i18n 翻译)。
+    // scope_path:project=项目路径;asset=资产 source_path;global/user=空 → 显示 "—"。
+    {
+      title: t('history.colScope'), width: 100,
+      render: (_: unknown, h: ScanSummary) => t(`history.scope.${h.scope || 'global'}`, { defaultValue: h.scope || 'global' }),
+    },
+    {
+      title: t('history.colScopePath'), width: 200, ellipsis: true,
+      render: (_: unknown, h: ScanSummary) => h.scope_path ? (
+        <Tooltip title={h.scope_path}><Typography.Text code style={{ fontSize: 11 }}>{h.scope_path}</Typography.Text></Tooltip>
+      ) : <Typography.Text type="secondary">—</Typography.Text>,
+    },
     // Task 12:Batch 列 — 显示 batch_id 末 8 位(同次重扫共享);无 batch_id(旧/单 agent 扫描)显示 '-'。
     { title: t('history.colBatch'), dataIndex: 'batch_id', width: 110, render: (bid?: string) => bid ? <Tag color="blue" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{bid.slice(-8)}</Tag> : '-' },
     { title: t('history.colAction'), width: 80, render: (_: unknown, h: ScanSummary) => (
