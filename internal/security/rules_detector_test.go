@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/security/ruleengine"
 	"code-agent-sentinel/internal/security/suppression"
@@ -967,5 +969,134 @@ func TestCodexBaselineRulesNoFalsePositiveOnClaude(t *testing.T) {
 	}
 	if hasRuleID(findings, "baseline.codex-danger-full-access") || hasRuleID(findings, "baseline.codex-approval-never") {
 		t.Fatalf("Claude settings 不应触发 Codex 规则: %+v", findings)
+	}
+}
+
+// ── Task 9: 跨资产组合规则(ComboRule)第二遍求值测试 ──
+//
+// comboMatches + makeComboFinding + Scan 第二遍:同 agent 资产集内,所有 requires
+// 同时命中(AND)→ 1 条 Finding 挂到 primary(首个 require 命中的资产)。
+// 关键:combos 必须经 ValidateCombo 预编译(填 compiled 字段),否则 comboMatches
+// 调 req.CompiledRule() 得 nil → 安全降级不命中 → 测试失败。
+
+// matchNodeFromYAML 用 YAML 片段构造 MatchNode(测试便捷)。
+// MatchNode 用自定义 UnmarshalYAML(schema.go:86)填 .raw;yaml.Unmarshal 经 wrapper.Match
+// 触发 MatchNode.UnmarshalYAML 填 raw,后续 ValidateCombo 预编译时再解释 raw 编译正则。
+func matchNodeFromYAML(t *testing.T, yamlStr string) ruleengine.MatchNode {
+	t.Helper()
+	var wrapper struct {
+		Match ruleengine.MatchNode `yaml:"match"`
+	}
+	if err := yaml.Unmarshal([]byte("match: {"+yamlStr+"}"), &wrapper); err != nil {
+		t.Fatal(err)
+	}
+	return wrapper.Match
+}
+
+// newRulesDetectorWithCombos 构造一个带指定 combo 规则的 RulesDetector(测试专用,绕开 builtin)。
+//
+// 关键:combos 必须先跑 ValidateCombo 预编译(填 Requires[*].compiled),否则
+// comboMatches 调 req.CompiledRule() 得 nil → 安全降级不命中 → 测试静默失败。
+// ValidateCombo 错误 → t.Fatal(测试用 combo 应合法)。
+func newRulesDetectorWithCombos(t *testing.T, combos []ruleengine.ComboRule) *RulesDetector {
+	t.Helper()
+	home := t.TempDir()
+	d := NewRulesDetector(home, nil) // nil cfg → 全启用默认
+	valid, errs := ruleengine.ValidateCombo(combos)
+	if len(errs) != 0 {
+		t.Fatalf("ValidateCombo errs: %v", errs)
+	}
+	d.baseComboRules = valid
+	return d
+}
+
+// TestComboRuleSkipWithBashWildcard 验证组合规则第二遍求值:
+// settings.skip_dangerous=true + permissions.allow 含 Bash(*) → critical combo 命中。
+// primary = 第一个 require(settings)命中的资产;severity 继承 combo 声明的 critical。
+func TestComboRuleSkipWithBashWildcard(t *testing.T) {
+	settings := configengine.Asset{
+		ID:         "settings-1",
+		Type:       configengine.AssetSettings,
+		Scope:      configengine.ScopeGlobal,
+		SourcePath: "/x/settings.json",
+		Name:       "settings",
+		Fields:     map[string]any{"skip_dangerous": true},
+	}
+	perms := configengine.Asset{
+		ID:         "perm-1",
+		Type:       configengine.AssetPermissions,
+		Scope:      configengine.ScopeGlobal,
+		SourcePath: "/x/settings.json",
+		Name:       "permissions",
+		Fields:     map[string]any{"allow": []string{"Bash(*)"}},
+	}
+	d := newRulesDetectorWithCombos(t, []ruleengine.ComboRule{{
+		ID:          "combo.skip-perm-with-bash-wildcard",
+		Severity:    "critical",
+		Description: "skip_dangerous + Bash(*) 同时存在",
+		Remediation: "移除 skip_dangerous 或收紧 Bash 权限",
+		Requires: []ruleengine.ComboCondition{
+			{AssetType: "settings", Match: matchNodeFromYAML(t, `field: skip_dangerous, op: eq, value: "true"`)},
+			{AssetType: "permissions", Match: matchNodeFromYAML(t, `field: allow, op: contains, value: "Bash(*)"`)},
+		},
+	}})
+	findings, err := d.Scan(context.Background(), []configengine.Asset{settings, perms})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var combo *Finding
+	for i := range findings {
+		if findings[i].RuleID == "combo.skip-perm-with-bash-wildcard" {
+			combo = &findings[i]
+		}
+	}
+	if combo == nil {
+		t.Fatal("应触发 combo.skip-perm-with-bash-wildcard(critical)")
+	}
+	if combo.Severity != SeverityCritical {
+		t.Fatalf("severity = %v, want critical", combo.Severity)
+	}
+	// primary = 第一个 require(settings)命中的资产 → AssetID=settings-1
+	if combo.AssetID != "settings-1" {
+		t.Errorf("combo primary AssetID = %q, want settings-1 (首个 require 命中资产)", combo.AssetID)
+	}
+	if combo.DetectorID != "rules" {
+		t.Errorf("DetectorID = %q, want rules", combo.DetectorID)
+	}
+	if combo.Evidence == "" {
+		t.Errorf("Evidence 不应为空")
+	}
+}
+
+// TestComboRuleNoFalsePositiveSingleCondition 验证组合规则 AND 语义:
+// 只有 skip_dangerous=true(无 Bash(*),allow 是 Bash(npm:*) 不含 Bash(*))→ 不触发 combo。
+func TestComboRuleNoFalsePositiveSingleCondition(t *testing.T) {
+	settings := configengine.Asset{
+		ID:         "settings-1",
+		Type:       configengine.AssetSettings,
+		SourcePath: "/x/settings.json",
+		Name:       "settings",
+		Fields:     map[string]any{"skip_dangerous": true},
+	}
+	perms := configengine.Asset{
+		ID:         "perm-1",
+		Type:       configengine.AssetPermissions,
+		SourcePath: "/x/settings.json",
+		Name:       "permissions",
+		Fields:     map[string]any{"allow": []string{"Bash(npm:*)"}},
+	}
+	d := newRulesDetectorWithCombos(t, []ruleengine.ComboRule{{
+		ID:       "combo.skip-perm-with-bash-wildcard",
+		Severity: "critical",
+		Requires: []ruleengine.ComboCondition{
+			{AssetType: "settings", Match: matchNodeFromYAML(t, `field: skip_dangerous, op: eq, value: "true"`)},
+			{AssetType: "permissions", Match: matchNodeFromYAML(t, `field: allow, op: contains, value: "Bash(*)"`)},
+		},
+	}})
+	findings, _ := d.Scan(context.Background(), []configengine.Asset{settings, perms})
+	for _, f := range findings {
+		if f.RuleID == "combo.skip-perm-with-bash-wildcard" {
+			t.Fatal("单条件命中不应触发 combo(AND 语义:requires 全部命中才触发)")
+		}
 	}
 }

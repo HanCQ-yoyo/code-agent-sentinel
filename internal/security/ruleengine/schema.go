@@ -96,6 +96,14 @@ type ComboCondition struct {
 	compiled  *Rule
 }
 
+// CompiledRule 返回 ValidateCombo 预编译的 Rule(含 regexes 缓存),供 security 包的
+// comboMatches 复用正则缓存求值。未预编译(理论不发生,ValidateCombo 已编译)返回 nil。
+//
+// 跨包访问需求:comboMatches 在 internal/security(rules_detector.go, package security)
+// 不能读 ComboCondition.compiled(未导出字段,跨包访问编译失败)。此导出方法是最小改动
+// 解决方案,不破坏封装(callers 只读不能改)。
+func (c ComboCondition) CompiledRule() *Rule { return c.compiled }
+
 // Location 是 content 字段命中的文件位置(1-based)。
 // Line=行号;StartCol/EndCol=字节列半开区间 [StartCol, EndCol),便于 Monaco 高亮。
 // 仅 content 字段的 regex_match/contains 产生;字段级匹配与反混淆命中无位置。
