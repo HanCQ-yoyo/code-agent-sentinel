@@ -53,9 +53,6 @@ func (e *Engine) discoverCodex() (Inventory, error) {
 // 不再借用 Claude 的 ~/.claude.json。纯 Codex 用户项目级发现照常(只要 config 登记了项目)。
 // 注意:此处直接读 e.KnownProjects,不经 ListProjects()(后者会回退 ~/.claude.json,
 // 与"Codex 不借 Claude 机器文件"目标相悖)。
-//
-// C2(<project>/.codex/ 发现)由 Task 5 实现:届时在此循环体内追加
-// e.discoverCodexProject(inv, p)。本任务(Task 4)只做 C1 改源(读 KnownProjects)。
 func (e *Engine) discoverCodexProjects(inv *Inventory) {
 	for _, p := range e.KnownProjects {
 		if !fileExists(p.Path) {
@@ -65,7 +62,21 @@ func (e *Engine) discoverCodexProjects(inv *Inventory) {
 			inv.Assets = append(inv.Assets, *a)
 			inv.Projects = append(inv.Projects, p)
 		}
-		// C2: e.discoverCodexProject(inv, p) — Task 5 实现 <project>/.codex/ 发现
+		// C2:项目级 .codex/config.toml 发现(scope=project)。
+		e.discoverCodexProject(inv, p)
+	}
+}
+
+// discoverCodexProject 发现项目级 Codex 配置:<project>/.codex/config.toml(项目 scope)。
+// 复用 parseCodexConfig(同结构与字段建模,仅 scope 不同)。文件不存在静默跳过。
+// AGENTS.md 由 discoverCodexProjects 直接读;此处只读 .codex/config.toml(规格 §3.1 可选目录)。
+func (e *Engine) discoverCodexProject(inv *Inventory, p Project) {
+	pc := filepath.Join(p.Path, ".codex", "config.toml")
+	if !fileExists(pc) {
+		return
+	}
+	if a, _ := parseCodexConfig(pc, ScopeProject); a != nil {
+		inv.Assets = append(inv.Assets, a...)
 	}
 }
 

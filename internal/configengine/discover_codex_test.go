@@ -204,3 +204,42 @@ func TestListProjectsPrefersKnownProjects(t *testing.T) {
 		t.Fatalf("KnownProjects 非空应优先, got %+v", got)
 	}
 }
+
+// TestCodexProjectDotCodexConfig 验证 C2:项目级 <project>/.codex/config.toml 发现。
+// KnownProjects 注入的项目下放 .codex/config.toml(含 sandbox_mode),应产出 scope=project
+// 的 settings 资产且 Fields["sandbox_mode"] 正确。
+func TestCodexProjectDotCodexConfig(t *testing.T) {
+	home, codex := codexFixture(t)
+	os.WriteFile(filepath.Join(codex, "config.toml"), []byte(`model = "x"`), 0o644)
+	proj := filepath.Join(home, "myproj")
+	dotCodex := filepath.Join(proj, ".codex")
+	if err := os.MkdirAll(dotCodex, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dotCodex, "config.toml"), []byte(`sandbox_mode = "read-only"`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	eng := &Engine{
+		HomeDir: home, ClaudeDir: codex, Kind: "codex",
+		KnownProjects: []Project{{Path: proj, Name: "myproj"}},
+	}
+	inv, err := eng.Discover()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 项目级 .codex/config.toml 应产出 scope=project 的 settings 资产
+	var projSettings *Asset
+	for i := range inv.Assets {
+		a := &inv.Assets[i]
+		if a.Type == AssetSettings && a.Scope == ScopeProject {
+			projSettings = a
+		}
+	}
+	if projSettings == nil {
+		t.Fatal("应发现项目级 .codex/config.toml(scope=project settings)")
+	}
+	if projSettings.Fields["sandbox_mode"] != "read-only" {
+		t.Fatalf("项目 settings sandbox_mode = %v, want read-only", projSettings.Fields["sandbox_mode"])
+	}
+}
