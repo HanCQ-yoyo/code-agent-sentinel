@@ -29,12 +29,20 @@ func (e *Engine) ListProjects() ([]Project, error) {
 	return readProjectList(e.ClaudeJSON)
 }
 
-// NewEngineFromAgent 用 agent 描述构造 Engine。本轮 Claude Code 等价 NewEngine(a.HomeDir, a.RootDir),
-// 但 agent 描述显式化,为多 agent 铺路。
+// NewEngineFromAgent 用 agent 描述构造 Engine。显式拷 ClaudeJSON:Claude agent 指向 ~/.claude.json,
+// Codex agent 为空(不读 Claude 机器文件)。Kind 决定 Discover 用哪套解析器。
+// 不再委托 NewEngine(它硬编码 ~/.claude.json,是 Codex 误用 Claude 机器文件的根因)。
 func NewEngineFromAgent(a Agent) *Engine {
-	e := NewEngine(a.HomeDir, a.RootDir)
-	e.Kind = a.Kind
-	return e
+	claudeDir := a.RootDir
+	if claudeDir == "" {
+		claudeDir = filepath.Join(a.HomeDir, ".claude")
+	}
+	return &Engine{
+		HomeDir:    a.HomeDir,
+		ClaudeDir:  claudeDir,
+		ClaudeJSON: a.ClaudeJSON, // Codex 为空
+		Kind:       a.Kind,
+	}
 }
 
 // isAssetTypeDisabled 判断某资产类型是否被关闭发现。

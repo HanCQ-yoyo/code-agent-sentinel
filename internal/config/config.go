@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"code-agent-sentinel/internal/configengine"
 )
 
 type BasicAuth struct {
@@ -162,14 +164,23 @@ func (c *Config) ResolveClaudeDir(home string) string {
 }
 
 // ResolveAgents 解析启用的 agent 列表。
-// Agents 非空 → 直用(逐项空字段填默认);为空 → 用旧 ClaudeDir 回退构造单项 claude-code。
-// 保证旧配置(claude_dir)零破坏。
+// Agents 非空 → 直用(逐项空字段按 ID 查 configengine.KnownAgents() spec 填默认);为空 → 用旧 ClaudeDir 回退构造单项 claude-code。
+// 保证旧配置(claude_dir)零破坏。codex 的 spec 默认 ClaudeJSON="" → Codex agent 不再借 ~/.claude.json。
 func (c *Config) ResolveAgents(home string) []AgentCfg {
 	if len(c.Agents) > 0 {
+		specs := map[string]configengine.AgentSpec{}
+		for _, s := range configengine.KnownAgents() {
+			specs[s.ID] = s
+		}
 		out := make([]AgentCfg, len(c.Agents))
 		for i, a := range c.Agents {
-			a.RootDir = resolveDefault(a.RootDir, filepath.Join(home, ".claude"))
-			a.ClaudeJSON = resolveDefault(a.ClaudeJSON, filepath.Join(home, ".claude.json"))
+			spec, ok := specs[a.ID]
+			if !ok {
+				// 未知 agent ID:回退当 claude-code(向后兼容旧配置/拼写)。
+				spec = specs["claude-code"]
+			}
+			a.RootDir = resolveDefault(a.RootDir, spec.DefaultRootDir(home))
+			a.ClaudeJSON = resolveDefault(a.ClaudeJSON, spec.DefaultClaudeJSON(home))
 			out[i] = a
 		}
 		return out

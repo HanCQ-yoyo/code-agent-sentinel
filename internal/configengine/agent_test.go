@@ -40,6 +40,23 @@ func TestNewEngineFromAgent(t *testing.T) {
 	}
 }
 
+// Task 2:Codex agent 经 NewEngineFromAgent 构造,Engine.ClaudeJSON 必须为空
+// (不读 Claude 机器文件)。NewEngineFromAgent 不再委托 NewEngine(它硬编码 ~/.claude.json)。
+func TestNewEngineFromAgentCodexNoClaudeJSON(t *testing.T) {
+	home := t.TempDir()
+	a := Agent{ID: "codex", Kind: "codex", RootDir: filepath.Join(home, ".codex"), ClaudeJSON: "", HomeDir: home}
+	eng := NewEngineFromAgent(a)
+	if eng.ClaudeJSON != "" {
+		t.Fatalf("codex Engine.ClaudeJSON = %q, want 空(不读 Claude 机器文件)", eng.ClaudeJSON)
+	}
+	if eng.Kind != "codex" {
+		t.Fatalf("Engine.Kind = %q, want codex", eng.Kind)
+	}
+	if eng.ClaudeDir != filepath.Join(home, ".codex") {
+		t.Fatalf("Engine.ClaudeDir = %q", eng.ClaudeDir)
+	}
+}
+
 func TestKnownAgentsContainsClaudeCode(t *testing.T) {
 	specs := KnownAgents()
 	if len(specs) == 0 {

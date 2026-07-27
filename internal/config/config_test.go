@@ -221,6 +221,48 @@ func TestResolveAgentsFallsBackToDefaultWhenAllEmpty(t *testing.T) {
 	}
 }
 
+// Task 2:Codex agent 空 root_dir/claude_json → 应落到 ~/.codex 且 ClaudeJSON 为空
+// (configengine.KnownAgents() spec: codex 无机器管理文件)。
+func TestResolveAgentsCodexDefaultRootDir(t *testing.T) {
+	dir := t.TempDir()
+	// codex agent 不填 root_dir/claude_json,应落到 ~/.codex 且 claude_json 为空
+	cfg := &Config{Agents: []AgentCfg{{ID: "codex", Enabled: true}}}
+	agents := cfg.ResolveAgents(dir)
+	if len(agents) != 1 || agents[0].ID != "codex" {
+		t.Fatalf("got %v", agents)
+	}
+	wantRoot := filepath.Join(dir, ".codex")
+	if agents[0].RootDir != wantRoot {
+		t.Fatalf("codex RootDir = %q, want %q", agents[0].RootDir, wantRoot)
+	}
+	if agents[0].ClaudeJSON != "" {
+		t.Fatalf("codex ClaudeJSON = %q, want 空", agents[0].ClaudeJSON)
+	}
+}
+
+// Task 2:Claude agent 空 root_dir/claude_json → 默认 ~/.claude + ~/.claude.json
+func TestResolveAgentsClaudeDefaultPaths(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &Config{Agents: []AgentCfg{{ID: "claude-code", Enabled: true}}}
+	agents := cfg.ResolveAgents(dir)
+	if agents[0].RootDir != filepath.Join(dir, ".claude") {
+		t.Fatalf("claude RootDir = %q", agents[0].RootDir)
+	}
+	if agents[0].ClaudeJSON != filepath.Join(dir, ".claude.json") {
+		t.Fatalf("claude ClaudeJSON = %q", agents[0].ClaudeJSON)
+	}
+}
+
+// Task 2:未知 agent ID 应回退 Claude(向后兼容旧配置/拼写),防 spec 复用退化。
+func TestResolveAgentsUnknownIDFallsBackToClaude(t *testing.T) {
+	dir := t.TempDir()
+	cfg := &Config{Agents: []AgentCfg{{ID: "unknown-agent", Enabled: true}}}
+	agents := cfg.ResolveAgents(dir)
+	if agents[0].RootDir != filepath.Join(dir, ".claude") || agents[0].ClaudeJSON != filepath.Join(dir, ".claude.json") {
+		t.Fatalf("未知 ID 应回退 Claude, got %+v", agents[0])
+	}
+}
+
 func TestResolveSchedulesUsesSchedulesWhenNonEmpty(t *testing.T) {
 	c := &Config{Schedules: []ScheduleCfg{{AgentID: "claude-code", Enabled: true, Interval: "30m"}}}
 	got := c.ResolveSchedules(nil)
