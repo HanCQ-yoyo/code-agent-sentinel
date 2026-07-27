@@ -335,6 +335,9 @@ export default function Assets() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {error ? <Alert type="error" message={t('common.loadFailed')} description={error} showIcon /> : null}
+      <Typography.Text type="secondary" style={{ display: 'block', marginBottom: 8 }}>
+        {t('assets.intro')}
+      </Typography.Text>
       {showAgentTabs ? (
         <Tabs
           items={agentTabItems}

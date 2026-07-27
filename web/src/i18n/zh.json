@@ -51,6 +51,7 @@
     "notScanned": "未扫描"
   },
   "assets": {
+    "intro": "浏览各 Coding Agent 的配置资产,查看其能力与安全风险",
     "viewLabel": "视图",
     "tagLabel": "标签",
     "typeLabel": "类型",

@@ -12,6 +12,29 @@
 
 ---
 
+## 治理基础(资产能力看板 + FP 减负 + 统一处置生命周期 + 细粒度筛选 + 检测任务完善)
+
+- **合入日期**:2026-07-27(分支 `feat/governance-foundation`,待合并后回填 main SHA)
+
+### 升级
+
+- **资产能力看板**:`CapabilityPanel` 结构化展示 allowed-tools / hook 事件 / mcp 命令 / memory 大纲,替代"仅一行 description"的旧视图;资产发现页加定位文案。
+- **FP 减负**(三机制叠加):
+  - **否定上下文抑制**:`ruleengine.IsNegatedByContext` 识别"禁止/不允许"前缀,否定语义命中不再当 finding。
+  - **资产内去重**:emit 流水线按位置聚合同位置多规则命中,`ContributingRuleIDs` 记录所有触发规则,单一 finding 承载多规则上下文。
+  - **聚合视图**:FindingTable 双视图(按 finding / 按资产聚合),资产维度集中查看风险。
+- **统一处置生命周期**:塌缩旧 `baseline.json` + `suppressions.yaml` 为单一 `finding_states.yaml` overlay(`findingstate` 包:Status / Priority / Note / Category / ContributingRuleIDs);`applyFindingState` 在扫描期按 fingerprint 注入处置状态;`sentinel baseline --create` 改为 `BulkAccept`(批量接受全部当前未处置),`--prune` 改为打印 `PruneReport`。
+- **细粒度筛选**:FindingTable 按 Category / Status / Priority / asset-type 多维度筛选;Category 派生(`ruleengine.CategoryOf`)贯穿检测器 → API → UI。
+- **检测任务完善**:History 页 per-agent 视图(每 agent 独立最近扫描列表)+ 检测范围/目标列(`ScanSummary.ScopePath`,`global` / `project:<path>` / `asset:<id>`)。
+
+### 修复
+
+- **旧 baseline/suppressions 自动迁移**:首次启动时将 `~/.claude-sentinel/baseline.json` 与 `suppressions.yaml` 合并为 `finding_states.yaml`,旧文件重命名为 `.legacy`(不删,留作回滚);迁移幂等(已有 finding_states.yaml 时跳过)。
+- **健康分 Status 单调**:`Status=accepted` 的 finding 不再参与 R(asset) 求和(修旧 baseline accepted finding 仍拉低分数的健康分失真)。
+- **emit 流水线 fingerprint 稳定性**:同位置多规则去重时复用首条 finding 的 fingerprint(避免重复 hash 计算,确保跨扫描可还原)。
+
+---
+
 ## Coding Agent 配置对齐(双 agent 资产发现 + credential/combo/managed-mcp 规则)
 
 - **合入日期**:2026-07-27(分支 `feat/coding-agent-config-alignment`,待合并后回填 main SHA)

@@ -51,6 +51,7 @@
     "notScanned": "Not scanned"
   },
   "assets": {
+    "intro": "Browse configuration assets of each Coding Agent; inspect their capabilities and security risks.",
     "viewLabel": "View",
     "tagLabel": "Tag",
     "typeLabel": "Type",

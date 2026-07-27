@@ -9,13 +9,16 @@ English | [中文](README.zh-CN.md)
 - **Asset discovery & parsing**: reads `~/.claude/` and project `.claude/` — settings, permissions, hooks, MCP servers, skills, commands, agents, plugins, CLAUDE.md/memory, keybindings, scripts, **credential** (`auth.json` / `.env` / `*.pem` etc., content not exposed) — 12 asset types. Supports multiple code agents: **Claude Code** (`~/.claude/`) and **OpenAI Codex CLI** (`~/.codex/config.toml`, `AGENTS.md`, `prompts/`, `hooks.json`). `sentinel setup` auto-detects installed agents; the dashboard aggregates multiple agents with independent scans.
 - **Discovery & cross-asset rules**: Claude L1-L5 — `managed-mcp.json` (enterprise mode hint), global `.mcp.json`, project `hooks/` directory, project `keybindings.json`, `skip_dangerous_mode_permission_prompt` field; Codex C2/C3 — project-level `.codex/config.toml` + `[hooks.state]` modeling; Codex C4/L6 — `auth.json` credential + project-root sensitive files. **6 cross-asset combo rules** (skip-perm+Bash(*) / Codex danger+never / credential exfil etc.) via the unified rule engine's new `ComboRule` second pass. Codex project-level discovery reads the sentinel `known_projects` list (independent of `~/.claude.json`).
 - **Security detection**: unified rule engine (256 built-in rules + 6 cross-asset combo rules) + prompt-injection scanning with deobfuscation + secret scanning (gitleaks) + dependency audit (govulncheck / npm-audit). Missing scanner binaries degrade gracefully.
-- **Suppressions & baseline**: silence known findings via `suppressions.yaml`; snapshot accepted fingerprints in `baseline.json` (create / prune from CLI or API).
+- **Unified disposition lifecycle**: collapses the former `baseline.json` + `suppressions.yaml` into a single `finding_states.yaml` overlay (`findingstate` package: Status / Priority / Note / Category / ContributingRuleIDs). `sentinel baseline --create` bulk-accepts all currently-undisposed findings; `--prune` prints a prune report. Old files auto-migrate (renamed `.legacy`, not deleted). Accepted findings no longer drag down the health score.
 - **Health score**: `Score = 100 × (1 − Σ(R(asset)·w(asset)) / (Rmax · Σ w(asset)))`, Rmax=10, 0–100, 5-tier — explainable, monotone, restorable.
 - **Config editing**: atomic writes with automatic backup + migration (`internal/editor`); configengine stays read-only.
 - **Scheduled scanning**: in-process scheduler (`scan_interval` / `scan_enabled`) keeps history fresh; `sentinel scan` does one-shot discover→scan→write-history without the server.
 - **Custom `.claude` directory**: `claude_dir` + `discovery.disabled_asset_types` let you point at an alternate config root and skip asset types you don't care about.
 - **Bilingual UI**: in-app `zh` / `en` switch (react-i18next) with `language` config default; backend strings remain Chinese.
 - **Finding-location highlighting**: rule findings carry `Location{Line,StartCol,EndCol}` surfaced in the Monaco viewer.
+- **Capability panel**: structured view of allowed-tools / hook events / mcp commands / memory outline per asset, replacing the old one-line description.
+- **FP reduction**: negation-context suppression (findings prefixed with "forbidden/not allowed" no longer fire); per-asset dedup (same-location multi-rule hits collapse into one finding with `ContributingRuleIDs`); dual-view FindingTable (by finding / by asset).
+- **Scan-task view**: per-agent history page with detection scope/target columns (`ScanSummary.ScopePath`: `global` / `project:<path>` / `asset:<id>`).
 - **Project pinning**: pin frequently-used projects to the top of the Assets page with a color tag (`pinned_projects`).
 - **Dashboard**: health-score card, risk summary, detector status, asset inventory, history trends.
 
@@ -66,9 +69,7 @@ ssh -L <port>:127.0.0.1:<port> <devhost>
 | `backup_dir` | string | Backup root; empty = `~/.claude-sentinel/backups`. |
 | `max_backups` | int | `0` = default 20. |
 | `sentinel_rules_dir` | string | Global custom rules dir; empty = `~/.claude-sentinel/rules`. |
-| `suppress_path` | string | Suppressions file; empty = `~/.claude-sentinel/suppressions.yaml`. |
-| `baseline_path` | string | Baseline file; empty = `~/.claude-sentinel/baseline.json`. |
-| `suppression_discount` | float | Residual risk factor for suppressed findings; `0`/negative = 0.3. |
+| `finding_states_path` | string | Disposition overlay file; empty = `~/.claude-sentinel/finding_states.yaml`. Legacy `baseline.json` / `suppressions.yaml` auto-migrate on first start (renamed `.legacy`). |
 | `detectors` | object | Per-detector `enabled` toggles + binary paths (rules / secret / dep). |
 
 Example:
@@ -95,8 +96,8 @@ All subcommands accept `--config` to override the config path. `--home` override
 | --- | --- |
 | `sentinel` | Start the local SOC dashboard server (default). Flags: `--config`, `--bind`, `--port`, `--no-browser`, `--i-know-its-risky`, `--home`, `--token`, `--claude-dir`. |
 | `sentinel scan` | One-shot scan (discover → scan → write history), no server. `--detectors=rules,secret` restricts which detectors run. |
-| `sentinel uninstall` | Delete `~/.claude-sentinel/` (history, backups, baseline, suppressions, rules). Does **not** touch `~/.claude` or the binary. `--yes` skips confirmation; `--keep-config` retains `config.yaml`. |
-| `sentinel baseline` | `--create` merges current findings into `baseline.json`; `--prune` removes non-reproducing fingerprints. |
+| `sentinel uninstall` | Delete `~/.claude-sentinel/` (history, backups, finding_states, rules). Does **not** touch `~/.claude` or the binary. `--yes` skips confirmation; `--keep-config` retains `config.yaml`. |
+| `sentinel baseline` | `--create` bulk-accepts all currently-undisposed findings into `finding_states.yaml`; `--prune` prints a prune report for non-reproducing fingerprints. |
 | `sentinel rules` | `list` prints id/severity/source/valid; `validate [file]` checks rule files (no arg = builtin + global). |
 
 ## Security Model
