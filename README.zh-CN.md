@@ -9,13 +9,16 @@
 - **资产发现与解析**:扫描 `~/.claude/` 与项目 `.claude/`,覆盖 settings、permissions、hooks、MCP servers、skills、commands、agents、plugins、CLAUDE.md/memory、keybindings、scripts、**credential**(凭据文件 `auth.json`/`.env`/`*.pem` 等,不暴露内容)等 12 类资产。支持多种 code agent:**Claude Code**(`~/.claude/`)与 **OpenAI Codex CLI**(`~/.codex/config.toml`、`AGENTS.md`、`prompts/`、`hooks.json`)。`sentinel setup` 自动探测已安装 agent;看板支持多 agent 聚合、各自独立扫描。
 - **发现补齐与跨资产组合规则**:Claude L1-L5——`managed-mcp.json`(企业模式提示)、全局 `.mcp.json`、项目 `hooks/` 目录、项目 `keybindings.json`、`skip_dangerous_mode_permission_prompt` 字段;Codex C2/C3——项目级 `.codex/config.toml` + `[hooks.state]` 建模;Codex C4/L6——`auth.json` 凭据 + 项目根敏感文件。**6 条跨资产组合规则**(skip-perm+Bash(*) / Codex danger+never / 凭据外发等)经统一规则引擎新增 `ComboRule` 第二遍求值。Codex 项目级发现改读 sentinel 的 `known_projects` 清单(独立于 `~/.claude.json`)。
 - **安全检测**:统一规则引擎(256 条内置规则 + 6 条跨资产组合规则)+ 提示注入扫描(含反混淆)+ 密钥扫描(gitleaks)+ 依赖漏洞(govulncheck / npm-audit)。子进程缺失时优雅降级。
-- **抑制与 baseline**:`suppressions.yaml` 静默已知 finding;`baseline.json` 快照已接受指纹(CLI 或 API create / prune)。
+- **统一处置生命周期**:塌缩旧 `baseline.json` + `suppressions.yaml` 为单一 `finding_states.yaml` overlay(`findingstate` 包:Status / Priority / Note / Category / ContributingRuleIDs)。`sentinel baseline --create` 批量接受全部当前未处置 finding;`--prune` 打印清理报告。旧文件自动迁移(重命名 `.legacy`,不删除)。已接受 finding 不再拉低健康分。
 - **健康分**:`Score = 100 × (1 − Σ(R(asset)·w(asset)) / (Rmax · Σ w(asset)))`,Rmax=10,0–100 五档,可解释 / 单调 / 可还原。
 - **配置编辑**:原子写入 + 自动备份与迁移(`internal/editor`);configengine 保持只读。
 - **定时扫描**:进程内 scheduler(`scan_interval` / `scan_enabled`)持续刷新历史;`sentinel scan` 一次性扫描不启 server。
 - **自定义 `.claude` 目录**:`claude_dir` + `discovery.disabled_asset_types` 指向自定义配置根、跳过不关心的资产类型。
 - **双语 UI**:界面 `zh` / `en` 切换(react-i18next,`language` 配置默认值);后端文案保持中文。
 - **命中位置高亮**:规则 finding 携带 `Location{Line,StartCol,EndCol}`,在 Monaco 查看器中高亮。
+- **资产能力看板**:结构化展示 allowed-tools / hook 事件 / mcp 命令 / memory 大纲,替代旧的单行 description。
+- **FP 减负**:否定上下文抑制("禁止/不允许"前缀命中不再触发)+ 资产内去重(同位置多规则命中塌缩为单条 finding,`ContributingRuleIDs` 记录全部触发规则)+ 双视图 FindingTable(按 finding / 按资产聚合)。
+- **检测任务视图**:History 页 per-agent 视图 + 检测范围/目标列(`ScanSummary.ScopePath`:`global` / `project:<path>` / `asset:<id>`)。
 - **项目置顶**:`pinned_projects` 把常用项目置顶 Assets 页并配色。
 - **Dashboard**:健康分卡、风险摘要、检测器状态、资产盘点、历史趋势。
 
@@ -66,9 +69,7 @@ ssh -L <port>:127.0.0.1:<port> <devhost>
 | `backup_dir` | string | 备份根目录;空 = `~/.claude-sentinel/backups`。 |
 | `max_backups` | int | `0` = 默认 20。 |
 | `sentinel_rules_dir` | string | 全局自定义规则目录;空 = `~/.claude-sentinel/rules`。 |
-| `suppress_path` | string | 抑制文件;空 = `~/.claude-sentinel/suppressions.yaml`。 |
-| `baseline_path` | string | baseline 文件;空 = `~/.claude-sentinel/baseline.json`。 |
-| `suppression_discount` | float | 抑制 finding 的残值扣分因子;`0`/负 = 0.3。 |
+| `finding_states_path` | string | 处置 overlay 文件;空 = `~/.claude-sentinel/finding_states.yaml`。旧 `baseline.json` / `suppressions.yaml` 首次启动自动迁移(重命名 `.legacy`)。 |
 | `detectors` | object | 各检测器 `enabled` 开关 + 二进制路径(rules / secret / dep)。 |
 
 示例:
@@ -95,8 +96,8 @@ discovery:
 | --- | --- |
 | `sentinel` | 启动本地 SOC 看板 server(默认)。Flags:`--config`、`--bind`、`--port`、`--no-browser`、`--i-know-its-risky`、`--home`、`--token`、`--claude-dir`。 |
 | `sentinel scan` | 一次性扫描(发现 → 扫描 → 写历史),不启 server;`--detectors=rules,secret` 限定运行的检测器。 |
-| `sentinel uninstall` | 清理 `~/.claude-sentinel/`(历史、备份、baseline、抑制、规则)。**不**碰 `~/.claude` 与二进制。`--yes` 跳过确认;`--keep-config` 保留 `config.yaml`。 |
-| `sentinel baseline` | `--create` 合并当前 finding 到 `baseline.json`;`--prune` 清理不复现的指纹。 |
+| `sentinel uninstall` | 清理 `~/.claude-sentinel/`(历史、备份、finding_states、规则)。**不**碰 `~/.claude` 与二进制。`--yes` 跳过确认;`--keep-config` 保留 `config.yaml`。 |
+| `sentinel baseline` | `--create` 批量接受当前全部未处置 finding 写入 `finding_states.yaml`;`--prune` 打印不复现指纹的清理报告。 |
 | `sentinel rules` | `list` 打印 id/severity/source/valid;`validate [file]` 校验规则文件(无参 = 内置 + 全局)。 |
 
 ## 安全模型

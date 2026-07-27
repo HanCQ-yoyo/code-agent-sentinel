@@ -24,6 +24,30 @@ export interface Finding {
   // snake_case(line/start_col/end_col)。供 UI(Task 18)在 Monaco 高亮命中行,不参与健康分。
   // 前端在 FindingDrawer→AssetSection 边界映射为 camelCase 传给 MonacoViewer.highlights。
   locations?: { line: number; start_col: number; end_col: number }[]
+  // 治理字段(Spec 1):统一处置生命周期 + Category 派生。
+  // status/priority/note 由用户经 /api/finding-state 维护(POST/DELETE),后端落盘到 ~/.claude-sentinel/finding_states.yaml。
+  // category 由 API 读时根据 rule_id 派生 attach(后端 Task 11),前端只读不写。
+  // contributing_rule_ids:combo 规则触发时记录所有命中的子规则 ID(后端 Task 11)。
+  status?: string         // open|in_progress|resolved|false_positive|accepted
+  priority?: string       // P0|P1|P2|P3
+  note?: string
+  category?: string       // 派生,API 读时 attach
+  contributing_rule_ids?: string[]
+}
+
+// Finding 处置状态(Spec 1)。后端 finding_states.yaml 的 status 字段取值之一。
+// open=未处置(默认);in_progress=处置中;resolved=已解决;false_positive=误报;accepted=已接受风险。
+export type FindingStatus = 'open' | 'in_progress' | 'resolved' | 'false_positive' | 'accepted'
+
+// /api/finding-state 单条记录(GET /api/finding-state/:fp 返回;POST/DELETE 体内/响应同结构)。
+// fingerprint 是稳定标识(后端 sha256 规则指纹);source 记录写入来源(web/bulk-accept/cli 等)。
+export interface FindingState {
+  fingerprint: string
+  status: FindingStatus
+  priority?: string
+  note?: string
+  source?: string
+  updated_at?: string
 }
 export interface HealthScore { score: number; band: string; deductions: { asset_name: string; rule_id: string; severity: Severity; points: number }[] }
 export interface DetectorStatus { id: string; available: boolean; reason?: string }
@@ -97,6 +121,11 @@ export interface ScanSummary {
   finding_count: number; detector_avail: number; detector_total: number; agent_id: string
   // Task 3:同一次 POST /api/scan?agents=a,b 的所有 agent 共享 batchID。
   batch_id?: string
+  // Task 16:检测范围与目标(对齐后端 ScanSummary.Scope/ScopePath)。
+  // scope: "global"|"user"|"project"|"asset"|"asset-id"(空归一化为 global)。
+  // scope_path: project=项目路径;asset=资产 source_path;global/user=空。
+  scope?: string
+  scope_path?: string
 }
 export interface AgentsResponse { agents: Agent[]; current: string }
 
@@ -137,23 +166,12 @@ export interface EditResult {
   rescan_error?: string
 }
 
-// P3 抑制(suppressions)与 baseline
-// 对应 GET /api/suppressions 返回的单条豁免项(后端 suppressionItemResponse)。
-export interface SuppressionItem {
-  id: string // 稳定标识符,DELETE /api/suppressions/:id 用
-  fingerprint: string
-  rule_id: string
-  asset_id: string
-  reason: string
-}
+// Task 15:SuppressionItem 已删除。Task 11 把 /api/suppressions 的 POST/GET/DELETE 全部删除,
+// 无消费方再需要此类型(前端 store 的 fetchSuppressions/deleteSuppression/suppressions 一并清理)。
 
-// POST /api/baseline 返回:合并后指纹总数 / 本次新增数 / 扫描发现总数。
-export interface BaselineResult {
-  baseline_path: string
-  total_fps: number
-  added_fps: number
-  scan_findings: number
-}
+// Task 15:BaselineResult 已删除。Task 11 把 POST /api/baseline 重定义为 bulk-accept
+//(返回 {accepted_count, scan_findings}),Task 12 的 bulkAccept action 不使用此类型
+//(apiPost 返回内联类型即可)。无其他引用。
 
 // 检测器运行期配置(GET/PUT /api/detectors/config)。
 export interface DetectorToggle { enabled: boolean }

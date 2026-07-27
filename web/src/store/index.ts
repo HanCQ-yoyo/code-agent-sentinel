@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { apiGet, apiPost, apiPut, apiDelete, AuthError } from '../api/client'
-import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, ScheduleStatus, TreeNode, Project, PinnedProject, DirTagsResponse, RawFile, PreviewResult, EditResult, SuppressionItem, BaselineResult, DetectorsConfig, DashboardData, AgentScanResult, Agent, Finding } from '../types'
+import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, ScheduleStatus, TreeNode, Project, PinnedProject, DirTagsResponse, RawFile, PreviewResult, EditResult, DetectorsConfig, DashboardData, AgentScanResult, Agent, Finding, FindingState } from '../types'
 import { type DirTag, type DirTagsMap } from '../lib/dirTags'
 import i18n from '../i18n'
 
@@ -59,6 +59,15 @@ interface State {
   // 全选 → ?agent=all 聚合(返回拼接 []Finding,每条带 agent_id);多选 → ?agent=id1,id2。
   findings: Finding[]
   fetchFindings: (agentID?: string) => Promise<void>
+  // Task 12:Finding 治理字段 CRUD(/api/finding-state)。后端落盘到 ~/.claude-sentinel/finding_states.yaml,
+  // API 读时把 status/priority/note 合并到 Finding 上(见 /api/findings 响应)。
+  // 三个 action 成功后都 fetchFindings() 重拉(不带参 = 用当前 agentQuery,与 runScan 后刷新模式一致)。
+  // setFindingState:POST /api/finding-state { fingerprint, status, priority?, note? } → upsert 单条。
+  // bulkAccept:POST /api/finding-state/bulk-accept { fingerprints, source } → 批量标记 accepted。
+  // resetFindingState:DELETE /api/finding-state/:fp → 清除该指纹的处置状态(回到 open 默认)。
+  setFindingState: (fingerprint: string, status: string, priority?: string, note?: string) => Promise<void>
+  bulkAccept: (fingerprints: string[]) => Promise<void>
+  resetFindingState: (fingerprint: string) => Promise<void>
   deleteHistory: (id: string) => Promise<void>
   fetchAgents: () => Promise<void>
   // Task 9:替换 setSelectedAgent。空数组=全选聚合;[id]=单选;[id1,id2]=多选。
@@ -106,12 +115,10 @@ interface State {
   previewAssetEdit: (id: string, newContent: string, baseHash: string) => Promise<PreviewResult | undefined>
   commitAssetEdit: (id: string, newContent: string, baseHash: string) => Promise<EditResult | undefined>
   clearEditError: () => void
-  // P3 抑制(suppressions)与 baseline
-  suppressions: SuppressionItem[]
-  fetchSuppressions: () => Promise<void>
-  addSuppression: (body: { fingerprint?: string; rule_id?: string; asset_id?: string; reason: string }) => Promise<boolean>
-  deleteSuppression: (id: string) => Promise<void>
-  generateBaseline: () => Promise<BaselineResult | undefined>
+  // P3 抑制(suppressions)与 baseline:Task 15 删除 addSuppression/generateBaseline
+  // 及其 fetchSuppressions/deleteSuppression/suppressions 状态——后端 /api/suppressions 的
+  // POST/GET/DELETE 全部在 Task 11 删除,这些是死代码(无消费方,调用即 404)。
+  // /api/baseline 重定义为 bulk-accept,用 bulkAccept action 取代。
   clearError: () => void
   // P3 Task 16:页面级 rescan 入口(项目右键 + 资产详情)预填 scope。
   // openRescan 传 initial 则预填(scopeType/scopePath),不传则默认 global。
@@ -146,7 +153,6 @@ export const useStore = create<State>((set, get) => ({
   scanEnabled: true,
   scanInterval: '',
   previewResult: null, editError: null,
-  suppressions: [],
   rescanOpen: false,
   rescanInitial: undefined,
   // Task 9:agentQuery — 全选聚合(?agent=all)或逗号分隔 IDs。
@@ -264,6 +270,21 @@ export const useStore = create<State>((set, get) => ({
     const q = agentID != null ? `?agent=${encodeURIComponent(agentID)}` : get().agentQuery()
     const res = await wrap(() => apiGet<Finding[]>(`/api/findings${q}`), set)
     if (res) set({ findings: res })
+  },
+  // Task 12:Finding 治理字段 CRUD。用 apiPost/apiDelete + wrap(与项目其他 action 一致),
+  // 不用 raw fetch + authHeaders(brief 写法,实际项目无此封装)。成功后 fetchFindings() 重拉
+  // (后端合并 finding-state 到 Finding 上,前端 store.findings 整体更新,消费方自动重渲染)。
+  setFindingState: async (fingerprint, status, priority, note) => {
+    await wrap(() => apiPost<FindingState>('/api/finding-state', { fingerprint, status, priority, note }), set)
+    await get().fetchFindings()
+  },
+  bulkAccept: async (fingerprints) => {
+    await wrap(() => apiPost('/api/finding-state/bulk-accept', { fingerprints, source: 'bulk-accept' }), set)
+    await get().fetchFindings()
+  },
+  resetFindingState: async (fingerprint) => {
+    await wrap(() => apiDelete(`/api/finding-state/${encodeURIComponent(fingerprint)}`), set)
+    await get().fetchFindings()
   },
   deleteHistory: async (id) => {
     await wrap(() => apiDelete(`/api/history/${id}`), set)
@@ -398,28 +419,6 @@ export const useStore = create<State>((set, get) => ({
     return r
   },
   clearEditError: () => set({ editError: null }),
-  // P3 抑制与 baseline:豁免列表 CRUD + baseline 生成(POST /api/baseline 跑全量扫描 + union 合并)。
-  // 成功后不自动重扫(brief 未要求);用户下次手动扫描时 suppressed 状态即反映。
-  fetchSuppressions: async () => {
-    const res = await wrap(() => apiGet<{ items: SuppressionItem[] }>('/api/suppressions'), set)
-    if (res) set({ suppressions: res.items ?? [] })
-  },
-  addSuppression: async (body) => {
-    const r = await wrap(() => apiPost<SuppressionItem>('/api/suppressions', body), set)
-    if (r) {
-      // 刷新豁免列表(新条目入列);不重扫,finding 的 suppressed 状态下次扫描才变。
-      get().fetchSuppressions()
-      return true
-    }
-    return false
-  },
-  deleteSuppression: async (id) => {
-    await wrap(() => apiDelete(`/api/suppressions/${encodeURIComponent(id)}`), set)
-    await get().fetchSuppressions()
-  },
-  generateBaseline: async () => {
-    return wrap(() => apiPost<BaselineResult>('/api/baseline'), set)
-  },
   clearError: () => set({ error: null, authError: false }),
   openRescan: (initial) => set({ rescanOpen: true, rescanInitial: initial }),
   closeRescan: () => set({ rescanOpen: false, rescanInitial: undefined }),

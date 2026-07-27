@@ -29,8 +29,8 @@ type Server struct {
 	Agents          []configengine.Agent
 	SelectedAgentID string
 	Editor          *editor.Editor
-	Runner          ScanRunner           // HTTP/scheduler/CLI 共用的扫描路径(接口可注入 spy 测试)
-	ScheduleManager *scheduler.Manager   // 多任务调度管理器(/api/schedules CRUD + /api/scheduler deprecated 转发)
+	Runner          ScanRunner         // HTTP/scheduler/CLI 共用的扫描路径(接口可注入 spy 测试)
+	ScheduleManager *scheduler.Manager // 多任务调度管理器(/api/schedules CRUD + /api/scheduler deprecated 转发)
 }
 
 // ScanRunner 抽象 *scan.Runner 的公共方法面,让 Server.Runner 可在测试中替换为 spy。
@@ -134,10 +134,14 @@ func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	api.GET("/history", s.getHistoryList)
 	api.GET("/history/:id", s.getHistoryDetail)
 	api.DELETE("/history/:id", s.deleteHistory)
-	api.POST("/suppressions", s.postSuppression)
-	api.GET("/suppressions", s.getSuppressions)
-	api.DELETE("/suppressions/:id", s.deleteSuppression)
 	api.POST("/baseline", s.postBaseline)
+	// 处置生命周期(取代 baseline + suppressions)
+	// prune-report 必须在 /:fp 前,避免路由冲突(Gin 静态优先匹配)。
+	api.POST("/finding-state", s.postFindingState)
+	api.GET("/finding-state/prune-report", s.getPruneReport)
+	api.GET("/finding-state/:fp", s.getFindingState)
+	api.DELETE("/finding-state/:fp", s.deleteFindingState)
+	api.POST("/finding-state/bulk-accept", s.postBulkAccept)
 	api.GET("/scheduler", s.getScheduler)
 	api.PUT("/scheduler", s.putScheduler)
 	api.GET("/schedules", s.getSchedules)

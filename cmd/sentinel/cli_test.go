@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	"code-agent-sentinel/internal/config"
-	"code-agent-sentinel/internal/security/suppression"
+	"code-agent-sentinel/internal/security/findingstate"
 )
 
 // TestRulesValidateReportsInvalid 验证 sentinel rules validate <file> 能检出非法 op。
@@ -65,9 +65,9 @@ func TestRulesListShowsBuiltin(t *testing.T) {
 	}
 }
 
-// TestBaselineCreate 验证 sentinel baseline --create 能跑全量扫描并把指纹写入 baseline.json。
-// Finding #2:--create 应 UNION(保留已有指纹 + 添加新发现),与 API postBaseline 一致,
-// 而非覆盖。预置一条不会在本次扫描复现的假指纹,验证 --create 后它仍被保留。
+// TestBaselineCreate 验证 sentinel baseline --create 能跑全量扫描并把指纹批量接受到 finding_states.yaml。
+// Task 11 语义变更:旧实现 union 到 baseline.json(已删);新实现调 BulkAccept 写 finding_states.yaml。
+// BulkAccept 不覆盖已有非 open 状态:预置一条 resolved 状态,验证 --create 后仍为 resolved(不被 accepted 覆盖)。
 func TestBaselineCreate(t *testing.T) {
 	home := t.TempDir()
 	// 构造一个会触发 baseline.wildcard-bash 的 settings.json
@@ -81,45 +81,55 @@ func TestBaselineCreate(t *testing.T) {
 	}
 
 	cfg := config.DefaultConfig()
-	baselinePath := cfg.ResolveBaselinePath(home)
+	statesPath := cfg.ResolveStatesPath(home)
 
-	// 预置一条不会在本次扫描复现的假指纹(模拟之前记录、当前不复现的旧 finding)
-	preseed := &suppression.BaselineSet{
-		Version:      "1",
-		GeneratedAt:  "2026-01-01T00:00:00Z",
-		Fingerprints: map[string]bool{"preseed-stale-fp": true},
-	}
-	if err := preseed.Save(baselinePath); err != nil {
-		t.Fatalf("预置 baseline 失败: %v", err)
+	// 预置一条不会在本次扫描复现的假指纹(resolved 状态,模拟之前已处置的旧 finding)
+	preseed := &findingstate.States{Items: []findingstate.State{
+		{Fingerprint: "preseed-resolved-fp", Status: findingstate.StatusResolved, Note: "之前已修复"},
+	}}
+	if err := preseed.Save(statesPath); err != nil {
+		t.Fatalf("预置 finding_states 失败: %v", err)
 	}
 
 	out, err := runBaselineCreate(cfg, home)
 	if err != nil {
 		t.Fatalf("baseline create error: %v\noutput: %s", err, out)
 	}
-	// baseline.json 应存在
-	if _, err := os.ReadFile(baselinePath); err != nil {
-		t.Fatalf("baseline.json 应存在: %v", err)
+	// finding_states.yaml 应存在
+	if _, err := os.ReadFile(statesPath); err != nil {
+		t.Fatalf("finding_states.yaml 应存在: %v", err)
 	}
-	// 应含指纹(baseline.wildcard-bash 命中 Bash(*))
-	bs, err := suppression.LoadBaseline(baselinePath)
+
+	// 验证:预置的 resolved 状态保留(不被 BulkAccept 覆盖为 accepted)
+	loaded, err := findingstate.Load(statesPath)
 	if err != nil {
-		t.Fatalf("加载 baseline 失败: %v", err)
+		t.Fatalf("加载 finding_states 失败: %v", err)
 	}
-	if bs == nil || len(bs.Fingerprints) == 0 {
-		t.Fatalf("baseline 应含至少一条指纹, got %+v", bs)
+	if loaded == nil {
+		t.Fatal("finding_states 为空")
 	}
-	// UNION 语义:预置的假指纹必须保留(覆盖语义会丢失它)
-	if !bs.Contains("preseed-stale-fp") {
-		t.Fatal("--create 应保留已有指纹(UNION 语义),预置假指纹被丢失(覆盖语义)")
+	var preseedKept bool
+	var acceptCount int
+	for _, it := range loaded.Items {
+		if it.Fingerprint == "preseed-resolved-fp" {
+			preseedKept = true
+			if it.Status != findingstate.StatusResolved {
+				t.Errorf("预置 resolved 状态被覆盖为 %s(BulkAccept 不应覆盖非 open)", it.Status)
+			}
+		}
+		if it.Status == findingstate.StatusAccepted {
+			acceptCount++
+		}
 	}
-	// UNION 后指纹数应 >= 2:预置 1 条 + 本次扫描新发现至少 1 条
-	if len(bs.Fingerprints) < 2 {
-		t.Fatalf("UNION 后指纹数应 >= 2(预置 1 + 新发现 >=1), got %d", len(bs.Fingerprints))
+	if !preseedKept {
+		t.Error("预置的 resolved 状态被删除(应保留)")
+	}
+	if acceptCount == 0 {
+		t.Error("应至少有 1 条 accepted(baseline.wildcard-bash 命中 Bash(*))")
 	}
 }
 
-// TestBaselinePrune 验证 sentinel baseline --prune 删除已不复现的指纹。
+// TestBaselinePrune 验证 sentinel baseline --prune 删除已不复现的孤儿状态。
 func TestBaselinePrune(t *testing.T) {
 	home := t.TempDir()
 	claudeDir := filepath.Join(home, ".claude")
@@ -132,47 +142,41 @@ func TestBaselinePrune(t *testing.T) {
 	}
 
 	cfg := config.DefaultConfig()
-	baselinePath := cfg.ResolveBaselinePath(home)
+	statesPath := cfg.ResolveStatesPath(home)
 
-	// (1) 先 create 生成 baseline
+	// (1) 先 create 生成 finding_states(含 baseline.wildcard-bash 的 fingerprint)
 	if _, err := runBaselineCreate(cfg, home); err != nil {
 		t.Fatalf("baseline create error: %v", err)
 	}
-	bs, err := suppression.LoadBaseline(baselinePath)
+	st, err := findingstate.Load(statesPath)
 	if err != nil {
-		t.Fatalf("加载 baseline 失败: %v", err)
+		t.Fatalf("加载 finding_states 失败: %v", err)
 	}
-	if len(bs.Fingerprints) == 0 {
-		t.Fatal("baseline create 应产出指纹")
+	if len(st.Items) == 0 {
+		t.Fatal("baseline create 应产出处置状态")
 	}
-	fpCount := len(bs.Fingerprints)
+	countBefore := len(st.Items)
 
-	// (2) 往 baseline 塞一条假指纹(模拟已不复现的旧 finding)
-	for k := range bs.Fingerprints {
-		bs.Fingerprints["fake-stale-fingerprint-"+k] = true
-		break
-	}
-	if len(bs.Fingerprints) != fpCount+1 {
-		t.Fatalf("塞假指纹后应有 %d 条, got %d", fpCount+1, len(bs.Fingerprints))
-	}
-	if err := bs.Save(baselinePath); err != nil {
+	// (2) 塞一条假指纹(模拟已不复现的旧 finding,accepted 状态)
+	st.Set("fake-stale-fingerprint", findingstate.State{Status: findingstate.StatusAccepted, Source: findingstate.SourceManual})
+	if err := st.Save(statesPath); err != nil {
 		t.Fatal(err)
 	}
 
-	// (3) prune:应删掉假指纹,保留真实指纹
+	// (3) prune:应删掉假指纹(本轮未检出),保留真实指纹
 	if _, err := runBaselinePrune(cfg, home); err != nil {
 		t.Fatalf("baseline prune error: %v", err)
 	}
-	bs2, err := suppression.LoadBaseline(baselinePath)
+	st2, err := findingstate.Load(statesPath)
 	if err != nil {
-		t.Fatalf("加载 pruned baseline 失败: %v", err)
+		t.Fatalf("加载 pruned finding_states 失败: %v", err)
 	}
-	if len(bs2.Fingerprints) != fpCount {
-		t.Fatalf("prune 后应剩 %d 条指纹(=复现的), got %d", fpCount, len(bs2.Fingerprints))
+	if len(st2.Items) != countBefore {
+		t.Fatalf("prune 后应剩 %d 条(=复现的), got %d", countBefore, len(st2.Items))
 	}
-	for k := range bs2.Fingerprints {
-		if strings.HasPrefix(k, "fake-stale-fingerprint-") {
-			t.Fatalf("prune 应删除假指纹,但仍存在: %s", k)
+	for _, it := range st2.Items {
+		if it.Fingerprint == "fake-stale-fingerprint" {
+			t.Fatalf("prune 应删除假指纹,但仍存在: %s", it.Fingerprint)
 		}
 	}
 }

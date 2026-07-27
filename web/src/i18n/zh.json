@@ -1,5 +1,5 @@
 {
-  "nav": { "dashboard": "仪表盘", "assets": "资产发现", "findings": "风险管理", "history": "历史扫描", "settings": "系统设置" },
+  "nav": { "dashboard": "仪表盘", "assets": "资产发现", "findings": "风险管理", "history": "检测任务", "settings": "系统设置" },
   "topbar": { "rescan": "安全检测", "scanning": "检测中…", "language": "语言", "theme": "主题", "leafAsset": "资产详情", "leafScan": "扫描详情", "dark": "深", "light": "浅" },
   "rescan": {
     "title": "安全检测配置",
@@ -51,6 +51,7 @@
     "notScanned": "未扫描"
   },
   "assets": {
+    "intro": "浏览各 Coding Agent 的配置资产,查看其能力与安全风险",
     "viewLabel": "视图",
     "tagLabel": "标签",
     "typeLabel": "类型",
@@ -92,6 +93,15 @@
     "colFindings": "发现",
     "colRiskCount": "风险数量",
     "colDetectors": "检测器",
+    "colScope": "检测范围",
+    "colScopePath": "检测目标",
+    "scope": {
+      "global": "全局",
+      "user": "用户级",
+      "project": "项目",
+      "asset": "资产",
+      "asset-id": "资产 ID"
+    },
     "colBatch": "批次",
     "colAction": "操作",
     "confirmDelete": "确认删除此扫描记录?",
@@ -104,7 +114,8 @@
     "batchNAgents": "{{count}} 个 Agent",
     "batchTag": "批次 {{id}}",
     "batchAgentsCount": "本批次共 {{count}} 个 Agent",
-    "singleAgentHint": "单 Agent 扫描"
+    "singleAgentHint": "单 Agent 扫描",
+    "batchSiblings": "批次内其他 Agent"
   },
   "settings": {
     "binaryPath": "二进制路径",
@@ -147,24 +158,17 @@
     "active": "活跃(未抑制)",
     "assetInfo": "资产信息",
     "assetPath": "资产文件路径",
-    "addSuppr": "添加到 suppressions",
-    "addBaseline": "加入 baseline",
-    "noFingerprint": "无法抑制(无指纹)",
-    "noFingerprintTip": "该 finding 无规则指纹(非 RulesDetector 产生),无法按指纹抑制",
-    "baselineConfirm": "加入 baseline?",
-    "baselineConfirmDesc": "将跑一次全量扫描,把所有当前 finding 的指纹合并到 baseline。",
-    "confirm": "确认",
-    "add": "添加",
-    "fingerprintLabel": "规则指纹",
-    "reasonLabel": "豁免原因",
-    "reasonPlaceholder": "如:已知风险,经评审接受",
-    "reasonHint": "豁免后该指纹的 finding 将标记为「已抑制」,不计入健康分。下次扫描生效。",
+    "noFingerprint": "该 finding 无规则指纹(非 RulesDetector 产生),无法按指纹处置",
     "loadFailed": "资产读取失败",
     "notFound": "未找到资产",
-    "supprSuccess": "已添加豁免,下次扫描生效",
-    "supprFailed": "添加豁免失败",
-    "baselineFailed": "Baseline 生成失败",
-    "baselineUpdated": "Baseline 已更新(总计 {{total}} 指纹,新增 {{added}}),下次扫描生效"
+    "disposition": "处置",
+    "status": "状态",
+    "priority": "优先级",
+    "notePlaceholder": "处置备注(可选)",
+    "save": "保存",
+    "resetToOpen": "重置为未处置",
+    "saved": "已保存处置",
+    "reset": "已重置为未处置"
   },
   "ruleDrawer": {
     "title": "规则详情",
@@ -264,6 +268,7 @@
   "assetDetail": {
     "notFound": "未找到资产",
     "metaTitle": "属性",
+    "capability": "能力",
     "back": "返回资产列表",
     "parseError": "解析失败",
     "path": "路径",
@@ -283,6 +288,36 @@
   "assetDrawer": {
     "title": "资产详情"
   },
+  "capability": {
+    "allowedTools": "允许的工具",
+    "allTools": "全部工具(未限制)",
+    "description": "描述",
+    "hookEvent": "事件",
+    "hookMatcher": "匹配器",
+    "hookCommand": "命令",
+    "mcpTransport": "传输",
+    "mcpCommand": "命令",
+    "mcpArgs": "参数",
+    "mcpEnv": "环境变量",
+    "mcpTools": "工具列表",
+    "mcpToolsUnparsed": "未解析(需运行 server)",
+    "envKeys": "环境变量",
+    "model": "模型",
+    "skipDangerous": "跳过危险确认",
+    "enabled": "已启用",
+    "allow": "允许",
+    "deny": "拒绝",
+    "ask": "询问",
+    "pluginVersion": "版本",
+    "pluginAuthor": "作者",
+    "pluginMarket": "市场",
+    "memoryOutline": "标题大纲",
+    "scriptLang": "语言",
+    "scriptLines": "行数",
+    "credKind": "类型",
+    "credPath": "路径",
+    "noFields": "无结构化能力字段"
+  },
   "assetStat": {
     "title": "资产统计",
     "skill": "技能",
@@ -292,7 +327,11 @@
     "script": "脚本",
     "hook": "Hook",
     "mcp": "MCP",
-    "memory": "记忆"
+    "memory": "记忆",
+    "settings": "设置",
+    "permissions": "权限",
+    "keybinding": "快捷键",
+    "credential": "凭据"
   },
   "rawFile": {
     "loadFailed": "读取失败",
@@ -356,7 +395,30 @@
     "supprTooltip": "抑制来源:{{source}}{{reason}}",
     "reasonPart": " · 原因:{{reason}}",
     "empty": "暂无发现 · 扫描后显示",
-    "noMatch": "无匹配发现"
+    "noMatch": "无匹配发现",
+    "viewFlat": "平铺",
+    "viewByRule": "按规则聚合",
+    "catAll": "全部类别",
+    "statusAll": "全部状态",
+    "prioAll": "全部优先级",
+    "typeAll": "全部类型",
+    "hits": "命中",
+    "status": {
+      "open": "未处置",
+      "in_progress": "处置中",
+      "resolved": "已解决",
+      "false_positive": "误报",
+      "accepted": "已接受"
+    }
+  },
+  "category": {
+    "destructive_command": "危险命令",
+    "prompt_injection": "提示注入",
+    "baseline": "配置基线",
+    "skill_abuse": "技能滥用",
+    "combo": "组合风险",
+    "load_error": "加载错误",
+    "unknown": "未知"
   },
   "diff": {
     "title": "预览变更",

@@ -1,5 +1,5 @@
 {
-  "nav": { "dashboard": "Dashboard", "assets": "Assets", "findings": "Findings", "history": "History", "settings": "Settings" },
+  "nav": { "dashboard": "Dashboard", "assets": "Assets", "findings": "Findings", "history": "Scan Tasks", "settings": "Settings" },
   "topbar": { "rescan": "Security Scan", "scanning": "Scanning…", "language": "Language", "theme": "Theme", "leafAsset": "Asset Details", "leafScan": "Scan Details", "dark": "Dark", "light": "Light" },
   "rescan": {
     "title": "Security Scan Config",
@@ -51,6 +51,7 @@
     "notScanned": "Not scanned"
   },
   "assets": {
+    "intro": "Browse configuration assets of each Coding Agent; inspect their capabilities and security risks.",
     "viewLabel": "View",
     "tagLabel": "Tag",
     "typeLabel": "Type",
@@ -92,6 +93,15 @@
     "colFindings": "Findings",
     "colRiskCount": "Risk Count",
     "colDetectors": "Detectors",
+    "colScope": "Scope",
+    "colScopePath": "Target",
+    "scope": {
+      "global": "Global",
+      "user": "User",
+      "project": "Project",
+      "asset": "Asset",
+      "asset-id": "Asset ID"
+    },
     "colBatch": "Batch",
     "colAction": "Action",
     "confirmDelete": "Delete this scan record?",
@@ -104,7 +114,8 @@
     "batchNAgents": "{{count}} Agents",
     "batchTag": "Batch {{id}}",
     "batchAgentsCount": "{{count}} agents in this batch",
-    "singleAgentHint": "Single agent scan"
+    "singleAgentHint": "Single agent scan",
+    "batchSiblings": "Other agents in this batch"
   },
   "settings": {
     "binaryPath": "Binary path",
@@ -147,24 +158,17 @@
     "active": "Active (not suppressed)",
     "assetInfo": "Asset Info",
     "assetPath": "Asset File Path",
-    "addSuppr": "Add to suppressions",
-    "addBaseline": "Add to baseline",
-    "noFingerprint": "Cannot suppress (no fingerprint)",
-    "noFingerprintTip": "This finding has no rule fingerprint (not produced by RulesDetector) and cannot be suppressed by fingerprint",
-    "baselineConfirm": "Add to baseline?",
-    "baselineConfirmDesc": "Will run a full scan and merge all current finding fingerprints into baseline.",
-    "confirm": "Confirm",
-    "add": "Add",
-    "fingerprintLabel": "Rule fingerprint",
-    "reasonLabel": "Suppression reason",
-    "reasonPlaceholder": "e.g. Known risk, accepted after review",
-    "reasonHint": "Once suppressed, findings with this fingerprint are marked 'suppressed' and excluded from the health score. Takes effect on next scan.",
+    "noFingerprint": "This finding has no rule fingerprint (not produced by RulesDetector) and cannot be dispositioned by fingerprint",
     "loadFailed": "Asset load failed",
     "notFound": "Asset not found",
-    "supprSuccess": "Suppression added; takes effect on next scan",
-    "supprFailed": "Failed to add suppression",
-    "baselineFailed": "Baseline generation failed",
-    "baselineUpdated": "Baseline updated ({{total}} total fingerprints, {{added}} added); takes effect on next scan"
+    "disposition": "Disposition",
+    "status": "Status",
+    "priority": "Priority",
+    "notePlaceholder": "Disposition note (optional)",
+    "save": "Save",
+    "resetToOpen": "Reset to Open",
+    "saved": "Disposition saved",
+    "reset": "Reset to open"
   },
   "ruleDrawer": {
     "title": "Rule Details",
@@ -264,6 +268,7 @@
   "assetDetail": {
     "notFound": "Asset not found",
     "metaTitle": "Properties",
+    "capability": "Capabilities",
     "back": "Back to assets",
     "parseError": "Parse error",
     "path": "Path",
@@ -283,6 +288,36 @@
   "assetDrawer": {
     "title": "Asset Details"
   },
+  "capability": {
+    "allowedTools": "Allowed Tools",
+    "allTools": "All tools (unrestricted)",
+    "description": "Description",
+    "hookEvent": "Event",
+    "hookMatcher": "Matcher",
+    "hookCommand": "Command",
+    "mcpTransport": "Transport",
+    "mcpCommand": "Command",
+    "mcpArgs": "Args",
+    "mcpEnv": "Environment",
+    "mcpTools": "Tools",
+    "mcpToolsUnparsed": "Unparsed (requires running server)",
+    "envKeys": "Environment",
+    "model": "Model",
+    "skipDangerous": "Skip Dangerous Prompts",
+    "enabled": "Enabled",
+    "allow": "Allow",
+    "deny": "Deny",
+    "ask": "Ask",
+    "pluginVersion": "Version",
+    "pluginAuthor": "Author",
+    "pluginMarket": "Marketplace",
+    "memoryOutline": "Outline",
+    "scriptLang": "Language",
+    "scriptLines": "Lines",
+    "credKind": "Kind",
+    "credPath": "Path",
+    "noFields": "No structured capability fields"
+  },
   "assetStat": {
     "title": "Asset Stats",
     "skill": "Skill",
@@ -292,7 +327,11 @@
     "script": "Script",
     "hook": "Hook",
     "mcp": "MCP",
-    "memory": "Memory"
+    "memory": "Memory",
+    "settings": "Settings",
+    "permissions": "Permissions",
+    "keybinding": "Keybinding",
+    "credential": "Credential"
   },
   "rawFile": {
     "loadFailed": "Load failed",
@@ -356,7 +395,30 @@
     "supprTooltip": "Suppression source: {{source}}{{reason}}",
     "reasonPart": " · Reason: {{reason}}",
     "empty": "No findings · run a scan to see results",
-    "noMatch": "No matching findings"
+    "noMatch": "No matching findings",
+    "viewFlat": "Flat",
+    "viewByRule": "By Rule",
+    "catAll": "All Categories",
+    "statusAll": "All Statuses",
+    "prioAll": "All Priorities",
+    "typeAll": "All Types",
+    "hits": "hits",
+    "status": {
+      "open": "Open",
+      "in_progress": "In Progress",
+      "resolved": "Resolved",
+      "false_positive": "False Positive",
+      "accepted": "Accepted"
+    }
+  },
+  "category": {
+    "destructive_command": "Dangerous Command",
+    "prompt_injection": "Prompt Injection",
+    "baseline": "Config Baseline",
+    "skill_abuse": "Skill Abuse",
+    "combo": "Combinatorial Risk",
+    "load_error": "Load Error",
+    "unknown": "Unknown"
   },
   "diff": {
     "title": "Preview changes",

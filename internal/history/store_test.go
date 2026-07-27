@@ -361,3 +361,33 @@ func TestLatestForAgents_EmptyStringMeansAll(t *testing.T) {
 		t.Errorf("agent-b 应取 b-rec: got %+v", got["agent-b"])
 	}
 }
+
+func TestListIncludesScopePath(t *testing.T) {
+	dir := t.TempDir()
+	st := NewStore(dir)
+	rec := ScanRecord{
+		ID:        "20260727-120000-abcdef01",
+		AgentID:   "claude-code",
+		StartedAt: time.Now(),
+		Scope:     "project",
+		ScopePath: "/home/user/proj",
+		Findings:  []security.Finding{},
+	}
+	if err := st.Save(rec); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+
+	sums, err := st.List()
+	if err != nil {
+		t.Fatalf("List: %v", err)
+	}
+	if len(sums) != 1 {
+		t.Fatalf("len = %d, want 1", len(sums))
+	}
+	if sums[0].Scope != "project" {
+		t.Errorf("Scope = %q", sums[0].Scope)
+	}
+	if sums[0].ScopePath != "/home/user/proj" {
+		t.Errorf("ScopePath = %q, want /home/user/proj", sums[0].ScopePath)
+	}
+}

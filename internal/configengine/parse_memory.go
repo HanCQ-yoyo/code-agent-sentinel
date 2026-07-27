@@ -3,8 +3,34 @@ package configengine
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
+
+var headingRe = regexp.MustCompile(`^(#{1,3})\s+(.+?)\s*$`)
+
+// fillMemoryOutline 提取 memory 资产 Content 的 H1-H3 标题大纲,填入 Fields["outline"]。
+// 每条:{level, title, line}(line 1-based)。无标题 → 空切片(非 nil)。
+// 这是 memory 唯一的能力信号(memory 无 frontmatter)。
+func fillMemoryOutline(a *Asset) {
+	if a.Fields == nil {
+		a.Fields = map[string]any{}
+	}
+	lines := strings.Split(a.Content, "\n")
+	outline := []map[string]any{}
+	for i, line := range lines {
+		m := headingRe.FindStringSubmatch(line)
+		if m == nil {
+			continue
+		}
+		outline = append(outline, map[string]any{
+			"level": len(m[1]),
+			"title": m[2],
+			"line":  i + 1,
+		})
+	}
+	a.Fields["outline"] = outline
+}
 
 // parseMemory 解析 CLAUDE.md + memory/ 目录(每条 memory 文件一条资产)。
 //
@@ -21,6 +47,7 @@ func parseMemory(claudeDir string, scope Scope) ([]Asset, error) {
 		}
 		data, _ := os.ReadFile(p)
 		a := Asset{Type: AssetMemory, Scope: scope, SourcePath: p, Name: name, Content: string(data)}
+		fillMemoryOutline(&a)
 		fillHash(&a)
 		out = append(out, a)
 	}
@@ -36,6 +63,7 @@ func parseMemory(claudeDir string, scope Scope) ([]Asset, error) {
 		p := filepath.Join(memDir, en.Name())
 		data, _ := os.ReadFile(p)
 		a := Asset{Type: AssetMemory, Scope: scope, SourcePath: p, Name: en.Name(), Content: string(data)}
+		fillMemoryOutline(&a)
 		fillHash(&a)
 		out = append(out, a)
 	}

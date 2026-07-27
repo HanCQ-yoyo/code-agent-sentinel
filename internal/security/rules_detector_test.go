@@ -13,7 +13,6 @@ import (
 
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/security/ruleengine"
-	"code-agent-sentinel/internal/security/suppression"
 )
 
 // rules_detector_test.go — Task 11 RulesDetector 测试
@@ -247,117 +246,6 @@ func hasLoadError(fs []Finding) bool {
 		}
 	}
 	return false
-}
-
-// TestRulesDetectorSuppressionBaselineHit 验证 baseline 命中 → finding 被标记 suppressed。
-// 先空 baseline 扫描取一条 finding 的 fingerprint,写入 baseline.json,再扫该 finding 应被抑制。
-func TestRulesDetectorSuppressionBaselineHit(t *testing.T) {
-	home := newRulesHome(t)
-
-	// 第一次扫描:无 baseline → finding 未抑制
-	d1 := NewRulesDetector(home, nil)
-	assets := []configengine.Asset{
-		{ID: "perm-1", Type: configengine.AssetPermissions, Name: "permissions",
-			Fields: map[string]any{"allow": []any{"Bash(*)"}}},
-	}
-	fs1, err := d1.Scan(context.Background(), assets)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var target *Finding
-	for i := range fs1 {
-		if fs1[i].RuleID == "baseline.wildcard-bash" {
-			target = &fs1[i]
-			break
-		}
-	}
-	if target == nil {
-		t.Fatalf("未检出 baseline.wildcard-bash: %+v", fs1)
-	}
-	if target.Suppressed {
-		t.Fatal("无 baseline 时 finding 不应被抑制")
-	}
-
-	// 用 RulesDetector 的规则集算 fingerprint(规则结构稳定,baseRules 即扫描用的同一批规则)。
-	fp := ""
-	for _, r := range d1.rulesForTest() {
-		if r.ID == "baseline.wildcard-bash" {
-			fp = ruleengine.Fingerprint(r, "perm-1")
-			break
-		}
-	}
-	if fp == "" {
-		t.Fatal("未找到 baseline.wildcard-bash 规则算 fingerprint")
-	}
-
-	// 写 baseline.json 含该 fingerprint
-	bs := &suppression.BaselineSet{Fingerprints: map[string]bool{fp: true}}
-	baselinePath := filepath.Join(home, ".claude-sentinel", "baseline.json")
-	if err := bs.Save(baselinePath); err != nil {
-		t.Fatal(err)
-	}
-
-	// 第二次扫描:baseline 命中 → finding 被抑制
-	d2 := NewRulesDetector(home, nil)
-	fs2, err := d2.Scan(context.Background(), assets)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var suppressed *Finding
-	for i := range fs2 {
-		if fs2[i].RuleID == "baseline.wildcard-bash" {
-			suppressed = &fs2[i]
-			break
-		}
-	}
-	if suppressed == nil {
-		t.Fatalf("第二次扫描未检出 baseline.wildcard-bash: %+v", fs2)
-	}
-	if !suppressed.Suppressed {
-		t.Fatal("baseline 命中应标记 Suppressed=true")
-	}
-	if suppressed.Suppression != "baseline" {
-		t.Fatalf("Suppression = %q, want baseline", suppressed.Suppression)
-	}
-}
-
-// TestRulesDetectorSuppressionInline 验证行内豁免(rule+asset 档)命中 → Suppression="inline"。
-func TestRulesDetectorSuppressionInline(t *testing.T) {
-	home := newRulesHome(t)
-	// 写 suppressions.yaml:豁免 baseline.wildcard-bash 在 perm-1 资产上
-	supprPath := filepath.Join(home, ".claude-sentinel", "suppressions.yaml")
-	supprs := &suppression.Suppressions{Items: []suppression.Item{
-		{RuleID: "baseline.wildcard-bash", AssetID: "perm-1", Reason: "已知风险,接受"},
-	}}
-	if err := supprs.Save(supprPath); err != nil {
-		t.Fatal(err)
-	}
-
-	d := NewRulesDetector(home, nil)
-	assets := []configengine.Asset{
-		{ID: "perm-1", Type: configengine.AssetPermissions, Name: "permissions",
-			Fields: map[string]any{"allow": []any{"Bash(*)"}}},
-	}
-	fs, err := d.Scan(context.Background(), assets)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var hit *Finding
-	for i := range fs {
-		if fs[i].RuleID == "baseline.wildcard-bash" {
-			hit = &fs[i]
-			break
-		}
-	}
-	if hit == nil {
-		t.Fatalf("未检出 baseline.wildcard-bash: %+v", fs)
-	}
-	if !hit.Suppressed || hit.Suppression != "inline" {
-		t.Fatalf("inline 豁免应命中: suppressed=%v suppression=%q", hit.Suppressed, hit.Suppression)
-	}
-	if hit.Reason != "已知风险,接受" {
-		t.Fatalf("Reason = %q, want '已知风险,接受'", hit.Reason)
-	}
 }
 
 // TestRulesDetectorProjectRuleScoped 验证项目规则隔离:
@@ -719,7 +607,7 @@ func TestRulesDetector_DestructiveCoversCommandAssets(t *testing.T) {
 	d := NewRulesDetector(home, nil)
 
 	cases := []struct {
-		name string
+		name  string
 		asset configengine.Asset
 	}{
 		{
@@ -1209,5 +1097,186 @@ func TestManagedMCPPresentInfoRule(t *testing.T) {
 	}
 	if !hasRuleID(findings, "baseline.managed-mcp-present") {
 		t.Fatalf("managed=true 应命中 baseline.managed-mcp-present(info): %+v", findings)
+	}
+}
+
+// ── Task 7: emit 流水线 —— negation drop + applyFindingState + 资产内去重 ──
+//
+// 4 个测试覆盖:
+//   - negation drop(content 字段命中行首"禁止" → pre-emit 丢弃,不进处置生命周期)
+//   - negation 不作用于 command 字段命中(locs 空 → IsNegatedByContext 返回 false,避免假阴性)
+//   - 同资产同行多规则命中 → 合并为 1 条 group(ContributingRuleIDs 含其他规则,Severity 取最大)
+//   - 同规则命中不同资产 → 不合并(各一条)
+
+// newTestDetector 构造一个注入指定规则 YAML 的 RulesDetector(测试专用)。
+// 在 <home>/.claude-sentinel/rules/test.yaml 写入 rulesYAML,NewRulesDetector 经
+// LoadForScan 加载。沿用 newRulesHome + 写文件 + NewRulesDetector 既有模式。
+func newTestDetector(t *testing.T, rulesYAML string) *RulesDetector {
+	t.Helper()
+	home := newRulesHome(t)
+	rulesDir := filepath.Join(home, ".claude-sentinel", "rules")
+	if err := os.MkdirAll(rulesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rulesDir, "test.yaml"), []byte(rulesYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return NewRulesDetector(home, nil)
+}
+
+// testAsset 构造一个指定类型 + content 的 Asset(测试专用)。
+// assetTypeStr 映射到 configengine.AssetType:"skill"→AssetSkill, "hook"→AssetHook 等。
+func testAsset(id, assetTypeStr, content string) configengine.Asset {
+	var t configengine.AssetType
+	switch assetTypeStr {
+	case "skill":
+		t = configengine.AssetSkill
+	case "hook":
+		t = configengine.AssetHook
+	case "mcp_server":
+		t = configengine.AssetMCPServer
+	case "script":
+		t = configengine.AssetScript
+	case "command":
+		t = configengine.AssetCommand
+	case "agent":
+		t = configengine.AssetAgent
+	case "memory":
+		t = configengine.AssetMemory
+	case "permissions":
+		t = configengine.AssetPermissions
+	case "settings":
+		t = configengine.AssetSettings
+	default:
+		t = configengine.AssetType(assetTypeStr)
+	}
+	return configengine.Asset{
+		ID:      id,
+		Type:    t,
+		Name:    assetTypeStr,
+		Content: content,
+	}
+}
+
+// TestNegationDropSuppressed 验证 negation drop:
+// 一条 injection 规则命中 content,但行首有"禁止" → 不应出现在 findings。
+// negation drop 在 regex emit 点(safe-line 检查后、Fingerprint 前)丢弃,
+// 不进处置生命周期,只计计数。
+func TestNegationDropSuppressed(t *testing.T) {
+	d := newTestDetector(t, `
+rules:
+  - id: injection.test-negation
+    severity: high
+    asset_type: skill
+    description: "test"
+    match: { field: content, op: contains, value: "rm -rf" }
+`)
+	a := testAsset("skill:demo", "skill", "禁止使用 rm -rf /\n这是说明")
+	out, _ := d.Scan(context.Background(), []configengine.Asset{a})
+	for _, f := range out {
+		if f.RuleID == "injection.test-negation" {
+			t.Fatalf("negation-suppressed finding should not be emitted: %+v", f)
+		}
+	}
+}
+
+// TestNegationNotAppliedToCommandField 验证 negation 不作用于 command 字段命中:
+// hook 的 command 字段命中某规则,行首"禁止"不应抑制。
+// 原因:command 字段命中无 Locations(无行位置),IsNegatedByContext 返回 false。
+// 设计意图:避免假阴性 —— `禁止: rm -rf` 注释里的否定词不能让真实命令变安全。
+//
+// 注意:本测试用 metadata.domain=test(非 filesystem/git/database),避免语义 Deny 关卡
+// 提前介入(Gate 1 会对该域所有规则 continue,正则根本不跑)。negation drop 只在正则 emit
+// 点生效,故须绕开语义解析器。
+func TestNegationNotAppliedToCommandField(t *testing.T) {
+	d := newTestDetector(t, `
+rules:
+  - id: injection.test-cmd
+    severity: high
+    asset_type: hook
+    description: "test"
+    match: { field: command, op: contains, value: "forbidden-pattern" }
+`)
+	a := testAsset("hook:demo", "hook", "")
+	a.Fields = map[string]any{"command": "禁止 forbidden-pattern"}
+	out, _ := d.Scan(context.Background(), []configengine.Asset{a})
+	found := false
+	for _, f := range out {
+		if f.RuleID == "injection.test-cmd" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("command-field match must NOT be negation-suppressed (would cause false negative)")
+	}
+}
+
+// TestIntraAssetDedupMergesSameLine 验证资产内去重:
+// 两条规则都命中 skill 同一行(都 contains "rm -rf")→ 合并为 1 条 group。
+// group 取最大 severity(high),ContributingRuleIDs 含另一规则。
+func TestIntraAssetDedupMergesSameLine(t *testing.T) {
+	d := newTestDetector(t, `
+rules:
+  - id: injection.rule-a
+    severity: high
+    asset_type: skill
+    description: "rule A"
+    match: { field: content, op: contains, value: "rm -rf" }
+  - id: injection.rule-b
+    severity: medium
+    asset_type: skill
+    description: "rule B"
+    match: { field: content, op: contains, value: "rm -rf" }
+`)
+	a := testAsset("skill:demo", "skill", "run rm -rf / to clean")
+	out, _ := d.Scan(context.Background(), []configengine.Asset{a})
+	var group *Finding
+	for i := range out {
+		if out[i].RuleID == "injection.rule-a" || out[i].RuleID == "injection.rule-b" {
+			group = &out[i]
+			break
+		}
+	}
+	if group == nil {
+		t.Fatal("no finding emitted")
+	}
+	// 合并后只剩一条 group,另一规则进 ContributingRuleIDs
+	totalForLine := 0
+	for _, f := range out {
+		if f.AssetID == "skill:demo" && (f.RuleID == "injection.rule-a" || f.RuleID == "injection.rule-b") {
+			totalForLine++
+		}
+	}
+	if totalForLine != 1 {
+		t.Errorf("expected 1 merged group, got %d", totalForLine)
+	}
+	// group 取最大 severity(high)
+	if group.Severity != SeverityHigh {
+		t.Errorf("group severity = %s, want high", group.Severity)
+	}
+}
+
+// TestIntraAssetDedupDifferentAssetsNotMerged 验证跨资产不合并:
+// 同规则命中两个不同资产 → 各一条(不合并,跨资产聚合是聚合视图的事)。
+func TestIntraAssetDedupDifferentAssetsNotMerged(t *testing.T) {
+	d := newTestDetector(t, `
+rules:
+  - id: injection.rule-a
+    severity: high
+    asset_type: skill
+    description: "rule A"
+    match: { field: content, op: contains, value: "rm -rf" }
+`)
+	a1 := testAsset("skill:one", "skill", "rm -rf /")
+	a2 := testAsset("skill:two", "skill", "rm -rf /")
+	out, _ := d.Scan(context.Background(), []configengine.Asset{a1, a2})
+	count := 0
+	for _, f := range out {
+		if f.RuleID == "injection.rule-a" {
+			count++
+		}
+	}
+	if count != 2 {
+		t.Errorf("expected 2 findings (different assets), got %d", count)
 	}
 }

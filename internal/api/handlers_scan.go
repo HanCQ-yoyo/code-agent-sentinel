@@ -114,6 +114,8 @@ func (s *Server) getScanResult(c *gin.Context) {
 		c.JSON(http.StatusOK, struct{}{})
 		return
 	}
+	// Category 派生:API 读时 attach(detector 不填,持久化空,读时重新计算)。
+	latest.Findings = attachCategory(latest.Findings)
 	c.JSON(http.StatusOK, latest)
 }
 
