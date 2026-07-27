@@ -205,6 +205,34 @@ func TestListProjectsPrefersKnownProjects(t *testing.T) {
 	}
 }
 
+// TestDiscoverCodexAuthJsonCredential 验证 C4:Codex 全局 ~/.codex/auth.json 发现为 credential 资产。
+// Content 必须为空(不暴露凭据明文),kind=auth,scope=global。
+func TestDiscoverCodexAuthJsonCredential(t *testing.T) {
+	home, codex := codexFixture(t)
+	os.WriteFile(filepath.Join(codex, "config.toml"), []byte(`model = "x"`), 0o644)
+	os.WriteFile(filepath.Join(codex, "auth.json"), []byte(`{"token":"sk-xxx"}`), 0o644)
+	eng := &Engine{HomeDir: home, ClaudeDir: codex, Kind: "codex"}
+	inv, err := eng.Discover()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cred *Asset
+	for i := range inv.Assets {
+		if inv.Assets[i].Type == AssetCredential {
+			cred = &inv.Assets[i]
+		}
+	}
+	if cred == nil {
+		t.Fatal("应发现 ~/.codex/auth.json 为 credential 资产")
+	}
+	if cred.Fields["kind"] != "auth" {
+		t.Fatalf("kind = %v, want auth", cred.Fields["kind"])
+	}
+	if cred.Content != "" {
+		t.Fatalf("credential Content 必须为空, got %q", cred.Content)
+	}
+}
+
 // TestCodexProjectDotCodexConfig 验证 C2:项目级 <project>/.codex/config.toml 发现。
 // KnownProjects 注入的项目下放 .codex/config.toml(含 sandbox_mode),应产出 scope=project
 // 的 settings 资产且 Fields["sandbox_mode"] 正确。

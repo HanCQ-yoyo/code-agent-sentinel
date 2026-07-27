@@ -33,6 +33,9 @@ func (e *Engine) discoverCodex() (Inventory, error) {
 	if a := codexAgentsMDAsset(filepath.Join(codex, "AGENTS.md"), ScopeGlobal); a != nil {
 		inv.Assets = append(inv.Assets, *a)
 	}
+	// auth.json:Codex 认证凭据(规格 §3.5)。parseCredentials 扫顶层凭据文件,
+	// auth.json 命中 credential 资产(Content 空,不暴露明文)。
+	inv.Assets = append(inv.Assets, parseCredentials(codex, ScopeGlobal)...)
 	// prompts/:可复用提示模板(等同 Claude skills),每个 .md 一条 skill 资产。
 	if a, _ := parseMarkdownDir(filepath.Join(codex, "prompts"), AssetSkill, ScopeGlobal); a != nil {
 		inv.Assets = append(inv.Assets, a...)

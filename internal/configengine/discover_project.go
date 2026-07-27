@@ -87,6 +87,9 @@ func (e *Engine) discoverOneProject(inv *Inventory, p Project) {
 		}
 	}
 	inv.Assets = append(inv.Assets, parseScripts(projAssets, d)...)
+	// L6:项目根凭据文件(.env/*.pem/.netrc 等)→ credential 资产(规格 §8.3)。
+	// 只扫项目根顶层,不进 .git/node_modules。auth.json 等也命中。
+	inv.Assets = append(inv.Assets, parseCredentials(p.Path, ScopeProject)...)
 }
 
 // readProjectList 从 ~/.claude.json 的 projects 字段列出已知项目。
