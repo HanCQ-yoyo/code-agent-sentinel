@@ -96,7 +96,7 @@ function AssetSection({ assetId, locations, agentId }: { assetId: string, locati
   )
 }
 
-// 处置面板:对带 fingerprint 的 finding 设状态/优先级/备注,落盘到 ~/.claude-sentinel/finding-states.json。
+// 处置面板:对带 fingerprint 的 finding 设状态/优先级/备注,落盘到 ~/.claude-sentinel/finding_states.yaml。
 // Task 15:取代旧的「添加到 suppressions」+「加入 baseline」两按钮区块。
 //   - 旧 addSuppression → POST /api/suppressions(Task 11 已删端点)
 //   - 旧 generateBaseline → POST /api/baseline(Task 11 重定义为 bulk-accept;Task 12 的 bulkAccept action 取代)
