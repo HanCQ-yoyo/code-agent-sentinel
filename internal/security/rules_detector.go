@@ -8,6 +8,7 @@ import (
 
 	"code-agent-sentinel/internal/config"
 	"code-agent-sentinel/internal/configengine"
+	"code-agent-sentinel/internal/security/findingstate"
 	"code-agent-sentinel/internal/security/ruleengine"
 	"code-agent-sentinel/internal/security/ruleengine/semantics"
 	"code-agent-sentinel/internal/security/suppression"
@@ -45,6 +46,13 @@ type RulesDetector struct {
 
 	baseline *suppression.BaselineSet  // 已知指纹快照(命中 → Suppression="baseline");nil=无
 	supprs   *suppression.Suppressions // 行内豁免(命中 → Suppression="inline");nil=无
+
+	// 处置生命周期状态(Task 7 引入,迁移期与 baseline/supprs 并存,Task 11 删 suppression 后清理)。
+	// nil=无 finding_states.yaml(或加载失败),applyFindingState 安全降级为 Status="open"。
+	states *findingstate.States
+	// negationDropped 计数:被 IsNegatedByContext 丢弃的 content 命中数(不进处置生命周期,
+	// 仅观测,可后续暴露到 DetectorStatus 或日志)。drop 不产 Finding。
+	negationDropped int
 }
 
 // NewRulesDetector 构造检测器:加载内置 + 全局规则 + 抑制配置。
@@ -96,6 +104,21 @@ func NewRulesDetector(home string, cfg *config.DetectorsConfig) *RulesDetector {
 		})
 	} else {
 		d.supprs = s
+	}
+
+	// 处置生命周期状态(Task 7):加载 ~/.claude-sentinel/finding_states.yaml。
+	// 文件不存在 → (nil,nil) 安全降级(applyFindingState 见 nil 直接 return)。
+	// 加载错误 → 记 loadErr(不致命,与 baseline/suppressions 一致)。
+	// 迁移期:applySuppression 仍跑(若旧 baseline/suppressions 还在),applyFindingState 在其后
+	// 调用,Status/Note 覆盖 Suppression 字段语义。Task 11 删 suppression 后,旧文件重命名 .legacy,
+	// baseline/supprs 为 nil,applyFindingState 独占处置生命周期。
+	statesPath := filepath.Join(home, ".claude-sentinel", "finding_states.yaml")
+	if s, err := findingstate.Load(statesPath); err != nil {
+		d.loadErrs = append(d.loadErrs, ruleengine.RuleLoadError{
+			Source: "findingstate", Reason: fmt.Sprintf("load finding_states: %v", err),
+		})
+	} else {
+		d.states = s
 	}
 
 	return d
@@ -226,7 +249,8 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 						}
 						f := makeSemanticFinding(d, carrier, a, denyRes)
 						fp := ruleengine.Fingerprint(carrier, a.ID)
-						applySuppression(&f, fp, d.baseline, d.supprs)
+						applySuppression(&f, fp, d.baseline, d.supprs) // 迁移期保留(过渡)
+						applyFindingState(&f, fp, d.states)            // 统一处置生命周期
 						out = append(out, f)
 						emittedDomains[domain] = true
 					}
@@ -251,6 +275,18 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 				}
 			}
 
+			// 关卡 2b:否定词上下文抑制(content-only,Task 7)。
+			// content 字段命中若行首/匹配点前 lookBehindChars 字符内有"禁止/不允许/do-not"等
+			// 否定词 → drop pre-emit(不进处置生命周期,只计计数,不产 Finding)。
+			// command 字段命中(locs 空)不抑制:避免假阴性 —— `禁止: rm -rf` 注释里的
+			// 否定词不能让真实破坏命令变安全(与 command 字段不进 Safe 关卡同理)。
+			// semantic emit 点(上方 Deny 分支)也不加 negation:语义 Deny 是高置信破坏判定,
+			// 否定词不能让真实破坏命令变安全。
+			if ruleengine.IsNegatedByContext(a.Content, res.Locations) {
+				d.negationDropped++
+				continue
+			}
+
 			fp := ruleengine.Fingerprint(r, a.ID)
 			f := Finding{
 				DetectorID:  d.ID(),
@@ -265,10 +301,23 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 				Fingerprint: fp,
 				Locations:   res.Locations,
 			}
-			applySuppression(&f, fp, d.baseline, d.supprs)
+			applySuppression(&f, fp, d.baseline, d.supprs) // 迁移期保留(过渡)
+			applyFindingState(&f, fp, d.states)            // 统一处置生命周期
 			out = append(out, f)
 		}
 	}
+
+	// 资产内去重(Task 7):同 asset_id + 同 Location.Line(content 同行)或同 asset_id +
+	// 同 command 字段串(command 字段命中)的多条 finding 合并为一条 finding-group。
+	// group 带 PrimaryRuleID(=RuleID)、ContributingRuleIDs(其他贡献规则)、Locations(并集)、
+	// Severity(取最大)。仅同资产内合并,跨资产不合并(那是聚合视图的事)。
+	//
+	// 去重时机:在 combo 第二遍 + load-error 之前。原因:combo finding 的 Locations 为空,
+	// AssetType=primary.Type(可能是 AssetHook/AssetMCPServer),若去重放最后会与真实 hook/mcp
+	// finding 按相同 AssetName+Evidence 误合并。load-error finding 的 AssetID="rules:..." 合成 ID,
+	// AssetType 为空(走 else 唯一负 key 分支,不误并),但为保持一致也放去重之后。combo 和
+	// load-error 本身不参与去重(它们各自语义独立:combo 是跨资产 AND,load-error 是元信息)。
+	out = dedupIntraAsset(out)
 
 	// 跨资产组合规则第二遍(Task 9):同 agent 资产集内,所有 requires 同时命中(AND)
 	// → 1 条 Finding 挂到 primary(首个 require 命中的资产)。
@@ -290,7 +339,7 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 	// 这是 spec 决策 #12「load-error Finding 不进健康分」的落地:旧 brief 用 SeverityMedium,
 	// 但 Medium 系数 1.5 会让合成 AssetID 以 w=1.0 兜底权重扣分,破坏该决策,故改 Info。
 	for _, e := range loadErrs {
-		out = append(out, Finding{
+		f := Finding{
 			DetectorID:  d.ID(),
 			RuleID:      "rules.load-error",
 			Severity:    SeverityInfo,
@@ -298,7 +347,11 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 			Message:     "规则加载错误",
 			Evidence:    e.Reason,
 			Remediation: "修复规则文件语法或配置(详见 evidence)",
-		})
+		}
+		// load-error 无 Fingerprint(空串),applyFindingState 只设 Status="open"(无匹配状态)。
+		// applySuppression 不调用:load-error 无 fp,baseline/inline 无法匹配。
+		applyFindingState(&f, "", d.states)
+		out = append(out, f)
 	}
 	return out, nil
 }
@@ -476,7 +529,9 @@ func computeLineSemantic(cmdText string) lineSemanticState {
 }
 
 // mapSemDomain 把语义 RuleID 的首段映射到 sentinel 规则 domain Metadata。
-//   git → git, filesystem → filesystem, snowflake.* → database
+//
+//	git → git, filesystem → filesystem, snowflake.* → database
+//
 // snowflake 语义 RuleID 现返回具体 dcg_rule_id(如 snowflake.drop-database,修复 C2),
 // 首段仍是 "snowflake",映射到 sentinel 的 "database" 域。
 func mapSemDomain(ruleID string) string {
@@ -506,7 +561,6 @@ func (st lineSemanticState) findingInSafeLines(locs []ruleengine.Location) bool 
 	}
 	return true
 }
-
 
 // pickSemanticCarrier 为语义 Deny finding 预选载体规则(修复 review Important #1)。
 //
@@ -654,6 +708,7 @@ func makeComboFinding(d *RulesDetector, cr ruleengine.ComboRule, primary confige
 		Fingerprint: fp,
 		// Locations 留空(组合规则无单点命中位置)
 	}
-	applySuppression(&f, fp, d.baseline, d.supprs)
+	applySuppression(&f, fp, d.baseline, d.supprs) // 迁移期保留(过渡)
+	applyFindingState(&f, fp, d.states)            // 统一处置生命周期
 	return f
 }

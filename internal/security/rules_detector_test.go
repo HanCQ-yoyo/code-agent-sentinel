@@ -719,7 +719,7 @@ func TestRulesDetector_DestructiveCoversCommandAssets(t *testing.T) {
 	d := NewRulesDetector(home, nil)
 
 	cases := []struct {
-		name string
+		name  string
 		asset configengine.Asset
 	}{
 		{
@@ -1209,5 +1209,186 @@ func TestManagedMCPPresentInfoRule(t *testing.T) {
 	}
 	if !hasRuleID(findings, "baseline.managed-mcp-present") {
 		t.Fatalf("managed=true 应命中 baseline.managed-mcp-present(info): %+v", findings)
+	}
+}
+
+// ── Task 7: emit 流水线 —— negation drop + applyFindingState + 资产内去重 ──
+//
+// 4 个测试覆盖:
+//   - negation drop(content 字段命中行首"禁止" → pre-emit 丢弃,不进处置生命周期)
+//   - negation 不作用于 command 字段命中(locs 空 → IsNegatedByContext 返回 false,避免假阴性)
+//   - 同资产同行多规则命中 → 合并为 1 条 group(ContributingRuleIDs 含其他规则,Severity 取最大)
+//   - 同规则命中不同资产 → 不合并(各一条)
+
+// newTestDetector 构造一个注入指定规则 YAML 的 RulesDetector(测试专用)。
+// 在 <home>/.claude-sentinel/rules/test.yaml 写入 rulesYAML,NewRulesDetector 经
+// LoadForScan 加载。沿用 newRulesHome + 写文件 + NewRulesDetector 既有模式。
+func newTestDetector(t *testing.T, rulesYAML string) *RulesDetector {
+	t.Helper()
+	home := newRulesHome(t)
+	rulesDir := filepath.Join(home, ".claude-sentinel", "rules")
+	if err := os.MkdirAll(rulesDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rulesDir, "test.yaml"), []byte(rulesYAML), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return NewRulesDetector(home, nil)
+}
+
+// testAsset 构造一个指定类型 + content 的 Asset(测试专用)。
+// assetTypeStr 映射到 configengine.AssetType:"skill"→AssetSkill, "hook"→AssetHook 等。
+func testAsset(id, assetTypeStr, content string) configengine.Asset {
+	var t configengine.AssetType
+	switch assetTypeStr {
+	case "skill":
+		t = configengine.AssetSkill
+	case "hook":
+		t = configengine.AssetHook
+	case "mcp_server":
+		t = configengine.AssetMCPServer
+	case "script":
+		t = configengine.AssetScript
+	case "command":
+		t = configengine.AssetCommand
+	case "agent":
+		t = configengine.AssetAgent
+	case "memory":
+		t = configengine.AssetMemory
+	case "permissions":
+		t = configengine.AssetPermissions
+	case "settings":
+		t = configengine.AssetSettings
+	default:
+		t = configengine.AssetType(assetTypeStr)
+	}
+	return configengine.Asset{
+		ID:      id,
+		Type:    t,
+		Name:    assetTypeStr,
+		Content: content,
+	}
+}
+
+// TestNegationDropSuppressed 验证 negation drop:
+// 一条 injection 规则命中 content,但行首有"禁止" → 不应出现在 findings。
+// negation drop 在 regex emit 点(safe-line 检查后、Fingerprint 前)丢弃,
+// 不进处置生命周期,只计计数。
+func TestNegationDropSuppressed(t *testing.T) {
+	d := newTestDetector(t, `
+rules:
+  - id: injection.test-negation
+    severity: high
+    asset_type: skill
+    description: "test"
+    match: { field: content, op: contains, value: "rm -rf" }
+`)
+	a := testAsset("skill:demo", "skill", "禁止使用 rm -rf /\n这是说明")
+	out, _ := d.Scan(context.Background(), []configengine.Asset{a})
+	for _, f := range out {
+		if f.RuleID == "injection.test-negation" {
+			t.Fatalf("negation-suppressed finding should not be emitted: %+v", f)
+		}
+	}
+}
+
+// TestNegationNotAppliedToCommandField 验证 negation 不作用于 command 字段命中:
+// hook 的 command 字段命中某规则,行首"禁止"不应抑制。
+// 原因:command 字段命中无 Locations(无行位置),IsNegatedByContext 返回 false。
+// 设计意图:避免假阴性 —— `禁止: rm -rf` 注释里的否定词不能让真实命令变安全。
+//
+// 注意:本测试用 metadata.domain=test(非 filesystem/git/database),避免语义 Deny 关卡
+// 提前介入(Gate 1 会对该域所有规则 continue,正则根本不跑)。negation drop 只在正则 emit
+// 点生效,故须绕开语义解析器。
+func TestNegationNotAppliedToCommandField(t *testing.T) {
+	d := newTestDetector(t, `
+rules:
+  - id: injection.test-cmd
+    severity: high
+    asset_type: hook
+    description: "test"
+    match: { field: command, op: contains, value: "forbidden-pattern" }
+`)
+	a := testAsset("hook:demo", "hook", "")
+	a.Fields = map[string]any{"command": "禁止 forbidden-pattern"}
+	out, _ := d.Scan(context.Background(), []configengine.Asset{a})
+	found := false
+	for _, f := range out {
+		if f.RuleID == "injection.test-cmd" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("command-field match must NOT be negation-suppressed (would cause false negative)")
+	}
+}
+
+// TestIntraAssetDedupMergesSameLine 验证资产内去重:
+// 两条规则都命中 skill 同一行(都 contains "rm -rf")→ 合并为 1 条 group。
+// group 取最大 severity(high),ContributingRuleIDs 含另一规则。
+func TestIntraAssetDedupMergesSameLine(t *testing.T) {
+	d := newTestDetector(t, `
+rules:
+  - id: injection.rule-a
+    severity: high
+    asset_type: skill
+    description: "rule A"
+    match: { field: content, op: contains, value: "rm -rf" }
+  - id: injection.rule-b
+    severity: medium
+    asset_type: skill
+    description: "rule B"
+    match: { field: content, op: contains, value: "rm -rf" }
+`)
+	a := testAsset("skill:demo", "skill", "run rm -rf / to clean")
+	out, _ := d.Scan(context.Background(), []configengine.Asset{a})
+	var group *Finding
+	for i := range out {
+		if out[i].RuleID == "injection.rule-a" || out[i].RuleID == "injection.rule-b" {
+			group = &out[i]
+			break
+		}
+	}
+	if group == nil {
+		t.Fatal("no finding emitted")
+	}
+	// 合并后只剩一条 group,另一规则进 ContributingRuleIDs
+	totalForLine := 0
+	for _, f := range out {
+		if f.AssetID == "skill:demo" && (f.RuleID == "injection.rule-a" || f.RuleID == "injection.rule-b") {
+			totalForLine++
+		}
+	}
+	if totalForLine != 1 {
+		t.Errorf("expected 1 merged group, got %d", totalForLine)
+	}
+	// group 取最大 severity(high)
+	if group.Severity != SeverityHigh {
+		t.Errorf("group severity = %s, want high", group.Severity)
+	}
+}
+
+// TestIntraAssetDedupDifferentAssetsNotMerged 验证跨资产不合并:
+// 同规则命中两个不同资产 → 各一条(不合并,跨资产聚合是聚合视图的事)。
+func TestIntraAssetDedupDifferentAssetsNotMerged(t *testing.T) {
+	d := newTestDetector(t, `
+rules:
+  - id: injection.rule-a
+    severity: high
+    asset_type: skill
+    description: "rule A"
+    match: { field: content, op: contains, value: "rm -rf" }
+`)
+	a1 := testAsset("skill:one", "skill", "rm -rf /")
+	a2 := testAsset("skill:two", "skill", "rm -rf /")
+	out, _ := d.Scan(context.Background(), []configengine.Asset{a1, a2})
+	count := 0
+	for _, f := range out {
+		if f.RuleID == "injection.rule-a" {
+			count++
+		}
+	}
+	if count != 2 {
+		t.Errorf("expected 2 findings (different assets), got %d", count)
 	}
 }
