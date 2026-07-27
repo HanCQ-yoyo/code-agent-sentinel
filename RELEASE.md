@@ -15,7 +15,7 @@
 ## Coding Agent 配置对齐(双 agent 资产发现 + credential/combo/managed-mcp 规则)
 
 - **合入日期**:2026-07-27(分支 `feat/coding-agent-config-alignment`,待合并后回填 main SHA)
-- **合入 SHA**:`合并后回填`(pre-merge;main fast-forward 预期,届时取末次提交 SHA)
+- **合入 SHA**:`472837e`(merge commit)
 
 ### 升级
 
