@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Drawer, Descriptions, Typography, Alert, Spin, Empty, Button, Modal, Input, Popconfirm, Tag, message } from 'antd'
+import { Drawer, Descriptions, Typography, Alert, Spin, Empty, Radio, Input, Button, Space, Tag, message } from 'antd'
 import { useTranslation } from 'react-i18next'
-import type { Finding, DetectorMeta, Asset } from '../types'
+import type { Finding, DetectorMeta, Asset, Severity } from '../types'
 import { apiGet } from '../api/client'
 import { useStore } from '../store'
 import { useTheme } from '../theme'
@@ -11,6 +11,11 @@ import { relativeClaudePath } from '../lib/path'
 import { formatDateTime } from '../lib/format'
 import { SEVERITY_LABEL_KEY } from '../lib/severity'
 import { detectorNameById, ruleNameById } from '../lib/i18n-names'
+
+// Severity → 优先级回退(无显式 priority 时按严重度派生)。info 归 P3(与 low 同档,均不影响健康分)。
+// Task 14 在 FindingTable 里有同名 helper;此处按 brief 内联,避免过度重构跨文件抽取共享。
+const severityToPrio = (s: Severity): string =>
+  ({ critical: 'P0', high: 'P1', medium: 'P2', low: 'P3', info: 'P3' } as Record<Severity, string>)[s]
 
 interface FindingDrawerProps {
   finding: Finding | null
@@ -91,49 +96,66 @@ function AssetSection({ assetId, locations, agentId }: { assetId: string, locati
   )
 }
 
+// 处置面板:对带 fingerprint 的 finding 设状态/优先级/备注,落盘到 ~/.claude-sentinel/finding-states.json。
+// Task 15:取代旧的「添加到 suppressions」+「加入 baseline」两按钮区块。
+//   - 旧 addSuppression → POST /api/suppressions(Task 11 已删端点)
+//   - 旧 generateBaseline → POST /api/baseline(Task 11 重定义为 bulk-accept;Task 12 的 bulkAccept action 取代)
+// 改用 Task 12 的 setFindingState/resetFindingState:统一处置生命周期(status/priority/note),
+//   后端 /api/finding-state POST/DELETE,API 读时把治理字段合并到 Finding 上。
+// severityToPrio 内联(同 FindingTable,不抽共享以免过度重构)。
+function DispositionPanel({ finding }: { finding: Finding }) {
+  const { t } = useTranslation()
+  const [status, setStatus] = useState(finding.status ?? 'open')
+  const [priority, setPriority] = useState(finding.priority ?? severityToPrio(finding.severity))
+  const [note, setNote] = useState(finding.note ?? '')
+  const setFindingState = useStore((s) => s.setFindingState)
+  const resetFindingState = useStore((s) => s.resetFindingState)
+
+  const save = async () => {
+    await setFindingState(finding.fingerprint!, status, priority, note)
+    message.success(t('findingDrawer.saved'))
+  }
+  const reset = async () => {
+    await resetFindingState(finding.fingerprint!)
+    setStatus('open'); setPriority(severityToPrio(finding.severity)); setNote('')
+    message.success(t('findingDrawer.reset'))
+  }
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div className="asset-section-title">{t('findingDrawer.disposition')}</div>
+      <Space direction="vertical" style={{ width: '100%' }}>
+        <div>
+          <Typography.Text type="secondary">{t('findingDrawer.status')}</Typography.Text>
+          <Radio.Group value={status} onChange={(e) => setStatus(e.target.value)} style={{ marginLeft: 8 }}>
+            {['open', 'in_progress', 'resolved', 'false_positive', 'accepted'].map((s) => (
+              <Radio.Button key={s} value={s}>{t(`findingTable.status.${s}`)}</Radio.Button>
+            ))}
+          </Radio.Group>
+        </div>
+        <div>
+          <Typography.Text type="secondary">{t('findingDrawer.priority')}</Typography.Text>
+          <Radio.Group value={priority} onChange={(e) => setPriority(e.target.value)} style={{ marginLeft: 8 }}>
+            {['P0', 'P1', 'P2', 'P3'].map((p) => <Radio.Button key={p} value={p}>{p}</Radio.Button>)}
+          </Radio.Group>
+        </div>
+        <Input.TextArea value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('findingDrawer.notePlaceholder')} rows={2} />
+        <Space>
+          <Button type="primary" onClick={save}>{t('findingDrawer.save')}</Button>
+          <Button onClick={reset}>{t('findingDrawer.resetToOpen')}</Button>
+        </Space>
+      </Space>
+    </div>
+  )
+}
+
 export function FindingDrawer({ finding, detectors, startedAt, onClose }: FindingDrawerProps) {
   const { t } = useTranslation()
   const detName = (id: string): string => detectorNameById(detectors, id)
-  const { addSuppression, generateBaseline } = useStore()
-  const [supprModalOpen, setSupprModalOpen] = useState(false)
-  const [supprReason, setSupprReason] = useState('')
-  const [submitting, setSubmitting] = useState(false)
-
-  // 切换 finding 时重置 Modal 状态(防脏数据残留)。
-  useEffect(() => {
-    setSupprModalOpen(false)
-    setSupprReason('')
-    setSubmitting(false)
-  }, [finding?.id])
-
-  // 添加到 suppressions:需 fingerprint(仅 RulesDetector 填充);无则按钮禁用 + Tooltip 说明。
-  const hasFingerprint = !!finding?.fingerprint
-  const handleAddSuppression = async () => {
-    if (!finding?.fingerprint) return
-    setSubmitting(true)
-    const ok = await addSuppression({ fingerprint: finding.fingerprint, reason: supprReason.trim() })
-    setSubmitting(false)
-    if (ok) {
-      message.success(t('findingDrawer.supprSuccess'))
-      setSupprModalOpen(false)
-      setSupprReason('')
-    } else {
-      message.error(t('findingDrawer.supprFailed'))
-    }
-  }
-
-  // 加入 baseline:POST /api/baseline 跑全量扫描 + union 合并指纹。耗时操作,确认后执行。
-  const [baselineLoading, setBaselineLoading] = useState(false)
-  const handleGenerateBaseline = async () => {
-    setBaselineLoading(true)
-    const r = await generateBaseline()
-    setBaselineLoading(false)
-    if (r) {
-      message.success(t('findingDrawer.baselineUpdated', { total: r.total_fps, added: r.added_fps }))
-    } else {
-      message.error(t('findingDrawer.baselineFailed'))
-    }
-  }
+  // Task 15:移除旧的 addSuppression/generateBaseline(useStore destructure)与
+  // supprModalOpen/supprReason/submitting/baselineLoading 状态——DispositionPanel 自管 local state。
+  // DispositionPanel 用 key={finding.fingerprint} 强制在 finding 切换时重挂载:其 useState
+  // 初始值依赖 finding prop,不重挂载会保留旧 finding 的 status/priority/note(脏状态)。
 
   // key={assetId}:切换 finding 时 AssetSection 重挂载,重拉资产(防脏数据)。
   return (
@@ -187,7 +209,8 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
               </Typography.Paragraph>
             </Descriptions.Item>
             <Descriptions.Item label={t('findingDrawer.remediation')}>{finding.remediation || t('common.none')}</Descriptions.Item>
-            {/* 抑制状态:suppressed=true 表示已被 baseline/inline 豁免,显示来源 + reason。 */}
+            {/* 抑制状态显示段(保留):suppressed=true 表示已被 baseline/inline 豁免;Task 11 后 applyFindingState
+                也把 Suppression 设为 "state"。仍展示来源 + reason,DispositionPanel 在下方负责改写。 */}
             <Descriptions.Item label={t('findingDrawer.supprStatus')}>
               {finding.suppressed ? (
                 <Tag style={{ marginInlineEnd: 0, borderColor: 'var(--bg-border)', background: 'var(--surface-2)', color: 'var(--text-muted)' }}>
@@ -204,64 +227,17 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
             <AssetSection key={finding.asset_id} assetId={finding.asset_id} locations={finding.locations} agentId={finding.agent_id} />
           </div>
 
-          {/* 抑制操作:添加到 suppressions(需 fingerprint)+ 加入 baseline(全量扫描合并)。
-              成功后不自动重扫——suppressed 状态在用户下次手动扫描时才反映(brief 未要求自动重扫)。 */}
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-            {hasFingerprint ? (
-              <Button size="small" onClick={() => setSupprModalOpen(true)}>{t('findingDrawer.addSuppr')}</Button>
-            ) : (
-              <Tag title={t('findingDrawer.noFingerprintTip')} style={{ color: 'var(--text-dim)', borderColor: 'var(--bg-border)', background: 'transparent' }}>
-                {t('findingDrawer.noFingerprint')}
-              </Tag>
-            )}
-            <Popconfirm
-              title={t('findingDrawer.baselineConfirm')}
-              description={t('findingDrawer.baselineConfirmDesc')}
-              okText={t('findingDrawer.confirm')}
-              cancelText={t('common.cancel')}
-              onConfirm={handleGenerateBaseline}
-              disabled={baselineLoading}
-            >
-              <Button size="small" loading={baselineLoading}>{t('findingDrawer.addBaseline')}</Button>
-            </Popconfirm>
-          </div>
+          {/* 处置面板:需 fingerprint(仅 RulesDetector 填充)。无 fingerprint 显示提示。
+              key={finding.fingerprint} 强制 DispositionPanel 在 finding 切换时重挂载:
+              其 useState(status/priority/note)初始值从 finding prop 取,不重挂载会保留旧 finding
+              的处置状态(脏数据,甚至可能把 A 的状态写到 B 的 fingerprint)。 */}
+          {finding.fingerprint ? (
+            <DispositionPanel key={finding.fingerprint} finding={finding} />
+          ) : (
+            <Typography.Text type="secondary">{t('findingDrawer.noFingerprint')}</Typography.Text>
+          )}
         </div>
       ) : null}
-
-      {/* 抑制原因输入 Modal:预填 fingerprint,用户填 reason 后提交 POST /api/suppressions。 */}
-      <Modal
-        title={t('findingDrawer.addSuppr')}
-        open={supprModalOpen}
-        onOk={handleAddSuppression}
-        onCancel={() => { setSupprModalOpen(false); setSupprReason('') }}
-        okText={t('findingDrawer.add')}
-        cancelText={t('common.cancel')}
-        confirmLoading={submitting}
-        okButtonProps={{ disabled: !supprReason.trim() }}
-      >
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('findingDrawer.fingerprintLabel')}</Typography.Text>
-            <div style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all', color: 'var(--text)', marginTop: 4 }}>
-              {finding?.fingerprint ?? '--'}
-            </div>
-          </div>
-          <div>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('findingDrawer.reasonLabel')}</Typography.Text>
-            <Input.TextArea
-              style={{ marginTop: 4 }}
-              rows={3}
-              value={supprReason}
-              onChange={(e) => setSupprReason(e.target.value)}
-              placeholder={t('findingDrawer.reasonPlaceholder')}
-              autoFocus
-            />
-          </div>
-          <Typography.Text type="secondary" style={{ fontSize: 11 }}>
-            {t('findingDrawer.reasonHint')}
-          </Typography.Text>
-        </div>
-      </Modal>
     </Drawer>
   )
 }

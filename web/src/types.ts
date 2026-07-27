@@ -161,23 +161,12 @@ export interface EditResult {
   rescan_error?: string
 }
 
-// P3 抑制(suppressions)与 baseline
-// 对应 GET /api/suppressions 返回的单条豁免项(后端 suppressionItemResponse)。
-export interface SuppressionItem {
-  id: string // 稳定标识符,DELETE /api/suppressions/:id 用
-  fingerprint: string
-  rule_id: string
-  asset_id: string
-  reason: string
-}
+// Task 15:SuppressionItem 已删除。Task 11 把 /api/suppressions 的 POST/GET/DELETE 全部删除,
+// 无消费方再需要此类型(前端 store 的 fetchSuppressions/deleteSuppression/suppressions 一并清理)。
 
-// POST /api/baseline 返回:合并后指纹总数 / 本次新增数 / 扫描发现总数。
-export interface BaselineResult {
-  baseline_path: string
-  total_fps: number
-  added_fps: number
-  scan_findings: number
-}
+// Task 15:BaselineResult 已删除。Task 11 把 POST /api/baseline 重定义为 bulk-accept
+//(返回 {accepted_count, scan_findings}),Task 12 的 bulkAccept action 不使用此类型
+//(apiPost 返回内联类型即可)。无其他引用。
 
 // 检测器运行期配置(GET/PUT /api/detectors/config)。
 export interface DetectorToggle { enabled: boolean }
