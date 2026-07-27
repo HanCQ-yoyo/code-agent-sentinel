@@ -42,7 +42,7 @@ var statusDiscount = map[string]float64{
 // 未知 severity(map 中不存在)→ 兜底 0.5;info(显式 0.0)→ 保持 0.0。
 // 折扣纯由 Status 驱动(统一处置模型,取代旧 suppression 0.3)。
 // 空 Status(未扫描过的老记录)按 open 处理。
-// Suppressed=true 但 Status 空(迁移过渡期 applySuppression 仍设 Suppressed)→ 兜底 0.5(与旧 0.3 接近且保守)。
+// Suppressed=true 但 Status 空(理论不发生:applyFindingState 总同时设 Status)→ 兜底 0.5(保守)。
 func findingWeight(f Finding) float64 {
 	p, ok := severityCoeff[f.Severity]
 	if !ok {

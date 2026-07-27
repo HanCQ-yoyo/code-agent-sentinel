@@ -44,6 +44,9 @@ type Finding struct {
 	Note     string `json:"note,omitempty"`
 	// ContributingRuleIDs 是资产内去重后,同位置命中的其他规则(去重 pass 产生)。
 	ContributingRuleIDs []string `json:"contributing_rule_ids,omitempty"`
+	// Category 是治理分类(派生自 rule_id,API 读时 attach,不进持久化)。
+	// 持久化时 omitempty 空(老记录无此字段);反序列化忽略,读时重新 attach。
+	Category string `json:"category,omitempty"`
 }
 
 // DetectorStatus 是一个检测器的运行状态。

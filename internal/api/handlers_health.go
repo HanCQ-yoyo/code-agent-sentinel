@@ -37,7 +37,7 @@ func (s *Server) getFindings(c *gin.Context) {
 			out = append(out, f)
 		}
 	}
-	c.JSON(http.StatusOK, out)
+	c.JSON(http.StatusOK, attachCategory(out))
 }
 
 // getFindingsAggregated 聚合模式:拼接各 agent 最近 global 扫描的 findings。
@@ -60,7 +60,7 @@ func (s *Server) getFindingsAggregated(c *gin.Context, agentIDs []string) {
 			}
 		}
 	}
-	c.JSON(http.StatusOK, out)
+	c.JSON(http.StatusOK, attachCategory(out))
 }
 
 func (s *Server) getHealth(c *gin.Context) {
@@ -91,8 +91,10 @@ func (s *Server) getHealth(c *gin.Context) {
 
 // getHealthAggregated 聚合模式:返回 per-agent 健康分数组,不计算跨 agent 总分
 // (健康分公式不跨 agent 聚合——每 agent 的资产/finding 独立评分)。
-// 响应:gin.H{"is_aggregate": true, "agent_scores": []gin.H{
-//   {"agent_id", "agent_name", "health_score": *HealthScore}}}
+//
+//	响应:gin.H{"is_aggregate": true, "agent_scores": []gin.H{
+//	  {"agent_id", "agent_name", "health_score": *HealthScore}}}
+//
 // 每 agent 的 health_score 取自其最近 global 扫描;无扫描时回退
 // ComputeHealth(its assets, nil)(与单 agent no-scan 路径一致,无 finding → 100)。
 func (s *Server) getHealthAggregated(c *gin.Context, agentIDs []string) {

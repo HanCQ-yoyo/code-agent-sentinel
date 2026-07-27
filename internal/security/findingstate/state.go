@@ -40,12 +40,12 @@ const (
 
 // State 是单条处置状态记录,fingerprint 为键。
 type State struct {
-	Fingerprint string `yaml:"fingerprint"`
-	Status      Status `yaml:"status"`
-	Priority    string `yaml:"priority,omitempty"` // P0|P1|P2|P3;空=读时从 severity 派生
-	Note        string `yaml:"note,omitempty"`
-	Source      Source `yaml:"source,omitempty"`
-	UpdatedAt   string `yaml:"updated_at,omitempty"`
+	Fingerprint string `yaml:"fingerprint" json:"fingerprint"`
+	Status      Status `yaml:"status" json:"status"`
+	Priority    string `yaml:"priority,omitempty" json:"priority,omitempty"` // P0|P1|P2|P3;空=读时从 severity 派生
+	Note        string `yaml:"note,omitempty" json:"note,omitempty"`
+	Source      Source `yaml:"source,omitempty" json:"source,omitempty"`
+	UpdatedAt   string `yaml:"updated_at,omitempty" json:"updated_at,omitempty"`
 }
 
 // States 是处置状态集合。

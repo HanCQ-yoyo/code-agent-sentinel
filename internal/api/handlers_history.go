@@ -34,6 +34,8 @@ func (s *Server) getHistoryDetail(c *gin.Context) {
 		c.JSON(http.StatusNotFound, errorBody("not_found", err.Error()))
 		return
 	}
+	// Category 派生:API 读时 attach(detector 不填,持久化空,读时重新计算)。
+	rec.Findings = attachCategory(rec.Findings)
 	c.JSON(http.StatusOK, rec)
 }
 

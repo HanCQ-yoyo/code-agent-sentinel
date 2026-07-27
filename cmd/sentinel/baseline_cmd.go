@@ -10,16 +10,16 @@ import (
 	"code-agent-sentinel/internal/config"
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/security"
-	"code-agent-sentinel/internal/security/suppression"
+	"code-agent-sentinel/internal/security/findingstate"
 )
 
 // newBaselineCmd 构造 `sentinel baseline` 子命令(--create / --prune)。
 //
-// --create:跑一次全量扫描,把所有 Finding 的 fingerprint 合并(union)到 baseline.json
-// (保留已有指纹 + 添加新发现,与 API POST /api/baseline 一致;不清理不复现指纹)。
-// --prune:重新扫描,删掉 baseline 中已不复现的指纹,保存。
+// Task 11 语义变更:旧实现写 baseline.json(已删);新实现统一到 finding_states.yaml:
+//   - --create:跑全量扫描,把所有 Finding 的 fingerprint 批量接受(accepted),与 API POST /api/baseline 一致。
+//   - --prune:重新扫描,删掉 finding_states.yaml 中已不复现的孤儿状态(PruneReport + Remove)。
 //
-// 路径解析:baseline.json 路径来自 cfg.ResolveBaselinePath(home)(支持 config 覆盖)。
+// 路径解析:finding_states.yaml 在 <home>/.claude-sentinel/(不接 config 覆盖,统一默认路径)。
 // 扫描逻辑镜像 main.go run():构建 Engine + Registry + Orchestrator,跑全量 Scan。
 func newBaselineCmd() *cobra.Command {
 	var (
@@ -29,7 +29,7 @@ func newBaselineCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "baseline",
-		Short: "baseline 管理:--create 合并快照 / --prune 清理",
+		Short: "baseline 管理:--create 批量接受 / --prune 清理孤儿状态",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !create && !prune {
 				return fmt.Errorf("请指定 --create 或 --prune")
@@ -45,8 +45,8 @@ func newBaselineCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.claude-sentinel/config.yaml)")
-	cmd.Flags().BoolVar(&create, "create", false, "跑全量扫描并把指纹合并到 baseline.json(保留已有 + 添加新发现)")
-	cmd.Flags().BoolVar(&prune, "prune", false, "重新扫描并删除 baseline 中已不复现的指纹")
+	cmd.Flags().BoolVar(&create, "create", false, "跑全量扫描并把指纹批量接受到 finding_states.yaml")
+	cmd.Flags().BoolVar(&prune, "prune", false, "重新扫描并删除 finding_states.yaml 中已不复现的孤儿状态")
 	return cmd
 }
 
@@ -78,89 +78,69 @@ func runFullScan(cfg *config.Config, home string) (*security.ScanResult, error) 
 	return res, nil
 }
 
-// collectFingerprints 从扫描结果收集所有非空 fingerprint。
+// collectFingerprints 从扫描结果收集所有非空 fingerprint(去重)。
 // 仅 RulesDetector 的 finding 带 fingerprint(parse.error 等兜底 finding 无)。
-func collectFingerprints(res *security.ScanResult) map[string]bool {
-	fps := make(map[string]bool)
+func collectFingerprints(res *security.ScanResult) []string {
+	seen := make(map[string]bool)
 	for _, f := range res.Findings {
 		if f.Fingerprint != "" {
-			fps[f.Fingerprint] = true
+			seen[f.Fingerprint] = true
 		}
+	}
+	fps := make([]string, 0, len(seen))
+	for fp := range seen {
+		fps = append(fps, fp)
 	}
 	return fps
 }
 
-// runBaselineCreateCmd 执行 --create:全量扫描 → 快照指纹 → 保存 baseline.json。
+// runBaselineCreateCmd 执行 --create:全量扫描 → 批量接受 fingerprint → 保存 finding_states.yaml。
 func runBaselineCreateCmd(cmd *cobra.Command, cfg *config.Config, home string) error {
 	out, err := runBaselineCreate(cfg, home)
 	fmt.Fprint(cmd.OutOrStdout(), out)
 	return err
 }
 
-// runBaselineCreate 跑全量扫描,把全部 Finding 的 fingerprint 合并到 baseline.json。
-// Finding #2:UNION 语义(保留已有指纹 + 添加新发现),与 API postBaseline 一致。
-// 旧实现用当前扫描的指纹直接覆盖,会丢失之前记录但当前不复现的指纹(覆盖语义)。
-// 返回可读输出。路径由 cfg.ResolveBaselinePath(home) 解析(支持 config 覆盖)。
+// runBaselineCreate 跑全量扫描,把全部 Finding 的 fingerprint 批量接受到 finding_states.yaml。
+// 已有非 open 状态(resolved/false_positive/accepted/in_progress)不覆盖,尊重既有处置。
+// 返回可读输出。
 func runBaselineCreate(cfg *config.Config, home string) (string, error) {
 	res, err := runFullScan(cfg, home)
 	if err != nil {
 		return "", err
 	}
 	fps := collectFingerprints(res)
-	baselinePath := cfg.ResolveBaselinePath(home)
+	statesPath := statesPathFor(home)
 
-	existing, err := suppression.LoadBaseline(baselinePath)
-	if err != nil {
-		return "", fmt.Errorf("加载 baseline 失败: %w", err)
+	st, _ := findingstate.Load(statesPath)
+	if st == nil {
+		st = &findingstate.States{}
 	}
-
-	// 合并:union(保留已有 + 添加新发现)。无 baseline 时新建。
-	var bs *suppression.BaselineSet
-	added := 0
-	if existing != nil {
-		bs = existing
-		if bs.Fingerprints == nil {
-			bs.Fingerprints = make(map[string]bool)
-		}
-		for fp := range fps {
-			if !bs.Fingerprints[fp] {
-				bs.Fingerprints[fp] = true
-				added++
-			}
-		}
-	} else {
-		bs = &suppression.BaselineSet{
-			Version:      "1",
-			Fingerprints: fps,
-		}
-		added = len(fps)
+	st.BulkAccept(fps, findingstate.SourceBulkAccept, time.Now().UTC().Format(time.RFC3339))
+	if err := st.Save(statesPath); err != nil {
+		return "", fmt.Errorf("保存 finding_states 失败: %w", err)
 	}
-	bs.GeneratedAt = time.Now().UTC().Format(time.RFC3339)
-
-	if err := bs.Save(baselinePath); err != nil {
-		return "", fmt.Errorf("保存 baseline 失败: %w", err)
-	}
-	return fmt.Sprintf("baseline 已生成(合并): %s\n  扫描产出 %d 条 finding, 新增 %d 条指纹, 合并后共 %d 条唯一指纹\n",
-		baselinePath, len(res.Findings), added, len(bs.Fingerprints)), nil
+	return fmt.Sprintf("处置状态已批量接受: %s\n  扫描产出 %d 条 finding, 批量接受 %d 条指纹\n",
+		statesPath, len(res.Findings), len(fps)), nil
 }
 
-// runBaselinePruneCmd 执行 --prune:加载旧 baseline → 重新扫描 → 删已不复现指纹 → 保存。
+// runBaselinePruneCmd 执行 --prune:加载 finding_states → 重新扫描 → 删已不复现指纹 → 保存。
 func runBaselinePruneCmd(cmd *cobra.Command, cfg *config.Config, home string) error {
 	out, err := runBaselinePrune(cfg, home)
 	fmt.Fprint(cmd.OutOrStdout(), out)
 	return err
 }
 
-// runBaselinePrune 重新扫描,删除 baseline 中已不复现的指纹,保存。
+// runBaselinePrune 重新扫描,删除 finding_states.yaml 中已不复现的指纹。
 // 返回可读输出。
 func runBaselinePrune(cfg *config.Config, home string) (string, error) {
-	baselinePath := cfg.ResolveBaselinePath(home)
-	old, err := suppression.LoadBaseline(baselinePath)
+	statesPath := statesPathFor(home)
+	st, err := findingstate.Load(statesPath)
 	if err != nil {
-		return "", fmt.Errorf("加载 baseline 失败: %w", err)
+		return "", fmt.Errorf("加载 finding_states 失败: %w", err)
 	}
-	if old == nil {
-		return "", fmt.Errorf("baseline 文件不存在: %s(请先 --create)", baselinePath)
+	if st == nil {
+		return "", fmt.Errorf("finding_states 文件不存在: %s(请先 --create)", statesPath)
 	}
 	res, err := runFullScan(cfg, home)
 	if err != nil {
@@ -168,21 +148,20 @@ func runBaselinePrune(cfg *config.Config, home string) (string, error) {
 	}
 	current := collectFingerprints(res)
 
-	// 保留:旧 baseline 中仍在当前扫描里复现的指纹
-	pruned := make(map[string]bool)
-	dropped := 0
-	for fp := range old.Fingerprints {
-		if current[fp] {
-			pruned[fp] = true
-		} else {
-			dropped++
-		}
+	// 用 PruneReport 找出孤儿(已处置但本轮未检出),逐条 Remove。
+	orphans := st.PruneReport(current)
+	for _, o := range orphans {
+		st.Remove(o.Fingerprint)
 	}
-	old.Fingerprints = pruned
-	old.GeneratedAt = time.Now().UTC().Format(time.RFC3339)
-	if err := old.Save(baselinePath); err != nil {
-		return "", fmt.Errorf("保存 pruned baseline 失败: %w", err)
+	if err := st.Save(statesPath); err != nil {
+		return "", fmt.Errorf("保存 pruned finding_states 失败: %w", err)
 	}
-	return fmt.Sprintf("baseline 已清理: %s\n  保留 %d 条指纹, 删除 %d 条已不复现\n",
-		baselinePath, len(pruned), dropped), nil
+	remain := len(st.Items)
+	return fmt.Sprintf("处置状态已清理: %s\n  保留 %d 条, 删除 %d 条已不复现\n",
+		statesPath, remain, len(orphans)), nil
+}
+
+// statesPathFor 返回 <home>/.claude-sentinel/finding_states.yaml。
+func statesPathFor(home string) string {
+	return config.DefaultConfig().ResolveStatesPath(home)
 }

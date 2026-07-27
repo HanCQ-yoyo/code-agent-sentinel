@@ -24,16 +24,16 @@ type Config struct {
 	// DirTags 用户对「目录标签」的显式覆盖:key=相对 .claude 根的路径,value=标签。
 	// 默认标签见 DefaultDirTags();生效标签由 ResolveDirTag 合并。
 	// 空表示用户未自定义,全用默认。见 dir_tags.go。
-	DirTags    DirTags `yaml:"dir_tags"`
-	Favorites  []string `yaml:"favorites"` // 资产收藏/置顶 id 列表(跨会话保留;localStorage 受端口影响故改存配置)
-	BackupDir  string  `yaml:"backup_dir"`  // 空=默认 ~/.claude-sentinel/backups
-	MaxBackups int     `yaml:"max_backups"` // 0=默认 20
+	DirTags    DirTags  `yaml:"dir_tags"`
+	Favorites  []string `yaml:"favorites"`   // 资产收藏/置顶 id 列表(跨会话保留;localStorage 受端口影响故改存配置)
+	BackupDir  string   `yaml:"backup_dir"`  // 空=默认 ~/.claude-sentinel/backups
+	MaxBackups int      `yaml:"max_backups"` // 0=默认 20
 
 	// Task 15:安全检测增强配置字段。空值=用默认路径/值,Resolve* 方法统一解析。
-	SentinelRulesDir    string  `yaml:"sentinel_rules_dir"`    // 空=默认 ~/.claude-sentinel/rules
-	SuppressPath        string  `yaml:"suppress_path"`         // 空=默认 ~/.claude-sentinel/suppressions.yaml
-	BaselinePath        string  `yaml:"baseline_path"`         // 空=默认 ~/.claude-sentinel/baseline.json
-	SuppressionDiscount float64 `yaml:"suppression_discount"`  // 空/0=默认 0.3
+	SentinelRulesDir    string  `yaml:"sentinel_rules_dir"`   // 空=默认 ~/.claude-sentinel/rules
+	SuppressPath        string  `yaml:"suppress_path"`        // 空=默认 ~/.claude-sentinel/suppressions.yaml
+	BaselinePath        string  `yaml:"baseline_path"`        // 空=默认 ~/.claude-sentinel/baseline.json
+	SuppressionDiscount float64 `yaml:"suppression_discount"` // 空/0=默认 0.3
 
 	// 检测器运行期配置(启用开关 + 二进制路径)。nil=全启用默认(向后兼容)。
 	// main.go 启动时 EnsureDetectors 确保非 nil,使 API 写能原地被检测器读到。
@@ -106,10 +106,10 @@ func (c *Config) ResolveKnownProjects() []KnownProject {
 // AgentCfg 是单个 code agent 的用户配置(setup 写入)。
 type AgentCfg struct {
 	ID          string `yaml:"id"            json:"id"`
-	Enabled     bool   `yaml:"enabled"       json:"enabled"`       // setup 勾选结果
+	Enabled     bool   `yaml:"enabled"       json:"enabled"`               // setup 勾选结果
 	ScanEnabled *bool  `yaml:"scan_enabled,omitempty" json:"scan_enabled"` // 运行期扫描覆盖开关。nil→默认 true(向后兼容旧配置)
-	RootDir     string `yaml:"root_dir"      json:"root_dir"`      // 配置根:~/.claude;空=默认
-	ClaudeJSON  string `yaml:"claude_json"   json:"claude_json"`   // 机器管理文件:~/.claude.json;空=默认
+	RootDir     string `yaml:"root_dir"      json:"root_dir"`              // 配置根:~/.claude;空=默认
+	ClaudeJSON  string `yaml:"claude_json"   json:"claude_json"`           // 机器管理文件:~/.claude.json;空=默认
 }
 
 // ScanEnabledEffective 展开 ScanEnabled 三态:nil→true(向后兼容旧配置)。
@@ -273,6 +273,13 @@ func (c *Config) ResolveBaselinePath(home string) string {
 		return c.BaselinePath
 	}
 	return filepath.Join(home, ".claude-sentinel", "baseline.json")
+}
+
+// ResolveStatesPath 返回 finding_states.yaml 路径。统一默认 <home>/.claude-sentinel/finding_states.yaml。
+// 注:finding_states.yaml 暂不接 config 覆盖(与 baseline/suppressions 不同),统一默认路径
+// 简化迁移与多路径一致性问题。
+func (c *Config) ResolveStatesPath(home string) string {
+	return filepath.Join(home, ".claude-sentinel", "finding_states.yaml")
 }
 
 // ResolveSuppressionDiscount 返回抑制折扣因子。0 或负值=默认 0.3。

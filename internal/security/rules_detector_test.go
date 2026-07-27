@@ -13,7 +13,6 @@ import (
 
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/security/ruleengine"
-	"code-agent-sentinel/internal/security/suppression"
 )
 
 // rules_detector_test.go — Task 11 RulesDetector 测试
@@ -247,117 +246,6 @@ func hasLoadError(fs []Finding) bool {
 		}
 	}
 	return false
-}
-
-// TestRulesDetectorSuppressionBaselineHit 验证 baseline 命中 → finding 被标记 suppressed。
-// 先空 baseline 扫描取一条 finding 的 fingerprint,写入 baseline.json,再扫该 finding 应被抑制。
-func TestRulesDetectorSuppressionBaselineHit(t *testing.T) {
-	home := newRulesHome(t)
-
-	// 第一次扫描:无 baseline → finding 未抑制
-	d1 := NewRulesDetector(home, nil)
-	assets := []configengine.Asset{
-		{ID: "perm-1", Type: configengine.AssetPermissions, Name: "permissions",
-			Fields: map[string]any{"allow": []any{"Bash(*)"}}},
-	}
-	fs1, err := d1.Scan(context.Background(), assets)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var target *Finding
-	for i := range fs1 {
-		if fs1[i].RuleID == "baseline.wildcard-bash" {
-			target = &fs1[i]
-			break
-		}
-	}
-	if target == nil {
-		t.Fatalf("未检出 baseline.wildcard-bash: %+v", fs1)
-	}
-	if target.Suppressed {
-		t.Fatal("无 baseline 时 finding 不应被抑制")
-	}
-
-	// 用 RulesDetector 的规则集算 fingerprint(规则结构稳定,baseRules 即扫描用的同一批规则)。
-	fp := ""
-	for _, r := range d1.rulesForTest() {
-		if r.ID == "baseline.wildcard-bash" {
-			fp = ruleengine.Fingerprint(r, "perm-1")
-			break
-		}
-	}
-	if fp == "" {
-		t.Fatal("未找到 baseline.wildcard-bash 规则算 fingerprint")
-	}
-
-	// 写 baseline.json 含该 fingerprint
-	bs := &suppression.BaselineSet{Fingerprints: map[string]bool{fp: true}}
-	baselinePath := filepath.Join(home, ".claude-sentinel", "baseline.json")
-	if err := bs.Save(baselinePath); err != nil {
-		t.Fatal(err)
-	}
-
-	// 第二次扫描:baseline 命中 → finding 被抑制
-	d2 := NewRulesDetector(home, nil)
-	fs2, err := d2.Scan(context.Background(), assets)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var suppressed *Finding
-	for i := range fs2 {
-		if fs2[i].RuleID == "baseline.wildcard-bash" {
-			suppressed = &fs2[i]
-			break
-		}
-	}
-	if suppressed == nil {
-		t.Fatalf("第二次扫描未检出 baseline.wildcard-bash: %+v", fs2)
-	}
-	if !suppressed.Suppressed {
-		t.Fatal("baseline 命中应标记 Suppressed=true")
-	}
-	if suppressed.Suppression != "baseline" {
-		t.Fatalf("Suppression = %q, want baseline", suppressed.Suppression)
-	}
-}
-
-// TestRulesDetectorSuppressionInline 验证行内豁免(rule+asset 档)命中 → Suppression="inline"。
-func TestRulesDetectorSuppressionInline(t *testing.T) {
-	home := newRulesHome(t)
-	// 写 suppressions.yaml:豁免 baseline.wildcard-bash 在 perm-1 资产上
-	supprPath := filepath.Join(home, ".claude-sentinel", "suppressions.yaml")
-	supprs := &suppression.Suppressions{Items: []suppression.Item{
-		{RuleID: "baseline.wildcard-bash", AssetID: "perm-1", Reason: "已知风险,接受"},
-	}}
-	if err := supprs.Save(supprPath); err != nil {
-		t.Fatal(err)
-	}
-
-	d := NewRulesDetector(home, nil)
-	assets := []configengine.Asset{
-		{ID: "perm-1", Type: configengine.AssetPermissions, Name: "permissions",
-			Fields: map[string]any{"allow": []any{"Bash(*)"}}},
-	}
-	fs, err := d.Scan(context.Background(), assets)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var hit *Finding
-	for i := range fs {
-		if fs[i].RuleID == "baseline.wildcard-bash" {
-			hit = &fs[i]
-			break
-		}
-	}
-	if hit == nil {
-		t.Fatalf("未检出 baseline.wildcard-bash: %+v", fs)
-	}
-	if !hit.Suppressed || hit.Suppression != "inline" {
-		t.Fatalf("inline 豁免应命中: suppressed=%v suppression=%q", hit.Suppressed, hit.Suppression)
-	}
-	if hit.Reason != "已知风险,接受" {
-		t.Fatalf("Reason = %q, want '已知风险,接受'", hit.Reason)
-	}
 }
 
 // TestRulesDetectorProjectRuleScoped 验证项目规则隔离:
