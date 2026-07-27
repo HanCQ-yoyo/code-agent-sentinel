@@ -16,13 +16,13 @@ func validSeverity(s string) bool {
 	return false
 }
 
-// validAssetType 判断 asset_type 字符串是否匹配 configengine 的 11 个常量之一。
+// validAssetType 判断 asset_type 字符串是否匹配 configengine 的 12 个常量之一。
 func validAssetType(s string) bool {
 	switch configengine.AssetType(s) {
 	case configengine.AssetSettings, configengine.AssetPermissions, configengine.AssetHook,
 		configengine.AssetMCPServer, configengine.AssetSkill, configengine.AssetCommand,
 		configengine.AssetAgent, configengine.AssetPlugin, configengine.AssetMemory,
-		configengine.AssetKeybinding, configengine.AssetScript:
+		configengine.AssetKeybinding, configengine.AssetScript, configengine.AssetCredential:
 		return true
 	}
 	return false

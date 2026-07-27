@@ -30,6 +30,7 @@ const (
 	AssetMemory      AssetType = "memory"
 	AssetKeybinding  AssetType = "keybinding"
 	AssetScript      AssetType = "script"
+	AssetCredential  AssetType = "credential" // 凭据文件(auth.json/.env/*.pem 等),不暴露内容
 )
 
 // Asset 是一个被安全管控的配置项。

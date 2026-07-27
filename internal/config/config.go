@@ -64,7 +64,7 @@ type Config struct {
 }
 
 // DiscoveryCfg 控制资产发现范围(按资产类型开关)。configengine 不导入本包,
-// 故此处用 []string(11 个 AssetType 之一),main.go 桥接为 configengine.AssetType。
+// 故此处用 []string(12 个 AssetType 之一),main.go 桥接为 configengine.AssetType。
 type DiscoveryCfg struct {
 	DisabledAssetTypes []string `yaml:"disabled_asset_types" json:"disabled_asset_types"`
 }

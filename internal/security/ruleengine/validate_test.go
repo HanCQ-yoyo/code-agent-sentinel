@@ -376,3 +376,9 @@ func TestValidateDisabledRulePostExcludeStillValidated(t *testing.T) {
 		t.Fatal("bad post_exclude regex should fail even for disabled rule")
 	}
 }
+
+func TestValidAssetTypeIncludesCredential(t *testing.T) {
+	if !validAssetType("credential") {
+		t.Fatal("validAssetType 应接受 \"credential\"")
+	}
+}
