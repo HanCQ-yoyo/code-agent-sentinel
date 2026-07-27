@@ -3,6 +3,7 @@ package configengine
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -224,5 +225,58 @@ func TestDiscoverProjectIgnoresGlobalClaudeDir(t *testing.T) {
 	}
 	if !foundProjSkill {
 		t.Error("项目级发现应从 <project>/.claude 读,不受全局 claudeDir 影响")
+	}
+}
+
+// TestDiscoverProjectKeybindings 验证 L4:项目级 .claude/keybindings.json 被发现为
+// scope=project 的 keybinding 资产(规格 §2.1 项目 .claude/)。
+func TestDiscoverProjectKeybindings(t *testing.T) {
+	f := newFixture(t)
+	proj := filepath.Join(f.home, "myproj")
+	os.MkdirAll(filepath.Join(proj, ".claude"), 0o755)
+	os.WriteFile(filepath.Join(proj, ".claude", "keybindings.json"), []byte(`{"ctrl+k":"action"}`), 0o644)
+	// 在 ~/.claude.json 登记 myproj 为已知项目
+	f.writeClaudeJSON(`{"projects":{"` + proj + `":{}}}`)
+
+	eng := NewEngine(f.home, "")
+	inv, err := eng.Discover()
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, a := range inv.Assets {
+		if a.Type == AssetKeybinding && a.Scope == ScopeProject {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("应发现项目级 .claude/keybindings.json(scope=project)")
+	}
+}
+
+// TestDiscoverProjectHooksScriptDir 验证 L3 项目级:项目 .claude/hooks/ 目录下的脚本
+// 被枚举为 scope=project 的 script 资产。与全局 hooks/ 同理(parseHooksScriptDir 复用)。
+func TestDiscoverProjectHooksScriptDir(t *testing.T) {
+	f := newFixture(t)
+	proj := filepath.Join(f.home, "myproj")
+	os.MkdirAll(filepath.Join(proj, ".claude", "hooks"), 0o755)
+	os.WriteFile(filepath.Join(proj, ".claude", "hooks", "deploy.sh"), []byte("#!/bin/bash\necho deploy"), 0o644)
+	// 给项目一个 settings.json 确保 discoverOneProject 运行(守卫要求 .claude 或 .mcp.json 存在)
+	os.WriteFile(filepath.Join(proj, ".claude", "settings.json"), []byte(`{}`), 0o644)
+	f.writeClaudeJSON(`{"projects":{"` + proj + `":{}}}`)
+
+	eng := NewEngine(f.home, "")
+	inv, err := eng.Discover()
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := false
+	for _, a := range inv.Assets {
+		if a.Type == AssetScript && strings.HasSuffix(a.SourcePath, "myproj/.claude/hooks/deploy.sh") && a.Scope == ScopeProject {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("应发现项目级 .claude/hooks/deploy.sh 为 scope=project 的 script 资产")
 	}
 }

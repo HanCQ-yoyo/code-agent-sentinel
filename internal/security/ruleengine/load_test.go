@@ -34,7 +34,7 @@ func TestMergeDisableByMissingMatch(t *testing.T) {
 }
 
 func TestLoadDirMissingIsEmpty(t *testing.T) {
-	rules, errs := LoadDir("/nonexistent/path", "global")
+	rules, _, errs := LoadDir("/nonexistent/path", "global")
 	if len(rules) != 0 || len(errs) != 0 {
 		t.Fatal("missing dir should be empty, no error")
 	}
@@ -67,7 +67,7 @@ func TestMergePreservesOrder(t *testing.T) {
 }
 
 func TestLoadBuiltinReturnsRules(t *testing.T) {
-	rules, errs := LoadBuiltin()
+	rules, _, errs := LoadBuiltin()
 	if len(errs) != 0 {
 		t.Fatalf("LoadBuiltin should have no errors, got %v", errs)
 	}
@@ -96,7 +96,7 @@ func TestLoadDirParsesYaml(t *testing.T) {
 	if err := os.WriteFile(path, []byte(yamlContent), 0644); err != nil {
 		t.Fatal(err)
 	}
-	rules, errs := LoadDir(dir, "global")
+	rules, _, errs := LoadDir(dir, "global")
 	if len(errs) != 0 {
 		t.Fatalf("LoadDir should have no errors, got %v", errs)
 	}
@@ -119,7 +119,7 @@ func TestLoadDirBadYamlReportsError(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "bad.yaml"), []byte(badYaml), 0644); err != nil {
 		t.Fatal(err)
 	}
-	rules, errs := LoadDir(dir, "global")
+	rules, _, errs := LoadDir(dir, "global")
 	if len(errs) == 0 {
 		t.Fatal("bad yaml should report error")
 	}
@@ -172,7 +172,7 @@ func TestLoadForScanMergesBuiltinGlobalProject(t *testing.T) {
 		Projects: []configengine.Project{{Path: projectDir, Name: "test-project"}},
 	}
 
-	rules, errs := LoadForScan(home, inv)
+	rules, _, errs := LoadForScan(home, inv)
 	if len(errs) != 0 {
 		t.Fatalf("LoadForScan should have no errors, got %v", errs)
 	}
@@ -225,7 +225,7 @@ func TestLoadForScanProjectIsolation(t *testing.T) {
 		Projects: []configengine.Project{{Path: projectDir, Name: "test-project"}},
 	}
 
-	rules, errs := LoadForScan(home, inv)
+	rules, _, errs := LoadForScan(home, inv)
 	if len(errs) != 0 {
 		t.Fatalf("LoadForScan should have no errors, got %v", errs)
 	}
@@ -261,7 +261,7 @@ func TestLoadForScanOverrideBuiltinByGlobal(t *testing.T) {
 	}
 
 	// 获取内置规则 ID,用全局规则覆盖它
-	builtin, _ := LoadBuiltin()
+	builtin, _, _ := LoadBuiltin()
 	if len(builtin) == 0 {
 		t.Fatal("builtin rules empty")
 	}
@@ -272,7 +272,7 @@ func TestLoadForScanOverrideBuiltinByGlobal(t *testing.T) {
 	}
 
 	inv := &configengine.Inventory{}
-	rules, errs := LoadForScan(home, inv)
+	rules, _, errs := LoadForScan(home, inv)
 	if len(errs) != 0 {
 		t.Fatalf("LoadForScan should have no errors, got %v", errs)
 	}
@@ -292,7 +292,7 @@ func TestLoadForScanNoInventoryProjects(t *testing.T) {
 	// 无项目的 inventory,只加载 builtin(无全局规则目录)
 	home := t.TempDir()
 	inv := &configengine.Inventory{}
-	rules, errs := LoadForScan(home, inv)
+	rules, _, errs := LoadForScan(home, inv)
 	if len(errs) != 0 {
 		t.Fatalf("LoadForScan should have no errors, got %v", errs)
 	}
@@ -308,7 +308,7 @@ func TestLoadDirNonDirectoryErrors(t *testing.T) {
 	if err := os.WriteFile(filePath, []byte("x"), 0644); err != nil {
 		t.Fatal(err)
 	}
-	rules, errs := LoadDir(filePath, "global")
+	rules, _, errs := LoadDir(filePath, "global")
 	if len(errs) != 1 {
 		t.Fatalf("non-directory path should report 1 error, got %d: %v", len(errs), errs)
 	}
@@ -339,7 +339,7 @@ func TestLoadForScanMultiProjectSameIDCoexists(t *testing.T) {
 	inv := &configengine.Inventory{
 		Projects: []configengine.Project{{Path: projA, Name: "a"}, {Path: projB, Name: "b"}},
 	}
-	rules, errs := LoadForScan(home, inv)
+	rules, _, errs := LoadForScan(home, inv)
 	if len(errs) != 0 {
 		t.Fatalf("LoadForScan should have no errors, got %v", errs)
 	}
@@ -360,4 +360,47 @@ func TestLoadForScanMultiProjectSameIDCoexists(t *testing.T) {
 	if aRule == nil || bRule == nil {
 		t.Fatalf("both projects' shared-rule must survive; got aRule=%v bRule=%v", aRule != nil, bRule != nil)
 	}
+}
+
+// ── Task 10: combo.yaml 6 条规则加载测试 ──
+
+// TestLoadBuiltinIncludesComboRules 验证 combo.yaml 的 6 条组合规则经 LoadBuiltin 加载
+// (go:embed rules/*.yaml 自动读取 combo.yaml)。combo.yaml 不存在或语法错误 → len(errs) > 0
+// 或缺少 ID。combo 规则的 ValidateCombo 预编译在 NewRulesDetector 构造时跑(Task 9),
+// 此处只验证 YAML 解析成功且 6 条 ID 齐全。
+func TestLoadBuiltinIncludesComboRules(t *testing.T) {
+	_, combos, errs := LoadBuiltin()
+	if len(errs) > 0 {
+		t.Fatalf("LoadBuiltin errors: %v", errs)
+	}
+	ids := map[string]bool{}
+	for _, c := range combos {
+		ids[c.ID] = true
+	}
+	want := []string{
+		"combo.skip-perm-with-bash-wildcard",
+		"combo.skip-perm-with-network",
+		"combo.bash-with-exfil",
+		"combo.codex-danger-never",
+		"combo.codex-hooks-state-mismatch",
+		"combo.read-with-exfil",
+	}
+	for _, id := range want {
+		if !ids[id] {
+			t.Errorf("缺 combo 规则 %q(已加载 combos: %v)", id, comboIDs(combos))
+		}
+	}
+	// 精确计数:combo.yaml 应恰好 6 条(防未来增删 combo 规则时本测试静默放过)。
+	if len(combos) != len(want) {
+		t.Errorf("combo 规则数 = %d, want %d(已加载: %v)", len(combos), len(want), comboIDs(combos))
+	}
+}
+
+// comboIDs 提取 combos 的 ID 列表(错误消息用)。
+func comboIDs(combos []ComboRule) []string {
+	out := make([]string, 0, len(combos))
+	for _, c := range combos {
+		out = append(out, c.ID)
+	}
+	return out
 }

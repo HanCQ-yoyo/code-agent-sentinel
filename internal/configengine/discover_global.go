@@ -58,6 +58,21 @@ func (e *Engine) discoverClaude() (Inventory, error) {
 	if mcpAssets, err := parseClaudeJSONMCP(e.ClaudeJSON, ScopeGlobal); err == nil {
 		inv.Assets = append(inv.Assets, mcpAssets...)
 	}
+	// L1:全局 ~/.claude/.mcp.json(规格 §2.1 全局 MCP 文件,与项目 .mcp.json 同构)。
+	// Claude Code 在 ~/.claude/.mcp.json 放全局 MCP server 配置(非项目级),发现它
+	// 使全局 MCP 资产列表完整。parseMCPJSON 文件不存在返回 err,故先 fileExists 守卫。
+	if p := filepath.Join(claude, ".mcp.json"); fileExists(p) {
+		if a, _ := parseMCPJSON(p, ScopeGlobal); a != nil {
+			inv.Assets = append(inv.Assets, a...)
+		}
+	}
+	// L2:企业 managed-mcp.json(规格 §2.5/§2.10,scope=managed,Fields["managed"]=true)。
+	// 企业管理工具部署的 MCP server,基线规则据此识别 managed server 施加不同策略。
+	if p := filepath.Join(claude, "managed-mcp.json"); fileExists(p) {
+		if a, _ := parseManagedMCP(p, ScopeManaged); a != nil {
+			inv.Assets = append(inv.Assets, a...)
+		}
+	}
 
 	// memory:CLAUDE.md + memory/ 目录(含真实内容 hash)。
 	if mem, _ := parseMemory(claude, ScopeGlobal); mem != nil {
@@ -74,6 +89,14 @@ func (e *Engine) discoverClaude() (Inventory, error) {
 		inv.Assets = append(inv.Assets, kb...)
 	}
 
+	// L3:独立 ~/.claude/hooks/ 脚本目录(规格 §2.1/§8.1)。枚举脚本文件作 script 资产。
+	// 与 parseScripts 抽取的 script 互补:hooks/ 下的脚本可能被外部(CI/cron)直接调用,
+	// parseScripts 只发现 hook/command 引用的脚本,会漏掉 hooks/ 下未被引用的脚本——
+	// parseHooksScriptDir 补齐这一缺口。两者可能对同一 hooks/ 脚本各产一条:parseScripts
+	// 通过预填 seen(传入 inv.Assets 中已有 AssetScript 的 SourcePath)跳过 parseHooksScriptDir
+	// 已产出的同路径脚本,避免重复入表;detectDuplicates 另行按 type+name 上报(不删除)跨
+	// scope / 跨 source_path 的重复供 UI 展示。
+	inv.Assets = append(inv.Assets, parseHooksScriptDir(claude, ScopeGlobal)...)
 	// scripts:在所有解析完成后,从 hook/command 资产的 command 字段抽取引用脚本。
 	inv.Assets = append(inv.Assets, parseScripts(inv.Assets, claude)...)
 

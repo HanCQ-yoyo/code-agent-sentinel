@@ -10,7 +10,7 @@ import (
 // Task 3 的骨架测试:文件存在 + 样例规则 destructive.sample.should-exist 注册。
 // Task 4 起追加真实 git 域规则后,样例规则被删除,本测试改为验证 git 域规则加载。
 func TestDestructiveRules_Load(t *testing.T) {
-	rules, errs := LoadBuiltin()
+	rules, _, errs := LoadBuiltin()
 	if len(errs) > 0 {
 		t.Fatalf("load errors: %v", errs)
 	}
@@ -96,7 +96,7 @@ func wantAnyHit(t *testing.T, name, cmd string, hits []string, wantID string) {
 // TestDestructive_GitDomain — Task 4:git 域 12 条 dest 规则 + safe post_exclude。
 // 覆盖:5 条 dest 命中 + 3 条 safe 不误报(含 git commit -m "rm -rf /" 数据区隔)。
 func TestDestructive_GitDomain(t *testing.T) {
-	rules, errs := LoadBuiltin()
+	rules, _, errs := LoadBuiltin()
 	if len(errs) > 0 {
 		t.Fatalf("LoadBuiltin errors: %v", errs)
 	}
@@ -146,7 +146,7 @@ func TestDestructive_GitDomain(t *testing.T) {
 // 命中 mysql 和 postgresql 规则。使用 anyHit 验证期望规则在命中集中;safe 用例
 // 期望空命中集。
 func TestDestructive_DatabaseDomain(t *testing.T) {
-	rules, errs := LoadBuiltin()
+	rules, _, errs := LoadBuiltin()
 	if len(errs) > 0 {
 		t.Fatalf("LoadBuiltin errors: %v", errs)
 	}
@@ -308,7 +308,7 @@ func TestDestructive_DatabaseDomain(t *testing.T) {
 //
 // 规则名对齐 dcg core/filesystem.rs 的 pattern name(如 rm-rf-root-home 而非 rm-root-absolute)。
 func TestDestructive_FilesystemDomain(t *testing.T) {
-	rules, errs := LoadBuiltin()
+	rules, _, errs := LoadBuiltin()
 	if len(errs) > 0 {
 		t.Fatalf("LoadBuiltin errors: %v", errs)
 	}
@@ -413,7 +413,7 @@ func TestDestructive_FilesystemDomain(t *testing.T) {
 // 子串,\b 在 docker 与 -compose 间存在)与 compose.rm-force。用 wantAnyHit 验证期望
 // 规则在命中集中;safe 用例期望空命中集。
 func TestDestructive_ContainersDomain(t *testing.T) {
-	rules, errs := LoadBuiltin()
+	rules, _, errs := LoadBuiltin()
 	if len(errs) > 0 {
 		t.Fatalf("LoadBuiltin errors: %v", errs)
 	}
@@ -522,7 +522,7 @@ func TestDestructive_ContainersDomain(t *testing.T) {
 // 关键测试:--dry-run 不命中(安全),--dry-run=false / --no-dry-run 仍命中(危险)。
 // 包名含破坏子命令前缀(uninstall-tool / unpublish-ci)不误匹配(尾锚点 (?=\\s|\$))。
 func TestDestructive_PackageManagersDomain(t *testing.T) {
-	rules, errs := LoadBuiltin()
+	rules, _, errs := LoadBuiltin()
 	if len(errs) > 0 {
 		t.Fatalf("LoadBuiltin errors: %v", errs)
 	}

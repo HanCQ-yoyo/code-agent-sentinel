@@ -66,6 +66,44 @@ type MatchNode struct {
 	raw map[string]any
 }
 
+// ComboRule 是跨资产组合规则:所有 Requires 同时命中(AND)时产一条 Finding。
+// 在 RulesDetector.Scan 的单资产循环后跑第二遍,输入是同 agent 的整个 []Asset。
+// Requires[i].Match 复用 MatchNode + 现有 11 个 op;组合语义在 Requires 层面。
+//
+// 与单资产 Rule 的区别:ComboRule 的 AssetType 为空(组合规则不挂单一资产类型),
+// 命中条件是"同批资产里每个 Require 各自找到一条满足的资产"(AND)。
+type ComboRule struct {
+	ID          string           `yaml:"id"`
+	Severity    string           `yaml:"severity"`
+	Description string           `yaml:"description"`
+	Remediation string           `yaml:"remediation"`
+	Metadata    map[string]any   `yaml:"metadata"`
+	Requires    []ComboCondition `yaml:"requires"`
+	Source      string           `yaml:"-"` // 来源文件路径(加载时填)
+}
+
+// ComboCondition 是 ComboRule 的一个子条件:在某类资产上匹配单条规则。
+// AssetType 可空(=任意类型,求值时不过滤类型)。Match 复用 MatchNode 求值(evalLeaf)。
+//
+// compiled 是编译态(ValidateCombo 预填,不序列化):把本 require 当作单资产 Rule
+// 编译,缓存正则进 compiled.regexes。Task 9 的 comboMatches 求值时构造 Rule
+// 复用其 regexes 缓存,避免每资产重编译。comboMatches 用 req.AssetType 做 asset
+// 类型路由(空=不过滤),不读 compiled.AssetType——故空 AssetType 的占位编译见
+// ValidateCombo 注释。
+type ComboCondition struct {
+	AssetType string    `yaml:"asset_type"`
+	Match     MatchNode `yaml:"match"`
+	compiled  *Rule
+}
+
+// CompiledRule 返回 ValidateCombo 预编译的 Rule(含 regexes 缓存),供 security 包的
+// comboMatches 复用正则缓存求值。未预编译(理论不发生,ValidateCombo 已编译)返回 nil。
+//
+// 跨包访问需求:comboMatches 在 internal/security(rules_detector.go, package security)
+// 不能读 ComboCondition.compiled(未导出字段,跨包访问编译失败)。此导出方法是最小改动
+// 解决方案,不破坏封装(callers 只读不能改)。
+func (c ComboCondition) CompiledRule() *Rule { return c.compiled }
+
 // Location 是 content 字段命中的文件位置(1-based)。
 // Line=行号;StartCol/EndCol=字节列半开区间 [StartCol, EndCol),便于 Monaco 高亮。
 // 仅 content 字段的 regex_match/contains 产生;字段级匹配与反混淆命中无位置。

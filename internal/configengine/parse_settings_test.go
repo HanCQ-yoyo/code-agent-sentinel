@@ -1,6 +1,10 @@
 package configengine
 
-import "testing"
+import (
+	"os"
+	"path/filepath"
+	"testing"
+)
 
 func TestParseSettings(t *testing.T) {
 	f := newFixture(t)
@@ -206,6 +210,7 @@ func TestDiscoverSettingsAndSettingsLocalCoexist(t *testing.T) {
 		t.Errorf("期望 Name 集合含 settings 与 settings.local, 实际 %v", names)
 	}
 }
+
 // TestParseSettingsCorrupted 验证:损坏的 JSON 不致全盘失败,而是产出一条
 // 带 parse_error 的 settings 占位资产(有 ID,可被上层当作 Finding 暴露)。
 // 文件可读,故 hash 也应填充(与 placeholder 行为一致)。
@@ -281,6 +286,52 @@ func TestParseSettingsContentAndFieldsContract(t *testing.T) {
 	}
 	if rawStr != src {
 		t.Errorf("Fields[raw] 应等于原文件文本")
+	}
+}
+
+// TestParseSettingsSkipDangerousField 验证:settings.json 含 skipDangerousModePermissionPrompt: true
+// 时,产出 settings 资产 Fields["skip_dangerous"] = true。该结构化字段供 Task 10 基线规则
+// (skip_dangerous)直接匹配,无需再扫 Fields["raw"] 全文本。
+func TestParseSettingsSkipDangerousField(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "settings.json")
+	os.WriteFile(p, []byte(`{"skipDangerousModePermissionPrompt": true, "model": "x"}`), 0o644)
+	assets, err := parseSettings(p, ScopeGlobal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var settings *Asset
+	for i := range assets {
+		if assets[i].Type == AssetSettings {
+			settings = &assets[i]
+		}
+	}
+	if settings == nil {
+		t.Fatal("未产出 settings 资产")
+	}
+	if settings.Fields["skip_dangerous"] != true {
+		t.Fatalf("skip_dangerous = %v, want true", settings.Fields["skip_dangerous"])
+	}
+}
+
+// TestParseSettingsSkipDangerousAbsent 验证:文件不含 skipDangerousModePermissionPrompt 键时,
+// 不设 Fields["skip_dangerous"](absent != false,避免规则误匹配 false==false)。
+func TestParseSettingsSkipDangerousAbsent(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "settings.json")
+	os.WriteFile(p, []byte(`{"model": "x"}`), 0o644)
+	assets, _ := parseSettings(p, ScopeGlobal)
+	var settings *Asset
+	for i := range assets {
+		if assets[i].Type == AssetSettings {
+			settings = &assets[i]
+		}
+	}
+	if settings == nil {
+		t.Fatal("未产出 settings 资产")
+	}
+	if _, ok := settings.Fields["skip_dangerous"]; ok {
+		t.Fatal("无 skipDangerousModePermissionPrompt 时不应设 skip_dangerous 字段")
 	}
 }
 

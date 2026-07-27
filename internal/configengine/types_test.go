@@ -68,3 +68,15 @@ func TestScopePluginConstant(t *testing.T) {
 		t.Fatalf("Filter ScopePlugin = %+v, want only brainstorming", got)
 	}
 }
+
+func TestAssetCredentialConstant(t *testing.T) {
+	if AssetCredential != "credential" {
+		t.Fatalf("AssetCredential = %q, want \"credential\"", AssetCredential)
+	}
+	// credential 资产应能经 makeAssetID 产出稳定 ID(确保新类型可构造资产)
+	a := Asset{Type: AssetCredential, Scope: ScopeGlobal, SourcePath: "/x/auth.json", Name: "auth.json"}
+	a.ID = makeAssetID(a)
+	if a.ID == "" {
+		t.Fatal("credential 资产 ID 为空")
+	}
+}

@@ -6,8 +6,9 @@ English | [中文](README.zh-CN.md)
 
 ## Features
 
-- **Asset discovery & parsing**: reads `~/.claude/` and project `.claude/` — settings, permissions, hooks, MCP servers, skills, commands, agents, plugins, CLAUDE.md/memory, keybindings, scripts. Supports multiple code agents: **Claude Code** (`~/.claude/`) and **OpenAI Codex CLI** (`~/.codex/config.toml`, `AGENTS.md`, `prompts/`, `hooks.json`). `sentinel setup` auto-detects installed agents; the dashboard aggregates multiple agents with independent scans.
-- **Security detection**: unified rule engine (63 built-in rules) + prompt-injection scanning with deobfuscation + secret scanning (gitleaks) + dependency audit (govulncheck / npm-audit). Missing scanner binaries degrade gracefully.
+- **Asset discovery & parsing**: reads `~/.claude/` and project `.claude/` — settings, permissions, hooks, MCP servers, skills, commands, agents, plugins, CLAUDE.md/memory, keybindings, scripts, **credential** (`auth.json` / `.env` / `*.pem` etc., content not exposed) — 12 asset types. Supports multiple code agents: **Claude Code** (`~/.claude/`) and **OpenAI Codex CLI** (`~/.codex/config.toml`, `AGENTS.md`, `prompts/`, `hooks.json`). `sentinel setup` auto-detects installed agents; the dashboard aggregates multiple agents with independent scans.
+- **Discovery & cross-asset rules**: Claude L1-L5 — `managed-mcp.json` (enterprise mode hint), global `.mcp.json`, project `hooks/` directory, project `keybindings.json`, `skip_dangerous_mode_permission_prompt` field; Codex C2/C3 — project-level `.codex/config.toml` + `[hooks.state]` modeling; Codex C4/L6 — `auth.json` credential + project-root sensitive files. **6 cross-asset combo rules** (skip-perm+Bash(*) / Codex danger+never / credential exfil etc.) via the unified rule engine's new `ComboRule` second pass. Codex project-level discovery reads the sentinel `known_projects` list (independent of `~/.claude.json`).
+- **Security detection**: unified rule engine (256 built-in rules + 6 cross-asset combo rules) + prompt-injection scanning with deobfuscation + secret scanning (gitleaks) + dependency audit (govulncheck / npm-audit). Missing scanner binaries degrade gracefully.
 - **Suppressions & baseline**: silence known findings via `suppressions.yaml`; snapshot accepted fingerprints in `baseline.json` (create / prune from CLI or API).
 - **Health score**: `Score = 100 × (1 − Σ(R(asset)·w(asset)) / (Rmax · Σ w(asset)))`, Rmax=10, 0–100, 5-tier — explainable, monotone, restorable.
 - **Config editing**: atomic writes with automatic backup + migration (`internal/editor`); configengine stays read-only.
@@ -59,6 +60,7 @@ ssh -L <port>:127.0.0.1:<port> <devhost>
 | `scan_enabled` | bool | Master switch for the in-process scheduler. |
 | `language` | string | `zh` / `en`; empty = browser-detect then fall back to `zh`. |
 | `pinned_projects` | list | `{path, color}` entries pinned on the Assets page. |
+| `known_projects` | list | `{path, name}` entries — sentinel's independent known-projects list; `setup` auto-imports from `~/.claude.json` projects as initial value. Used for Codex project-level discovery (and Claude). Empty → Claude falls back to `~/.claude.json` projects. |
 | `dir_tags` | map | Per-path label overrides. |
 | `favorites` | []string | Pinned asset IDs (persisted server-side). |
 | `backup_dir` | string | Backup root; empty = `~/.claude-sentinel/backups`. |

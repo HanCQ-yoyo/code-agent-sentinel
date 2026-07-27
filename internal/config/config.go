@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"code-agent-sentinel/internal/configengine"
 )
 
 type BasicAuth struct {
@@ -57,6 +59,10 @@ type Config struct {
 	LogPath string `yaml:"log_path" json:"log_path"`
 	// #4:置顶项目列表
 	PinnedProjects []PinnedProject `yaml:"pinned_projects"`
+	// 已知项目清单(独立于 agent 机器文件;setup 可从 ~/.claude.json 导入初始值)。
+	// 供 Codex 项目级发现使用(替代 ~/.claude.json projects),Claude 各项目读 .claude/ 亦可用。
+	// 与 PinnedProjects 并列(语义不同:已知清单 vs Assets 页置顶标识)。
+	KnownProjects []KnownProject `yaml:"known_projects" json:"known_projects"`
 	// 多 agent 配置(setup 写入)。空 → ResolveAgents 回退到 ClaudeDir。
 	Agents []AgentCfg `yaml:"agents" json:"agents"`
 	// 多任务调度:每个 agent 一个定时扫描任务。空 → ResolveSchedules 回退到 ScanEnabled/ScanInterval。
@@ -64,7 +70,7 @@ type Config struct {
 }
 
 // DiscoveryCfg 控制资产发现范围(按资产类型开关)。configengine 不导入本包,
-// 故此处用 []string(11 个 AssetType 之一),main.go 桥接为 configengine.AssetType。
+// 故此处用 []string(12 个 AssetType 之一),main.go 桥接为 configengine.AssetType。
 type DiscoveryCfg struct {
 	DisabledAssetTypes []string `yaml:"disabled_asset_types" json:"disabled_asset_types"`
 }
@@ -73,6 +79,28 @@ type DiscoveryCfg struct {
 type PinnedProject struct {
 	Path  string `yaml:"path" json:"path"`
 	Color string `yaml:"color" json:"color"`
+}
+
+// KnownProject 是 sentinel 独立维护的已知项目清单(不依赖任何 agent 的机器文件)。
+// 用于两个 agent 的项目级发现:Claude 读各项目 .claude/,Codex 读各项目 AGENTS.md/.codex/。
+// 与 PinnedProjects 并列(语义不同:已知清单 vs Assets 页置顶标识)。
+type KnownProject struct {
+	Path string `yaml:"path" json:"path"`
+	Name string `yaml:"name" json:"name"`
+}
+
+// ResolveKnownProjects 返回去重后的已知项目列表(按 Path 去重,空 Path 跳过,保留首次出现)。
+func (c *Config) ResolveKnownProjects() []KnownProject {
+	seen := map[string]bool{}
+	out := make([]KnownProject, 0, len(c.KnownProjects))
+	for _, p := range c.KnownProjects {
+		if p.Path == "" || seen[p.Path] {
+			continue
+		}
+		seen[p.Path] = true
+		out = append(out, p)
+	}
+	return out
 }
 
 // AgentCfg 是单个 code agent 的用户配置(setup 写入)。
@@ -162,14 +190,23 @@ func (c *Config) ResolveClaudeDir(home string) string {
 }
 
 // ResolveAgents 解析启用的 agent 列表。
-// Agents 非空 → 直用(逐项空字段填默认);为空 → 用旧 ClaudeDir 回退构造单项 claude-code。
-// 保证旧配置(claude_dir)零破坏。
+// Agents 非空 → 直用(逐项空字段按 ID 查 configengine.KnownAgents() spec 填默认);为空 → 用旧 ClaudeDir 回退构造单项 claude-code。
+// 保证旧配置(claude_dir)零破坏。codex 的 spec 默认 ClaudeJSON="" → Codex agent 不再借 ~/.claude.json。
 func (c *Config) ResolveAgents(home string) []AgentCfg {
 	if len(c.Agents) > 0 {
+		specs := map[string]configengine.AgentSpec{}
+		for _, s := range configengine.KnownAgents() {
+			specs[s.ID] = s
+		}
 		out := make([]AgentCfg, len(c.Agents))
 		for i, a := range c.Agents {
-			a.RootDir = resolveDefault(a.RootDir, filepath.Join(home, ".claude"))
-			a.ClaudeJSON = resolveDefault(a.ClaudeJSON, filepath.Join(home, ".claude.json"))
+			spec, ok := specs[a.ID]
+			if !ok {
+				// 未知 agent ID:回退当 claude-code(向后兼容旧配置/拼写)。
+				spec = specs["claude-code"]
+			}
+			a.RootDir = resolveDefault(a.RootDir, spec.DefaultRootDir(home))
+			a.ClaudeJSON = resolveDefault(a.ClaudeJSON, spec.DefaultClaudeJSON(home))
 			out[i] = a
 		}
 		return out

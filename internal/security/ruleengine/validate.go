@@ -16,13 +16,13 @@ func validSeverity(s string) bool {
 	return false
 }
 
-// validAssetType 判断 asset_type 字符串是否匹配 configengine 的 11 个常量之一。
+// validAssetType 判断 asset_type 字符串是否匹配 configengine 的 12 个常量之一。
 func validAssetType(s string) bool {
 	switch configengine.AssetType(s) {
 	case configengine.AssetSettings, configengine.AssetPermissions, configengine.AssetHook,
 		configengine.AssetMCPServer, configengine.AssetSkill, configengine.AssetCommand,
 		configengine.AssetAgent, configengine.AssetPlugin, configengine.AssetMemory,
-		configengine.AssetKeybinding, configengine.AssetScript:
+		configengine.AssetKeybinding, configengine.AssetScript, configengine.AssetCredential:
 		return true
 	}
 	return false
@@ -280,4 +280,73 @@ func validateNot(v any, r *Rule) error {
 		return fmt.Errorf("op 'not' requires a single map child, got %T", v)
 	}
 	return validateMatchRaw(childRaw, r)
+}
+
+// ValidateCombo 校验组合规则并预编译每个 require 的 MatchNode 正则。
+//
+// 结构校验:每条 combo 需有 id + 合法 severity + 非空 requires(≥2 条,组合才有意义);
+// 每个 require 的 asset_type(若非空)必须是合法 AssetType。
+//
+// 预编译(controller addendum 决议):对每个 require 构造临时 Rule{ID, AssetType, Match}
+// 跑 validateRule(复用 validate.go:57 的单条校验——它编译正则进 tmp.regexes),
+// 成功则 c.compiled = &tmp。Task 9 的 comboMatches 求值时复用 compiled.regexes 缓存,
+// 避免每资产重编译。
+//
+// 空 AssetType 占位:validateRule 要求 r.AssetType 非空 + 合法(asset_type 是单资产
+// Rule 必填),但 combo 的 require AssetType 可空(=任意类型)。冲突解决:预编译时
+// 若 c.AssetType == "" 临时填 "settings" 占位,只为一过性编译正则——求值时 comboMatches
+// 用 req.AssetType 做 asset 类型过滤(空=不过滤),不读 compiled.AssetType,故占位
+// 不影响求值路由。
+//
+// 返回通过校验的 combo(Requires[*].compiled 已填)+ 错误列表。非法 combo 不进 valid。
+func ValidateCombo(rules []ComboRule) (valid []ComboRule, errs []RuleLoadError) {
+	for i := range rules {
+		r := &rules[i]
+		if r.ID == "" {
+			errs = append(errs, RuleLoadError{Source: r.Source, Reason: "combo rule missing id"})
+			continue
+		}
+		if r.Severity == "" {
+			errs = append(errs, RuleLoadError{Source: r.Source, Reason: fmt.Sprintf("combo rule %q missing severity", r.ID)})
+			continue
+		}
+		if !validSeverity(r.Severity) {
+			errs = append(errs, RuleLoadError{Source: r.Source, Reason: fmt.Sprintf("combo rule %q invalid severity %q", r.ID, r.Severity)})
+			continue
+		}
+		if len(r.Requires) < 2 {
+			errs = append(errs, RuleLoadError{Source: r.Source, Reason: fmt.Sprintf("combo rule %q requires 至少 2 条(组合才有意义)", r.ID)})
+			continue
+		}
+		bad := false
+		for j := range r.Requires {
+			c := &r.Requires[j]
+			if c.AssetType != "" && !validAssetType(c.AssetType) {
+				errs = append(errs, RuleLoadError{Source: r.Source, Reason: fmt.Sprintf("combo rule %q require[%d] invalid asset_type %q", r.ID, j, c.AssetType)})
+				bad = true
+				continue
+			}
+			// 预编译:把 require 当单资产 Rule 编译(填 regexes 缓存)。
+			// 空 AssetType 用 "settings" 占位:validateRule 要求非空,但求值不读
+			// compiled.AssetType(comboMatches 按 req.AssetType 路由)。
+			// Severity 继承 combo 的:validateRule 要求非空 severity,combo require 自身
+			// 无 severity(组合规则整体一条 severity),借 combo 的过校验即可。
+			tmp := Rule{ID: r.ID, Severity: r.Severity, Match: c.Match}
+			if c.AssetType != "" {
+				tmp.AssetType = c.AssetType
+			} else {
+				tmp.AssetType = "settings" // 占位:见上方注释
+			}
+			if err := validateRule(&tmp); err != nil {
+				errs = append(errs, RuleLoadError{Source: r.Source, Reason: fmt.Sprintf("combo rule %q require[%d]: %v", r.ID, j, err)})
+				bad = true
+				continue
+			}
+			c.compiled = &tmp
+		}
+		if !bad {
+			valid = append(valid, *r)
+		}
+	}
+	return valid, errs
 }

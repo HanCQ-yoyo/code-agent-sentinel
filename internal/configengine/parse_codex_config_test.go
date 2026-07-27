@@ -98,3 +98,39 @@ func TestParseCodexConfigMissingFile(t *testing.T) {
 		t.Fatal("文件不存在应返回 error")
 	}
 }
+
+// TestParseCodexConfigHooksState 验证 [hooks.state] 表建模到 settings.Fields["hooks_state"]。
+// [hooks.state] 是 name→trusted 映射(规格 §3.2)。go-toml/v2 把表头 `hooks.state` 按点号
+// 拆嵌套,故 codexConfig 用 Hooks.State 嵌套 struct 捕获(详见 parse_codex_config.go 的落地偏差注释)。
+func TestParseCodexConfigHooksState(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "config.toml")
+	content := `model = "gpt-5-codex"
+[hooks.state]
+"abc123" = "trusted"
+"def456" = "untrusted"
+`
+	if err := os.WriteFile(p, []byte(content), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	assets, err := parseCodexConfig(p, ScopeGlobal)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var settings *Asset
+	for i := range assets {
+		if assets[i].Type == AssetSettings && assets[i].Name == "config" {
+			settings = &assets[i]
+		}
+	}
+	if settings == nil {
+		t.Fatal("未产出 settings 资产")
+	}
+	hs, ok := settings.Fields["hooks_state"].(map[string]string)
+	if !ok {
+		t.Fatalf("hooks_state 未建模或类型错误: %T", settings.Fields["hooks_state"])
+	}
+	if hs["abc123"] != "trusted" || hs["def456"] != "untrusted" {
+		t.Fatalf("hooks_state = %+v, want {abc123:trusted, def456:untrusted}", hs)
+	}
+}

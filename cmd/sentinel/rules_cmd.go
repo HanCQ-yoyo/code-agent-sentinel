@@ -32,10 +32,11 @@ func newRulesCmd() *cobra.Command {
 // loadRulesForCLI 加载 builtin + global 规则供 CLI 展示/校验。
 // 返回 Validate 后的 valid 规则 + 全部加载/校验错误。
 // 不加载项目规则(CLI 场景用户关心全局规则;项目规则在扫描时动态加载)。
+// combo 暂不展示(_ 丢弃):rules 命令面向单资产规则,Task 8 范畴不扩 combo UI。
 func loadRulesForCLI(cfg *config.Config, home string) ([]ruleengine.Rule, []ruleengine.RuleLoadError) {
-	builtin, errs := ruleengine.LoadBuiltin()
+	builtin, _, errs := ruleengine.LoadBuiltin()
 	globalDir := cfg.ResolveSentinelRulesDir(home)
-	global, globalErrs := ruleengine.LoadDir(globalDir, "global:"+globalDir)
+	global, _, globalErrs := ruleengine.LoadDir(globalDir, "global:"+globalDir)
 	errs = append(errs, globalErrs...)
 	merged := ruleengine.Merge(builtin, global)
 	valid, validateErrs := ruleengine.Validate(merged)
@@ -108,7 +109,7 @@ func newRulesValidateCmd() *cobra.Command {
 				if err := os.WriteFile(dst, data, 0o644); err != nil {
 					return err
 				}
-				rules, loadErrs := ruleengine.LoadDir(tmpDir, "file:"+file)
+				rules, _, loadErrs := ruleengine.LoadDir(tmpDir, "file:"+file)
 				// Validate:LoadDir 只解析 YAML,Validate 做 schema + 正则编译校验
 				valid, validateErrs := ruleengine.Validate(rules)
 				loadErrs = append(loadErrs, validateErrs...)

@@ -35,6 +35,10 @@ type RulesDetector struct {
 	// builtin + global 合并 + Validate 后的规则(Meta 与 Scan 基础层)。
 	// Scan 时再叠加项目规则得到 allRules。
 	baseRules []ruleengine.Rule
+	// builtin + global 的 ComboRule(Task 8 加载,Task 9 在 Scan 第二遍求值)。
+	// 已在 NewRulesDetector 构造时经 ValidateCombo 预编译(Requires[*].compiled 填充)。
+	// 项目 combo 暂不接(LoadForScan 丢弃项目 combo,保持"项目规则只单资产"语义)。
+	baseComboRules []ruleengine.ComboRule
 	// 构造时的加载/校验错误(builtin + global + baseline + suppressions)。
 	// Scan 时追加项目规则错误,合并成 load-error findings。
 	loadErrs []ruleengine.RuleLoadError
@@ -63,9 +67,16 @@ func NewRulesDetector(home string, cfg *config.DetectorsConfig) *RulesDetector {
 	// 内置 + 全局规则:LoadForScan(home, nil) = builtin + global(无项目),合并 + Validate。
 	// 用 LoadForScan 而非 LoadBuiltin+LoadDir 分开调,是为了复用 Merge+Validate 一次成型。
 	// 路径 Finding #5:全局规则目录在 LoadForScan 内硬编码,扫描侧不读 cfg(sentinel_rules_dir)。
-	rules, errs := ruleengine.LoadForScan(home, nil)
+	//
+	// combos(builtin + global 的 ComboRule):Task 8 加载并赋 d.baseComboRules,
+	// 经 ValidateCombo 预编译(Requires[*].compiled 填充)。Task 9 的 Scan 第二遍接 comboMatches 求值。
+	// ValidateCombo 错误进 d.loadErrs(load-error Finding,Severity=Info 不进健康分)。
+	rules, combos, errs := ruleengine.LoadForScan(home, nil)
+	validCombos, comboErrs := ruleengine.ValidateCombo(combos)
 	d.baseRules = rules
+	d.baseComboRules = validCombos
 	d.loadErrs = errs
+	d.loadErrs = append(d.loadErrs, comboErrs...)
 
 	// 抑制配置:文件不存在 → (nil,nil) 静默(用户尚未生成/创建,非错误)。
 	// 路径 Finding #5:扫描侧硬编码默认路径,不读 cfg(baseline_path/suppress_path 覆盖在
@@ -259,6 +270,21 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 		}
 	}
 
+	// 跨资产组合规则第二遍(Task 9):同 agent 资产集内,所有 requires 同时命中(AND)
+	// → 1 条 Finding 挂到 primary(首个 require 命中的资产)。
+	//
+	// allComboRules 来源:d.baseComboRules(builtin + global,NewRulesDetector 构造时
+	// 已 ValidateCombo 预编译)。项目 combo 暂不接(loadProjectRules 丢弃项目 combo,保持
+	// "项目规则只单资产"语义,后续任务扩展)。
+	//
+	// 求值见 comboMatches:每个 require 用 CompiledRule()(ValidateCombo 预编译的 Rule,
+	// 含 regexes 缓存)跑 ruleengine.Eval;CompiledRule() 为 nil(理论不发生)安全降级不命中。
+	for _, cr := range d.baseComboRules {
+		if primary, evidence, ok := comboMatches(cr, assets); ok {
+			out = append(out, makeComboFinding(d, cr, primary, evidence))
+		}
+	}
+
 	// load-error Finding:AssetID 用 "rules:" + e.Source(合成 ID,不在任何 inventory)。
 	// Severity=Info(系数 0.0)→ ComputeHealth 不为其扣分(见 TestRulesDetectorLoadErrorNotInHealth)。
 	// 这是 spec 决策 #12「load-error Finding 不进健康分」的落地:旧 brief 用 SeverityMedium,
@@ -289,7 +315,8 @@ func (d *RulesDetector) loadProjectRules() ([]ruleengine.Rule, []ruleengine.Rule
 	var errs []ruleengine.RuleLoadError
 	for _, p := range projects {
 		dir := filepath.Join(p.Path, ".sentinel", "rules")
-		prules, perrs := ruleengine.LoadDir(dir, "project")
+		// 项目 combo 暂不接(_ 丢弃):保持"项目规则只单资产"语义,Task 8 范畴不扩。
+		prules, _, perrs := ruleengine.LoadDir(dir, "project")
 		errs = append(errs, perrs...)
 		for i := range prules {
 			prules[i].ProjectPath = p.Path
@@ -565,4 +592,68 @@ func makeSemanticFinding(d *RulesDetector, r ruleengine.Rule, a configengine.Ass
 		Remediation: r.Remediation,
 		Fingerprint: ruleengine.Fingerprint(r, a.ID),
 	}
+}
+
+// comboMatches 检查组合规则的所有 requires 是否在同 agent 资产集内各至少命中一个资产(AND)。
+// 返回 (primaryAsset, evidence, matched)。primary = 第一个 require 命中的资产;
+// evidence 列出各 require 命中的资产 ID(格式 "<asset_type>[<asset_id>]")。
+//
+// 求值:每个 require 用 CompiledRule()(ValidateCombo 预编译的 Rule,含 regexes 缓存)
+// 跑 ruleengine.Eval。CompiledRule() 为 nil(未预编译,理论不发生)→ 安全降级不命中。
+// AssetType 过滤:非空时只评估该类型资产,空=任意类型。
+// 每个 require 命中一个即可(break),全部 requires 都命中 → 组合成立。
+func comboMatches(cr ruleengine.ComboRule, assets []configengine.Asset) (primary configengine.Asset, evidence string, ok bool) {
+	var ev []string
+	first := true
+	for _, req := range cr.Requires {
+		hit := false
+		for _, a := range assets {
+			if req.AssetType != "" && a.Type != configengine.AssetType(req.AssetType) {
+				continue
+			}
+			compiled := req.CompiledRule()
+			if compiled == nil {
+				// 未预编译(理论不发生,ValidateCombo 已编译);安全降级:不命中。
+				continue
+			}
+			if res := ruleengine.Eval(*compiled, a); res.Matched {
+				if first {
+					primary = a
+					first = false
+				}
+				ev = append(ev, fmt.Sprintf("%s[%s]", req.AssetType, a.ID))
+				hit = true
+				break // 每个 require 命中一个即可
+			}
+		}
+		if !hit {
+			return primary, "", false // 某 require 未命中 → 组合不成立
+		}
+	}
+	return primary, strings.Join(ev, ", "), true
+}
+
+// makeComboFinding 构造组合规则的 Finding,挂到 primary 资产。
+// 镜像现有正则 finding(rules_detector.go:254-268)的构造:
+//   - Severity 用 Severity(cr.Severity) 强转(已 ValidateCombo 校验为合法枚举,无需 SeverityFromString)
+//   - Fingerprint 用 combo rule ID 算(构造临时 Rule{ID: cr.ID} 传 Fingerprint)
+//   - applySuppression 施加两层抑制(baseline/inline),与正则 finding 一致
+//   - Locations 留空(组合规则无单点命中位置)
+func makeComboFinding(d *RulesDetector, cr ruleengine.ComboRule, primary configengine.Asset, evidence string) Finding {
+	fp := ruleengine.Fingerprint(ruleengine.Rule{ID: cr.ID}, primary.ID)
+	f := Finding{
+		DetectorID:  d.ID(),
+		RuleID:      cr.ID,
+		Severity:    Severity(cr.Severity),
+		AssetID:     primary.ID,
+		AssetType:   primary.Type,
+		AssetName:   primary.Name,
+		Message:     cr.Description,
+		Evidence:    "组合命中: " + evidence,
+		Remediation: cr.Remediation,
+		Fingerprint: fp,
+		// Locations 留空(组合规则无单点命中位置)
+	}
+	applySuppression(&f, fp, d.baseline, d.supprs)
+	return f
 }

@@ -76,6 +76,11 @@ func (e *Engine) discoverOneProject(inv *Inventory, p Project) {
 			inv.Assets = append(inv.Assets, a...)
 		}
 	}
+	// L4:项目级 .claude/keybindings.json(规格 §2.1 项目 .claude/)。与全局 keybindings
+	// 同理,但 scope=project。parseKeybindings 文件不存在返回 nil,nil(项目可能无此文件)。
+	if kb, _ := parseKeybindings(filepath.Join(d, "keybindings.json"), ScopeProject); kb != nil {
+		inv.Assets = append(inv.Assets, kb...)
+	}
 	// 仅对**本项目**本次新增的 hook/command 抽取脚本(parseScripts 的 seen 去重是
 	// per-call 的;多项目循环下若扫全部 inv.Assets 的项目级 hook,每个项目都会重扫
 	// 前面项目已处理的 hook → 绝对路径脚本被重复产出(同 ID)+ detectDuplicates 误报。
@@ -86,7 +91,17 @@ func (e *Engine) discoverOneProject(inv *Inventory, p Project) {
 			projAssets = append(projAssets, a)
 		}
 	}
+	// L3:项目级 .claude/hooks/ 脚本目录(与全局 hooks/ 同理,scope=project)。
+	// 放在 parseScripts 前:parseScripts 会用传入 assets(projAssets)中已有 AssetScript
+	// 的 SourcePath 预填 seen,从而跳过 parseHooksScriptDir 已产出的同路径脚本,避免重复入表。
+	// 因此 hooksScripts 必须同时进 projAssets(供 seen 预填)与 inv.Assets(供下游消费)。
+	hooksScripts := parseHooksScriptDir(d, ScopeProject)
+	inv.Assets = append(inv.Assets, hooksScripts...)
+	projAssets = append(projAssets, hooksScripts...)
 	inv.Assets = append(inv.Assets, parseScripts(projAssets, d)...)
+	// L6:项目根凭据文件(.env/*.pem/.netrc 等)→ credential 资产(规格 §8.3)。
+	// 只扫项目根顶层,不进 .git/node_modules。auth.json 等也命中。
+	inv.Assets = append(inv.Assets, parseCredentials(p.Path, ScopeProject)...)
 }
 
 // readProjectList 从 ~/.claude.json 的 projects 字段列出已知项目。

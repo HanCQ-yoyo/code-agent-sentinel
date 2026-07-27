@@ -10,7 +10,7 @@ import (
 // ruleByID 从内置规则加载并按 ID 查找一条规则。
 func ruleByID(t *testing.T, id string) Rule {
 	t.Helper()
-	rules, errs := LoadBuiltin()
+	rules, _, errs := LoadBuiltin()
 	if len(errs) != 0 {
 		t.Fatalf("LoadBuiltin errors: %v", errs)
 	}

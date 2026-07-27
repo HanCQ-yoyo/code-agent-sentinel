@@ -6,7 +6,7 @@ import (
 )
 
 // discoverCodex 发现 Codex CLI 全局资产:config.toml + hooks.json + AGENTS.md + prompts/。
-// 项目级发现复用 ~/.claude.json 的 projects 清单(见 discoverCodexProjects)。
+// 项目级发现遍历 Engine.KnownProjects(从 sentinel config 桥接,见 discoverCodexProjects)。
 //
 // 设计:config.toml 走新 parseCodexConfig;hooks.json 复用 parseHooksFromData(对 event
 // 名零校验,Codex 的 PascalCase event 直接吃);AGENTS.md 走 codexAgentsMDAsset;
@@ -33,6 +33,9 @@ func (e *Engine) discoverCodex() (Inventory, error) {
 	if a := codexAgentsMDAsset(filepath.Join(codex, "AGENTS.md"), ScopeGlobal); a != nil {
 		inv.Assets = append(inv.Assets, *a)
 	}
+	// auth.json:Codex 认证凭据(规格 §3.5)。parseCredentials 扫顶层凭据文件,
+	// auth.json 命中 credential 资产(Content 空,不暴露明文)。
+	inv.Assets = append(inv.Assets, parseCredentials(codex, ScopeGlobal)...)
 	// prompts/:可复用提示模板(等同 Claude skills),每个 .md 一条 skill 资产。
 	if a, _ := parseMarkdownDir(filepath.Join(codex, "prompts"), AssetSkill, ScopeGlobal); a != nil {
 		inv.Assets = append(inv.Assets, a...)
@@ -46,18 +49,15 @@ func (e *Engine) discoverCodex() (Inventory, error) {
 	return inv, nil
 }
 
-// discoverCodexProjects 遍历已知项目(复用 ~/.claude.json 的 projects 清单),读各项目
-// 根目录的 AGENTS.md 作为项目级 memory 资产。
+// discoverCodexProjects 遍历已知项目(Engine.KnownProjects,从 sentinel config 桥接),
+// 读各项目根目录的 AGENTS.md + .codex/(C2) 作为项目级资产。
 //
-// 来源说明:Codex CLI 无项目清单文件,但 sentinel 是多 agent 工具,用户通常同时用
-// Claude(~/.claude.json 登记 projects)。此处复用该清单作为"已知项目"来源,只读各项目
-// AGENTS.md(不读 .claude)。纯 Codex 用户无 ~/.claude.json → 项目级为空,全局发现照常。
+// 来源说明:Codex CLI 无项目清单文件(规格 §3)。sentinel 用独立 known_projects 清单,
+// 不再借用 Claude 的 ~/.claude.json。纯 Codex 用户项目级发现照常(只要 config 登记了项目)。
+// 注意:此处直接读 e.KnownProjects,不经 ListProjects()(后者会回退 ~/.claude.json,
+// 与"Codex 不借 Claude 机器文件"目标相悖)。
 func (e *Engine) discoverCodexProjects(inv *Inventory) {
-	projects, err := readProjectList(e.ClaudeJSON)
-	if err != nil || len(projects) == 0 {
-		return
-	}
-	for _, p := range projects {
+	for _, p := range e.KnownProjects {
 		if !fileExists(p.Path) {
 			continue
 		}
@@ -65,6 +65,21 @@ func (e *Engine) discoverCodexProjects(inv *Inventory) {
 			inv.Assets = append(inv.Assets, *a)
 			inv.Projects = append(inv.Projects, p)
 		}
+		// C2:项目级 .codex/config.toml 发现(scope=project)。
+		e.discoverCodexProject(inv, p)
+	}
+}
+
+// discoverCodexProject 发现项目级 Codex 配置:<project>/.codex/config.toml(项目 scope)。
+// 复用 parseCodexConfig(同结构与字段建模,仅 scope 不同)。文件不存在静默跳过。
+// AGENTS.md 由 discoverCodexProjects 直接读;此处只读 .codex/config.toml(规格 §3.1 可选目录)。
+func (e *Engine) discoverCodexProject(inv *Inventory, p Project) {
+	pc := filepath.Join(p.Path, ".codex", "config.toml")
+	if !fileExists(pc) {
+		return
+	}
+	if a, _ := parseCodexConfig(pc, ScopeProject); a != nil {
+		inv.Assets = append(inv.Assets, a...)
 	}
 }
 

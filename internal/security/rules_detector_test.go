@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"gopkg.in/yaml.v3"
+
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/security/ruleengine"
 	"code-agent-sentinel/internal/security/suppression"
@@ -33,6 +35,9 @@ func rulesFixtureAssets() []configengine.Asset {
 		Fields: map[string]any{
 			"raw": json.RawMessage(`{"skipDangerousModePermissionPrompt":true,"env":{"ANTHROPIC_API_KEY":"sk-x"}}`),
 			"env": map[string]string{"ANTHROPIC_API_KEY": "sk-x"},
+			// Task 10 迁移:baseline.dangerous-skip-permission 改读结构化字段 skip_dangerous
+			// (不再扫 raw)。fixture 同步加该字段以保持原命中行为。
+			"skip_dangerous": true,
 		},
 	}
 	assets = append(assets, settings)
@@ -155,9 +160,10 @@ func TestRulesDetectorMeta(t *testing.T) {
 	if len(m.Engines) != 1 || m.Engines[0].Kind != "embedded" || !m.Engines[0].Available {
 		t.Errorf("Engines = %+v", m.Engines)
 	}
-	// 13 baseline + 46 injection + 6 skill + 12 destructive.git + 26 destructive.filesystem (Task 5) + 112 destructive.database (Task 6) + 21 destructive.containers + 18 destructive.package_managers (Task 7) = 254 条内置规则
-	if len(m.Rules) != 254 {
-		t.Errorf("Rules 数 = %d, want 254 (13 baseline + 46 injection + 6 skill + 12 destructive.git + 26 destructive.filesystem + 112 destructive.database + 21 destructive.containers + 18 destructive.package_managers)", len(m.Rules))
+	// 15 baseline (Task 10 +2:mcp-http-cleartext/managed-mcp-present) + 46 injection + 6 skill + 12 destructive.git + 26 destructive.filesystem (Task 5) + 112 destructive.database (Task 6) + 21 destructive.containers + 18 destructive.package_managers (Task 7) = 256 条内置规则
+	// (combo.yaml 6 条不计入 Meta().Rules,遍历 baseRules 不含 combo)
+	if len(m.Rules) != 256 {
+		t.Errorf("Rules 数 = %d, want 256 (15 baseline + 46 injection + 6 skill + 12 destructive.git + 26 destructive.filesystem + 112 destructive.database + 21 destructive.containers + 18 destructive.package_managers)", len(m.Rules))
 	}
 	if m.Covers != nil {
 		t.Errorf("Covers 应为 nil, got %v", m.Covers)
@@ -967,5 +973,241 @@ func TestCodexBaselineRulesNoFalsePositiveOnClaude(t *testing.T) {
 	}
 	if hasRuleID(findings, "baseline.codex-danger-full-access") || hasRuleID(findings, "baseline.codex-approval-never") {
 		t.Fatalf("Claude settings 不应触发 Codex 规则: %+v", findings)
+	}
+}
+
+// ── Task 9: 跨资产组合规则(ComboRule)第二遍求值测试 ──
+//
+// comboMatches + makeComboFinding + Scan 第二遍:同 agent 资产集内,所有 requires
+// 同时命中(AND)→ 1 条 Finding 挂到 primary(首个 require 命中的资产)。
+// 关键:combos 必须经 ValidateCombo 预编译(填 compiled 字段),否则 comboMatches
+// 调 req.CompiledRule() 得 nil → 安全降级不命中 → 测试失败。
+
+// matchNodeFromYAML 用 YAML 片段构造 MatchNode(测试便捷)。
+// MatchNode 用自定义 UnmarshalYAML(schema.go:86)填 .raw;yaml.Unmarshal 经 wrapper.Match
+// 触发 MatchNode.UnmarshalYAML 填 raw,后续 ValidateCombo 预编译时再解释 raw 编译正则。
+func matchNodeFromYAML(t *testing.T, yamlStr string) ruleengine.MatchNode {
+	t.Helper()
+	var wrapper struct {
+		Match ruleengine.MatchNode `yaml:"match"`
+	}
+	if err := yaml.Unmarshal([]byte("match: {"+yamlStr+"}"), &wrapper); err != nil {
+		t.Fatal(err)
+	}
+	return wrapper.Match
+}
+
+// newRulesDetectorWithCombos 构造一个带指定 combo 规则的 RulesDetector(测试专用,绕开 builtin)。
+//
+// 关键:combos 必须先跑 ValidateCombo 预编译(填 Requires[*].compiled),否则
+// comboMatches 调 req.CompiledRule() 得 nil → 安全降级不命中 → 测试静默失败。
+// ValidateCombo 错误 → t.Fatal(测试用 combo 应合法)。
+func newRulesDetectorWithCombos(t *testing.T, combos []ruleengine.ComboRule) *RulesDetector {
+	t.Helper()
+	home := t.TempDir()
+	d := NewRulesDetector(home, nil) // nil cfg → 全启用默认
+	valid, errs := ruleengine.ValidateCombo(combos)
+	if len(errs) != 0 {
+		t.Fatalf("ValidateCombo errs: %v", errs)
+	}
+	d.baseComboRules = valid
+	return d
+}
+
+// TestComboRuleSkipWithBashWildcard 验证组合规则第二遍求值:
+// settings.skip_dangerous=true + permissions.allow 含 Bash(*) → critical combo 命中。
+// primary = 第一个 require(settings)命中的资产;severity 继承 combo 声明的 critical。
+func TestComboRuleSkipWithBashWildcard(t *testing.T) {
+	settings := configengine.Asset{
+		ID:         "settings-1",
+		Type:       configengine.AssetSettings,
+		Scope:      configengine.ScopeGlobal,
+		SourcePath: "/x/settings.json",
+		Name:       "settings",
+		Fields:     map[string]any{"skip_dangerous": true},
+	}
+	perms := configengine.Asset{
+		ID:         "perm-1",
+		Type:       configengine.AssetPermissions,
+		Scope:      configengine.ScopeGlobal,
+		SourcePath: "/x/settings.json",
+		Name:       "permissions",
+		Fields:     map[string]any{"allow": []string{"Bash(*)"}},
+	}
+	d := newRulesDetectorWithCombos(t, []ruleengine.ComboRule{{
+		ID:          "combo.skip-perm-with-bash-wildcard",
+		Severity:    "critical",
+		Description: "skip_dangerous + Bash(*) 同时存在",
+		Remediation: "移除 skip_dangerous 或收紧 Bash 权限",
+		Requires: []ruleengine.ComboCondition{
+			{AssetType: "settings", Match: matchNodeFromYAML(t, `field: skip_dangerous, op: eq, value: "true"`)},
+			{AssetType: "permissions", Match: matchNodeFromYAML(t, `field: allow, op: contains, value: "Bash(*)"`)},
+		},
+	}})
+	findings, err := d.Scan(context.Background(), []configengine.Asset{settings, perms})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var combo *Finding
+	for i := range findings {
+		if findings[i].RuleID == "combo.skip-perm-with-bash-wildcard" {
+			combo = &findings[i]
+		}
+	}
+	if combo == nil {
+		t.Fatal("应触发 combo.skip-perm-with-bash-wildcard(critical)")
+	}
+	if combo.Severity != SeverityCritical {
+		t.Fatalf("severity = %v, want critical", combo.Severity)
+	}
+	// primary = 第一个 require(settings)命中的资产 → AssetID=settings-1
+	if combo.AssetID != "settings-1" {
+		t.Errorf("combo primary AssetID = %q, want settings-1 (首个 require 命中资产)", combo.AssetID)
+	}
+	if combo.DetectorID != "rules" {
+		t.Errorf("DetectorID = %q, want rules", combo.DetectorID)
+	}
+	if combo.Evidence == "" {
+		t.Errorf("Evidence 不应为空")
+	}
+}
+
+// TestComboRuleNoFalsePositiveSingleCondition 验证组合规则 AND 语义:
+// 只有 skip_dangerous=true(无 Bash(*),allow 是 Bash(npm:*) 不含 Bash(*))→ 不触发 combo。
+func TestComboRuleNoFalsePositiveSingleCondition(t *testing.T) {
+	settings := configengine.Asset{
+		ID:         "settings-1",
+		Type:       configengine.AssetSettings,
+		SourcePath: "/x/settings.json",
+		Name:       "settings",
+		Fields:     map[string]any{"skip_dangerous": true},
+	}
+	perms := configengine.Asset{
+		ID:         "perm-1",
+		Type:       configengine.AssetPermissions,
+		SourcePath: "/x/settings.json",
+		Name:       "permissions",
+		Fields:     map[string]any{"allow": []string{"Bash(npm:*)"}},
+	}
+	d := newRulesDetectorWithCombos(t, []ruleengine.ComboRule{{
+		ID:       "combo.skip-perm-with-bash-wildcard",
+		Severity: "critical",
+		Requires: []ruleengine.ComboCondition{
+			{AssetType: "settings", Match: matchNodeFromYAML(t, `field: skip_dangerous, op: eq, value: "true"`)},
+			{AssetType: "permissions", Match: matchNodeFromYAML(t, `field: allow, op: contains, value: "Bash(*)"`)},
+		},
+	}})
+	findings, _ := d.Scan(context.Background(), []configengine.Asset{settings, perms})
+	for _, f := range findings {
+		if f.RuleID == "combo.skip-perm-with-bash-wildcard" {
+			t.Fatal("单条件命中不应触发 combo(AND 语义:requires 全部命中才触发)")
+		}
+	}
+}
+
+// ── Task 10: 规则迁移到结构化字段 + 新增单资产规则(combo.yaml 加载见 ruleengine 包) ──
+//
+// 5 个测试验证 3 条迁移规则 + 2 条新增规则用结构化字段命中(不靠 raw):
+//   - baseline.dangerous-skip-permission  ← Fields["skip_dangerous"]=true
+//   - baseline.codex-danger-full-access   ← Fields["sandbox_mode"]="danger-full-access"
+//   - baseline.mcp-http-cleartext         ← Fields["url"]="http://..."(新增)
+//   - baseline.managed-mcp-present        ← Fields["managed"]=true(新增,scope=managed)
+// baseline.codex-approval-never 的命中由既有 TestCodexBaselineRulesApprovalNever 覆盖
+// (该测试已设 Fields["approval_policy"]="never"),无需重复。
+
+// TestStructuredSkipDangerousRule 验证迁移后的 dangerous-skip-permission 用结构化字段命中:
+// 不再扫 Fields["raw"],直接匹配 Fields["skip_dangerous"]=true(op: eq, value: "true";
+// evalLeaf 的 eq 分支用 stringify(fieldVal) == valStr,stringify(true) = "true")。
+func TestStructuredSkipDangerousRule(t *testing.T) {
+	a := configengine.Asset{
+		Type:       configengine.AssetSettings,
+		Scope:      configengine.ScopeGlobal,
+		SourcePath: "/x/settings.json",
+		Name:       "settings",
+		Fields:     map[string]any{"skip_dangerous": true},
+	}
+	d := NewRulesDetector(t.TempDir(), nil)
+	findings, err := d.Scan(context.Background(), []configengine.Asset{a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasRuleID(findings, "baseline.dangerous-skip-permission") {
+		t.Fatalf("结构化字段 skip_dangerous=true 应命中 baseline.dangerous-skip-permission: %+v", findings)
+	}
+
+	// 负向用例:skip_dangerous 字段缺失(absent)不应命中。
+	// 迁移前旧规则用 field: raw, op: contains 会误命中含 "skipDangerousModePermissionPrompt": false 的配置;
+	// 迁移后 field: skip_dangerous, op: eq, value: "true" 仅在 parseSettings 设 true 时命中(absent 不命中)。
+	safe := configengine.Asset{
+		Type:       configengine.AssetSettings,
+		Scope:      configengine.ScopeGlobal,
+		SourcePath: "/y/settings.json",
+		Name:       "settings",
+		Fields:     map[string]any{"env": map[string]string{"NODE_ENV": "production"}},
+	}
+	safeFindings, _ := d.Scan(context.Background(), []configengine.Asset{safe})
+	if hasRuleID(safeFindings, "baseline.dangerous-skip-permission") {
+		t.Fatalf("skip_dangerous 缺失不应命中 baseline.dangerous-skip-permission: %+v", safeFindings)
+	}
+}
+
+// TestStructuredCodexDangerFullAccess 验证迁移后的 codex-danger-full-access 用结构化字段命中。
+// 注:既有 TestCodexBaselineRulesDangerFullAccess 也断言此行为(并设了 raw + sandbox_mode),
+// 此处仅用结构化字段验证迁移后的纯字段匹配(不依赖 raw)。
+func TestStructuredCodexDangerFullAccess(t *testing.T) {
+	a := configengine.Asset{
+		Type:       configengine.AssetSettings,
+		Scope:      configengine.ScopeGlobal,
+		SourcePath: "/x/config.toml",
+		Name:       "config",
+		Fields:     map[string]any{"sandbox_mode": "danger-full-access"},
+	}
+	d := NewRulesDetector(t.TempDir(), nil)
+	findings, err := d.Scan(context.Background(), []configengine.Asset{a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasRuleID(findings, "baseline.codex-danger-full-access") {
+		t.Fatalf("结构化字段 sandbox_mode=danger-full-access 应命中: %+v", findings)
+	}
+}
+
+// TestMCPHttpCleartextRule 验证新增规则 baseline.mcp-http-cleartext:
+// mcp_server 的 url 字段以 http:// 开头(明文)→ 命中 high 规则。
+func TestMCPHttpCleartextRule(t *testing.T) {
+	a := configengine.Asset{
+		Type:       configengine.AssetMCPServer,
+		Scope:      configengine.ScopeGlobal,
+		SourcePath: "/x/config.toml",
+		Name:       "remote",
+		Fields:     map[string]any{"url": "http://evil.com/api"},
+	}
+	d := NewRulesDetector(t.TempDir(), nil)
+	findings, err := d.Scan(context.Background(), []configengine.Asset{a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasRuleID(findings, "baseline.mcp-http-cleartext") {
+		t.Fatalf("http:// URL 应命中 baseline.mcp-http-cleartext: %+v", findings)
+	}
+}
+
+// TestManagedMCPPresentInfoRule 验证新增规则 baseline.managed-mcp-present:
+// scope=managed 的 mcp_server(managed=true)→ 命中 info 规则(企业管理模式提示)。
+func TestManagedMCPPresentInfoRule(t *testing.T) {
+	a := configengine.Asset{
+		Type:       configengine.AssetMCPServer,
+		Scope:      configengine.ScopeManaged,
+		SourcePath: "/x/managed-mcp.json",
+		Name:       "m",
+		Fields:     map[string]any{"managed": true},
+	}
+	d := NewRulesDetector(t.TempDir(), nil)
+	findings, err := d.Scan(context.Background(), []configengine.Asset{a})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !hasRuleID(findings, "baseline.managed-mcp-present") {
+		t.Fatalf("managed=true 应命中 baseline.managed-mcp-present(info): %+v", findings)
 	}
 }

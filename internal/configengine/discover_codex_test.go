@@ -119,13 +119,15 @@ func TestDiscoverCodexDisabledSkillType(t *testing.T) {
 func TestDiscoverCodexProjectAGENTSMD(t *testing.T) {
 	home, codex := codexFixture(t)
 	os.WriteFile(filepath.Join(codex, "config.toml"), []byte(`model = "x"`), 0o644)
-	// 造一个已知项目(经 ~/.claude.json projects 清单)
+	// 造一个已知项目(经 Engine.KnownProjects 注入,不经 ~/.claude.json)
 	proj := filepath.Join(home, "myproj")
 	os.MkdirAll(proj, 0o755)
 	os.WriteFile(filepath.Join(proj, "AGENTS.md"), []byte("# 项目指令"), 0o644)
-	os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{"projects":{"`+proj+`":{}}}`), 0o644)
 
-	eng := &Engine{HomeDir: home, ClaudeDir: codex, ClaudeJSON: filepath.Join(home, ".claude.json"), Kind: "codex"}
+	eng := &Engine{
+		HomeDir: home, ClaudeDir: codex, Kind: "codex",
+		KnownProjects: []Project{{Path: proj, Name: "myproj"}},
+	}
 	inv, err := eng.Discover()
 	if err != nil {
 		t.Fatal(err)
@@ -141,5 +143,131 @@ func TestDiscoverCodexProjectAGENTSMD(t *testing.T) {
 	}
 	if projMem.Name != "AGENTS.md" {
 		t.Fatalf("项目 memory Name = %q, want AGENTS.md", projMem.Name)
+	}
+	// 关键:确认无 ~/.claude.json 也正常工作(纯 Codex 用户)
+	if _, err := os.Stat(filepath.Join(home, ".claude.json")); err == nil {
+		t.Fatal("测试不应创建 ~/.claude.json(纯 Codex 用户场景)")
+	}
+}
+
+// TestCodexDiscoverIgnoresClaudeJSON:即使存在 ~/.claude.json 且含 projects,
+// Codex(KnownProjects 空)也不应借它发现项目级资产。
+func TestCodexDiscoverIgnoresClaudeJSON(t *testing.T) {
+	home, codex := codexFixture(t)
+	os.WriteFile(filepath.Join(codex, "config.toml"), []byte(`model = "x"`), 0o644)
+	// 即使存在 ~/.claude.json 且含 projects,Codex 也不应借它发现项目
+	claudeProj := filepath.Join(home, "claudeonly")
+	os.MkdirAll(claudeProj, 0o755)
+	os.WriteFile(filepath.Join(claudeProj, "AGENTS.md"), []byte("# claude 项目"), 0o644)
+	os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{"projects":{"`+claudeProj+`":{}}}`), 0o644)
+
+	eng := &Engine{HomeDir: home, ClaudeDir: codex, Kind: "codex"} // KnownProjects 空
+	inv, err := eng.Discover()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, a := range inv.Assets {
+		if a.Type == AssetMemory && a.Scope == ScopeProject {
+			t.Fatalf("Codex 不应借 ~/.claude.json 发现项目级资产, got %+v", a)
+		}
+	}
+}
+
+// TestListProjectsFallsBackToClaudeJSON:KnownProjects 空 → 回退 ~/.claude.json projects。
+// 防止 Task 4 的 ListProjects 回退策略退化(Claude 零破坏)。
+func TestListProjectsFallsBackToClaudeJSON(t *testing.T) {
+	home := t.TempDir()
+	proj := filepath.Join(home, "myproj")
+	os.MkdirAll(proj, 0o755)
+	os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{"projects":{"`+proj+`":{}}}`), 0o644)
+	eng := &Engine{HomeDir: home, ClaudeDir: filepath.Join(home, ".claude"), ClaudeJSON: filepath.Join(home, ".claude.json")}
+	// KnownProjects 空 → 回退 ~/.claude.json
+	got, err := eng.ListProjects()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 || got[0].Path != proj {
+		t.Fatalf("回退应读到 ~/.claude.json projects, got %+v", got)
+	}
+}
+
+// TestListProjectsPrefersKnownProjects:KnownProjects 非空 → 优先返回,忽略 ~/.claude.json。
+func TestListProjectsPrefersKnownProjects(t *testing.T) {
+	home := t.TempDir()
+	os.WriteFile(filepath.Join(home, ".claude.json"), []byte(`{"projects":{"/should-not-appear":{}}}`), 0o644)
+	eng := &Engine{
+		HomeDir: home, ClaudeDir: filepath.Join(home, ".claude"), ClaudeJSON: filepath.Join(home, ".claude.json"),
+		KnownProjects: []Project{{Path: "/known", Name: "known"}},
+	}
+	got, _ := eng.ListProjects()
+	if len(got) != 1 || got[0].Path != "/known" {
+		t.Fatalf("KnownProjects 非空应优先, got %+v", got)
+	}
+}
+
+// TestDiscoverCodexAuthJsonCredential 验证 C4:Codex 全局 ~/.codex/auth.json 发现为 credential 资产。
+// Content 必须为空(不暴露凭据明文),kind=auth,scope=global。
+func TestDiscoverCodexAuthJsonCredential(t *testing.T) {
+	home, codex := codexFixture(t)
+	os.WriteFile(filepath.Join(codex, "config.toml"), []byte(`model = "x"`), 0o644)
+	os.WriteFile(filepath.Join(codex, "auth.json"), []byte(`{"token":"sk-xxx"}`), 0o644)
+	eng := &Engine{HomeDir: home, ClaudeDir: codex, Kind: "codex"}
+	inv, err := eng.Discover()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var cred *Asset
+	for i := range inv.Assets {
+		if inv.Assets[i].Type == AssetCredential {
+			cred = &inv.Assets[i]
+		}
+	}
+	if cred == nil {
+		t.Fatal("应发现 ~/.codex/auth.json 为 credential 资产")
+	}
+	if cred.Fields["kind"] != "auth" {
+		t.Fatalf("kind = %v, want auth", cred.Fields["kind"])
+	}
+	if cred.Content != "" {
+		t.Fatalf("credential Content 必须为空, got %q", cred.Content)
+	}
+}
+
+// TestCodexProjectDotCodexConfig 验证 C2:项目级 <project>/.codex/config.toml 发现。
+// KnownProjects 注入的项目下放 .codex/config.toml(含 sandbox_mode),应产出 scope=project
+// 的 settings 资产且 Fields["sandbox_mode"] 正确。
+func TestCodexProjectDotCodexConfig(t *testing.T) {
+	home, codex := codexFixture(t)
+	os.WriteFile(filepath.Join(codex, "config.toml"), []byte(`model = "x"`), 0o644)
+	proj := filepath.Join(home, "myproj")
+	dotCodex := filepath.Join(proj, ".codex")
+	if err := os.MkdirAll(dotCodex, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dotCodex, "config.toml"), []byte(`sandbox_mode = "read-only"`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	eng := &Engine{
+		HomeDir: home, ClaudeDir: codex, Kind: "codex",
+		KnownProjects: []Project{{Path: proj, Name: "myproj"}},
+	}
+	inv, err := eng.Discover()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 项目级 .codex/config.toml 应产出 scope=project 的 settings 资产
+	var projSettings *Asset
+	for i := range inv.Assets {
+		a := &inv.Assets[i]
+		if a.Type == AssetSettings && a.Scope == ScopeProject {
+			projSettings = a
+		}
+	}
+	if projSettings == nil {
+		t.Fatal("应发现项目级 .codex/config.toml(scope=project settings)")
+	}
+	if projSettings.Fields["sandbox_mode"] != "read-only" {
+		t.Fatalf("项目 settings sandbox_mode = %v, want read-only", projSettings.Fields["sandbox_mode"])
 	}
 }

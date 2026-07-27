@@ -14,6 +14,9 @@ type Agent struct {
 	RootDir    string `json:"root_dir"`    // 配置根:Claude ~/.claude | Codex ~/.codex
 	ClaudeJSON string `json:"claude_json"` // 机器管理文件:Claude ~/.claude.json;Codex 空
 	HomeDir    string `json:"-"`           // 注入用,不外露
+	// KnownProjects 是项目级发现的已知项目清单(从 config 桥接,共享于所有 agent)。
+	// Task 4 将其接入 Engine.KnownProjects,使 Codex 项目发现改读此清单而非 ~/.claude.json。
+	KnownProjects []Project `json:"-"`
 }
 
 // DefaultAgents 返回内置 agent 列表(本轮仅 Claude Code)。
@@ -71,10 +74,11 @@ func KnownAgents() []AgentSpec {
 
 // AgentItem 是 AgentSpec 的配置足迹(从 config.AgentCfg 桥接而来,避免 configengine 导入 config)。
 type AgentItem struct {
-	ID         string
-	Enabled    bool
-	RootDir    string
-	ClaudeJSON string
+	ID            string
+	Enabled       bool
+	RootDir       string
+	ClaudeJSON    string
+	KnownProjects []Project
 }
 
 // AgentsFromSpecs 把配置足迹映射成 []Agent(填 HomeDir + Kind)。Enabled 过滤由调用方负责。
@@ -102,6 +106,7 @@ func AgentsFromSpecs(home string, items []AgentItem) []Agent {
 		}
 		out = append(out, Agent{
 			ID: it.ID, Name: spec.Name, Kind: spec.Kind, RootDir: root, ClaudeJSON: cj, HomeDir: home,
+			KnownProjects: it.KnownProjects,
 		})
 	}
 	return out
