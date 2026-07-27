@@ -356,3 +356,23 @@ func TestTokenFieldRoundTrip(t *testing.T) {
 		t.Errorf("Token 往返: got %q want abc123", got.Token)
 	}
 }
+
+// Task 3:KnownProjects 独立项目清单(去重,按 Path 保留首个)。
+func TestResolveKnownProjectsDedup(t *testing.T) {
+	cfg := &Config{KnownProjects: []KnownProject{
+		{Path: "/a", Name: "a"},
+		{Path: "/a", Name: "dup"}, // 同 path 去重,保留首个
+		{Path: "/b", Name: "b"},
+	}}
+	got := cfg.ResolveKnownProjects()
+	if len(got) != 2 || got[0].Path != "/a" || got[1].Path != "/b" {
+		t.Fatalf("ResolveKnownProjects = %+v", got)
+	}
+}
+
+func TestResolveKnownProjectsEmpty(t *testing.T) {
+	cfg := &Config{}
+	if got := cfg.ResolveKnownProjects(); len(got) != 0 {
+		t.Fatalf("空 KnownProjects 应返回空切片, got %+v", got)
+	}
+}

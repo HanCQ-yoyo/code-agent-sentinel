@@ -176,3 +176,16 @@ func TestAgentsFromSpecsFillsKindAndCodexDefaultRoot(t *testing.T) {
 		t.Fatalf("claude RootDir = %q, want ~/.claude", claude.RootDir)
 	}
 }
+
+// Task 3:KnownProjects 从 AgentItem 透传到 Agent(供 Task 4 接入 Engine.KnownProjects)。
+func TestAgentsFromSpecsCarriesKnownProjects(t *testing.T) {
+	home := t.TempDir()
+	items := []AgentItem{{
+		ID: "codex", Enabled: true,
+		KnownProjects: []Project{{Path: "/proj1", Name: "p1"}},
+	}}
+	agents := AgentsFromSpecs(home, items)
+	if len(agents) != 1 || len(agents[0].KnownProjects) != 1 || agents[0].KnownProjects[0].Path != "/proj1" {
+		t.Fatalf("KnownProjects 未透传: %+v", agents)
+	}
+}

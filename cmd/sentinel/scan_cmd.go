@@ -45,10 +45,19 @@ func runScanCmd(cmd *cobra.Command, cfgPath, detectorsFlag, agentFlag string) er
 	cfg.EnsureDetectors() // 与 main.go 一致:检测器持 cfg.Detectors 指针
 	// 多 agent:从 config 解析 enabled agents,桥接为 configengine.Agent(镜像 main.go run())。
 	agentCfgs := cfg.ResolveAgents(home)
+	// Task 3:KnownProjects 独立项目清单(从 config 桥接,共享于所有 agent)。
+	knownProjs := cfg.ResolveKnownProjects()
+	engKnownProjs := make([]configengine.Project, 0, len(knownProjs))
+	for _, p := range knownProjs {
+		engKnownProjs = append(engKnownProjs, configengine.Project{Path: p.Path, Name: p.Name})
+	}
 	agentItems := make([]configengine.AgentItem, 0, len(agentCfgs))
 	for _, a := range agentCfgs {
 		if a.Enabled {
-			agentItems = append(agentItems, configengine.AgentItem{ID: a.ID, Enabled: a.Enabled, RootDir: a.RootDir, ClaudeJSON: a.ClaudeJSON})
+			agentItems = append(agentItems, configengine.AgentItem{
+				ID: a.ID, Enabled: a.Enabled, RootDir: a.RootDir, ClaudeJSON: a.ClaudeJSON,
+				KnownProjects: engKnownProjs,
+			})
 		}
 	}
 	engAgents := configengine.AgentsFromSpecs(home, agentItems)

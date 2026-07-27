@@ -59,6 +59,10 @@ type Config struct {
 	LogPath string `yaml:"log_path" json:"log_path"`
 	// #4:置顶项目列表
 	PinnedProjects []PinnedProject `yaml:"pinned_projects"`
+	// 已知项目清单(独立于 agent 机器文件;setup 可从 ~/.claude.json 导入初始值)。
+	// 供 Codex 项目级发现使用(替代 ~/.claude.json projects),Claude 各项目读 .claude/ 亦可用。
+	// 与 PinnedProjects 并列(语义不同:已知清单 vs Assets 页置顶标识)。
+	KnownProjects []KnownProject `yaml:"known_projects" json:"known_projects"`
 	// 多 agent 配置(setup 写入)。空 → ResolveAgents 回退到 ClaudeDir。
 	Agents []AgentCfg `yaml:"agents" json:"agents"`
 	// 多任务调度:每个 agent 一个定时扫描任务。空 → ResolveSchedules 回退到 ScanEnabled/ScanInterval。
@@ -75,6 +79,28 @@ type DiscoveryCfg struct {
 type PinnedProject struct {
 	Path  string `yaml:"path" json:"path"`
 	Color string `yaml:"color" json:"color"`
+}
+
+// KnownProject 是 sentinel 独立维护的已知项目清单(不依赖任何 agent 的机器文件)。
+// 用于两个 agent 的项目级发现:Claude 读各项目 .claude/,Codex 读各项目 AGENTS.md/.codex/。
+// 与 PinnedProjects 并列(语义不同:已知清单 vs Assets 页置顶标识)。
+type KnownProject struct {
+	Path string `yaml:"path" json:"path"`
+	Name string `yaml:"name" json:"name"`
+}
+
+// ResolveKnownProjects 返回去重后的已知项目列表(按 Path 去重,空 Path 跳过,保留首次出现)。
+func (c *Config) ResolveKnownProjects() []KnownProject {
+	seen := map[string]bool{}
+	out := make([]KnownProject, 0, len(c.KnownProjects))
+	for _, p := range c.KnownProjects {
+		if p.Path == "" || seen[p.Path] {
+			continue
+		}
+		seen[p.Path] = true
+		out = append(out, p)
+	}
+	return out
 }
 
 // AgentCfg 是单个 code agent 的用户配置(setup 写入)。
