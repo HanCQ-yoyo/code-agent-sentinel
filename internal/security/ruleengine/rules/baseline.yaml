@@ -3,7 +3,10 @@ rules:
     severity: critical
     description: "skipDangerousModePermissionPrompt 已启用,绕过危险操作确认"
     asset_type: settings
-    match: { field: raw, op: contains, value: "skipDangerousModePermissionPrompt" }
+    # Task 10 迁移:raw → 结构化字段 skip_dangerous(parse_settings.go 在
+    # skipDangerousModePermissionPrompt=true 时设 Fields["skip_dangerous"]=true)。
+    # op: eq, value: "true" 经 evalLeaf eq 分支 stringify(true)="true" 匹配。
+    match: { field: skip_dangerous, op: eq, value: "true" }
     remediation: "关闭 skipDangerousModePermissionPrompt"
   - id: baseline.wildcard-bash
     severity: high
@@ -84,11 +87,28 @@ rules:
     severity: critical
     description: "Codex sandbox_mode=danger-full-access,无沙箱执行任意命令(等同 Claude --dangerously-skip-permissions)"
     asset_type: settings
-    match: { field: raw, op: regex_match, value: "sandbox_mode\\s*=\\s*\"danger-full-access\"" }
+    # Task 10 迁移:raw regex → 结构化字段 sandbox_mode(parse_codex_config.go 产)。
+    match: { field: sandbox_mode, op: eq, value: "danger-full-access" }
     remediation: "将 sandbox_mode 改为 workspace-write 或 read-only"
   - id: baseline.codex-approval-never
     severity: high
     description: "Codex approval_policy=never,永不请求审批自动执行所有操作"
     asset_type: settings
-    match: { field: raw, op: regex_match, value: "approval_policy\\s*=\\s*\"never\"" }
+    # Task 10 迁移:raw regex → 结构化字段 approval_policy(parse_codex_config.go 产)。
+    match: { field: approval_policy, op: eq, value: "never" }
     remediation: "将 approval_policy 改为 untrusted 或 on-failure"
+  # ── Task 10 新增:基于 mcp_server 结构化字段(url/managed)的单资产规则 ──
+  - id: baseline.mcp-http-cleartext
+    severity: high
+    description: "MCP server 使用明文 http:// URL,可被中间人劫持"
+    asset_type: mcp_server
+    # url 字段由 parse_mcp.go/parse_codex_config.go 产出。regex_match 在 Validate 编译。
+    match: { field: url, op: regex_match, value: "^http://" }
+    remediation: "改用 https:// 或本地 stdio 传输"
+  - id: baseline.managed-mcp-present
+    severity: info
+    description: "企业 managed-mcp.json 存在(企业管理模式,需核实合规性)"
+    asset_type: mcp_server
+    # managed 字段由 parse_managed.go 设 Fields["managed"]=true。op: eq 经 stringify(true)="true"。
+    match: { field: managed, op: eq, value: "true" }
+    remediation: "核实企业管理 MCP 合规性"

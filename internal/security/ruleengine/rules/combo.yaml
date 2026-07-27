@@ -1,0 +1,68 @@
+# combo.yaml — 跨资产组合规则(Task 10)
+#
+# 组合规则(ComboRule)在 RulesDetector.Scan 的单资产循环后跑第二遍(Task 9):同 agent
+# 资产集内,所有 requires 同时命中(AND)→ 1 条 Finding 挂到 primary(首个 require 命中
+# 的资产)。combo 不计入 Meta().Rules(遍历 baseRules),计数断言(detector_test.go:52)
+# 不含 combo。
+#
+# 每个 require 复用单资产 Rule 的 MatchNode + 11 个 op;ValidateCombo 预编译每个 require
+# 的正则(填 ComboCondition.compiled),comboMatches 求值时复用缓存。
+#
+# 与单资产规则的关系:defense-in-depth。如 baseline.dangerous-skip-permission(单资产
+# critical)+ baseline.wildcard-bash(单资产 high)各自触发,combo.skip-perm-with-bash-wildcard
+# 额外产一条 critical finding 提示"组合风险"。不同 RuleID/severity/fingerprint,不冲突。
+combo_rules:
+  - id: combo.skip-perm-with-bash-wildcard
+    severity: critical
+    description: "skipDangerousModePermissionPrompt 与通配 Bash(*) 同时存在,无需审批任意命令"
+    requires:
+      - asset_type: settings
+        match: { field: skip_dangerous, op: eq, value: "true" }
+      - asset_type: permissions
+        match: { field: allow, op: contains, value: "Bash(*)" }
+    remediation: "关闭 skipDangerousModePermissionPrompt 或收窄 Bash 权限"
+  - id: combo.skip-perm-with-network
+    severity: critical
+    description: "skipDangerousModePermissionPrompt 与通配 WebFetch(*) 同时存在,无审批外发数据"
+    requires:
+      - asset_type: settings
+        match: { field: skip_dangerous, op: eq, value: "true" }
+      - asset_type: permissions
+        match: { field: allow, op: contains, value: "WebFetch(*)" }
+    remediation: "关闭 skipDangerousModePermissionPrompt 或收窄 WebFetch 权限"
+  - id: combo.bash-with-exfil
+    severity: critical
+    description: "通配 Bash(*) 与 WebFetch(*) 同时存在,命令执行 + 数据外发"
+    requires:
+      - asset_type: permissions
+        match: { field: allow, op: contains, value: "Bash(*)" }
+      - asset_type: permissions
+        match: { field: allow, op: contains, value: "WebFetch(*)" }
+    remediation: "收窄 Bash 与 WebFetch 权限"
+  - id: combo.codex-danger-never
+    severity: critical
+    description: "Codex sandbox_mode=danger-full-access 与 approval_policy=never 同时存在,无任何限制的自主 agent"
+    requires:
+      - asset_type: settings
+        match: { field: sandbox_mode, op: eq, value: "danger-full-access" }
+      - asset_type: settings
+        match: { field: approval_policy, op: eq, value: "never" }
+    remediation: "将 sandbox_mode 改为 workspace-write 或 approval_policy 改为 untrusted"
+  - id: combo.codex-hooks-state-mismatch
+    severity: medium
+    description: "Codex [hooks.state] 标记 trusted 但 hooks.json 含危险命令"
+    requires:
+      - asset_type: settings
+        match: { field: hooks_state, op: exists }
+      - asset_type: hook
+        match: { field: command, op: regex_match, value: "(?i)(curl|wget).*(\\|\\s*sh|bash)|rm\\s+-rf|base64\\s*-[ed]|eval\\b" }
+    remediation: "核实已信任 hook 的命令安全性,撤销可疑 hook 的 trusted 标记"
+  - id: combo.read-with-exfil
+    severity: high
+    description: "通配 Read(**) 与 WebFetch(*) 同时存在,读到文件 + 外发到任意服务器"
+    requires:
+      - asset_type: permissions
+        match: { field: allow, op: contains, value: "Read(**)" }
+      - asset_type: permissions
+        match: { field: allow, op: contains, value: "WebFetch(*)" }
+    remediation: "收窄 Read 与 WebFetch 权限"
