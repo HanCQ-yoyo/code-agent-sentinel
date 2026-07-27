@@ -6,8 +6,9 @@
 
 ## 核心能力
 
-- **资产发现与解析**:扫描 `~/.claude/` 与项目 `.claude/`,覆盖 settings、permissions、hooks、MCP servers、skills、commands、agents、plugins、CLAUDE.md/memory、keybindings、scripts 等 11 类资产。支持多种 code agent:**Claude Code**(`~/.claude/`)与 **OpenAI Codex CLI**(`~/.codex/config.toml`、`AGENTS.md`、`prompts/`、`hooks.json`)。`sentinel setup` 自动探测已安装 agent;看板支持多 agent 聚合、各自独立扫描。
-- **安全检测**:统一规则引擎(63 条内置规则)+ 提示注入扫描(含反混淆)+ 密钥扫描(gitleaks)+ 依赖漏洞(govulncheck / npm-audit)。子进程缺失时优雅降级。
+- **资产发现与解析**:扫描 `~/.claude/` 与项目 `.claude/`,覆盖 settings、permissions、hooks、MCP servers、skills、commands、agents、plugins、CLAUDE.md/memory、keybindings、scripts、**credential**(凭据文件 `auth.json`/`.env`/`*.pem` 等,不暴露内容)等 12 类资产。支持多种 code agent:**Claude Code**(`~/.claude/`)与 **OpenAI Codex CLI**(`~/.codex/config.toml`、`AGENTS.md`、`prompts/`、`hooks.json`)。`sentinel setup` 自动探测已安装 agent;看板支持多 agent 聚合、各自独立扫描。
+- **发现补齐与跨资产组合规则**:Claude L1-L5——`managed-mcp.json`(企业模式提示)、全局 `.mcp.json`、项目 `hooks/` 目录、项目 `keybindings.json`、`skip_dangerous_mode_permission_prompt` 字段;Codex C2/C3——项目级 `.codex/config.toml` + `[hooks.state]` 建模;Codex C4/L6——`auth.json` 凭据 + 项目根敏感文件。**6 条跨资产组合规则**(skip-perm+Bash(*) / Codex danger+never / 凭据外发等)经统一规则引擎新增 `ComboRule` 第二遍求值。Codex 项目级发现改读 sentinel 的 `known_projects` 清单(独立于 `~/.claude.json`)。
+- **安全检测**:统一规则引擎(256 条内置规则 + 6 条跨资产组合规则)+ 提示注入扫描(含反混淆)+ 密钥扫描(gitleaks)+ 依赖漏洞(govulncheck / npm-audit)。子进程缺失时优雅降级。
 - **抑制与 baseline**:`suppressions.yaml` 静默已知 finding;`baseline.json` 快照已接受指纹(CLI 或 API create / prune)。
 - **健康分**:`Score = 100 × (1 − Σ(R(asset)·w(asset)) / (Rmax · Σ w(asset)))`,Rmax=10,0–100 五档,可解释 / 单调 / 可还原。
 - **配置编辑**:原子写入 + 自动备份与迁移(`internal/editor`);configengine 保持只读。
@@ -59,6 +60,7 @@ ssh -L <port>:127.0.0.1:<port> <devhost>
 | `scan_enabled` | bool | 进程内 scheduler 总开关。 |
 | `language` | string | `zh` / `en`;空 = 浏览器探测后回退 `zh`。 |
 | `pinned_projects` | list | `{path, color}` 条目,Assets 页置顶。 |
+| `known_projects` | list | `{path, name}` 条目——sentinel 独立已知项目清单;`setup` 从 `~/.claude.json` projects 自动导入初始值。用于 Codex 项目级发现(及 Claude)。空 → Claude 回退 `~/.claude.json` projects。 |
 | `dir_tags` | map | 按路径覆盖标签。 |
 | `favorites` | []string | 收藏的资产 ID(后端持久化)。 |
 | `backup_dir` | string | 备份根目录;空 = `~/.claude-sentinel/backups`。 |
