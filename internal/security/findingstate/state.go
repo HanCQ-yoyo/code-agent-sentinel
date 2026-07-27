@@ -96,3 +96,53 @@ func (s *States) Match(fp string) (State, bool) {
 	}
 	return State{}, false
 }
+
+// Set 插入或更新(upsert)一条处置状态。同 fingerprint 覆盖。
+func (s *States) Set(fp string, st State) {
+	st.Fingerprint = fp
+	for i := range s.Items {
+		if s.Items[i].Fingerprint == fp {
+			s.Items[i] = st
+			return
+		}
+	}
+	s.Items = append(s.Items, st)
+}
+
+// BulkAccept 批量将给定 fingerprint 标为 accepted(若当前为 open 或不存在)。
+// 已有非 open 状态(resolved/false_positive/accepted/in_progress)不覆盖,尊重既有处置。
+func (s *States) BulkAccept(fps []string, source Source, updatedAt string) {
+	for _, fp := range fps {
+		if existing, ok := s.Match(fp); ok && existing.Status != StatusOpen && existing.Status != "" {
+			continue
+		}
+		s.Set(fp, State{Status: StatusAccepted, Source: source, UpdatedAt: updatedAt})
+	}
+}
+
+// PruneReport 返回"已处置但本轮未检出"的孤儿状态(不删除原记录)。
+// activeFps 是本轮扫描实际检出的 fingerprint 集合。
+func (s *States) PruneReport(activeFps []string) []State {
+	active := make(map[string]bool, len(activeFps))
+	for _, fp := range activeFps {
+		active[fp] = true
+	}
+	var orphans []State
+	for _, item := range s.Items {
+		if !active[item.Fingerprint] {
+			orphans = append(orphans, item)
+		}
+	}
+	return orphans
+}
+
+// Remove 删除一条处置状态。存在并删除返回 true,不存在返回 false。
+func (s *States) Remove(fp string) bool {
+	for i := range s.Items {
+		if s.Items[i].Fingerprint == fp {
+			s.Items = append(s.Items[:i], s.Items[i+1:]...)
+			return true
+		}
+	}
+	return false
+}
