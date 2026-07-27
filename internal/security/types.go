@@ -36,8 +36,14 @@ type Finding struct {
 	// 供 UI(Task 18)在 Monaco 高亮命中行;不参与健康分,不进 Fingerprint。
 	Locations   []ruleengine.Location `json:"locations,omitempty"`
 	Suppressed  bool                  `json:"suppressed,omitempty"`
-	Suppression string                `json:"suppression,omitempty"` // "baseline" / "inline"
+	Suppression string                `json:"suppression,omitempty"` // "state"(统一处置)/ "negation"(自动,不进生命周期,仅计数)
 	Reason      string                `json:"reason,omitempty"`
+	// 处置生命周期字段(统一处置模型,取代 baseline+suppressions):
+	Status   string `json:"status,omitempty"`   // open|in_progress|resolved|false_positive|accepted;空=未扫描过(按 open 处理)
+	Priority string `json:"priority,omitempty"` // P0|P1|P2|P3;空=读时从 severity 派生
+	Note     string `json:"note,omitempty"`
+	// ContributingRuleIDs 是资产内去重后,同位置命中的其他规则(去重 pass 产生)。
+	ContributingRuleIDs []string `json:"contributing_rule_ids,omitempty"`
 }
 
 // DetectorStatus 是一个检测器的运行状态。
