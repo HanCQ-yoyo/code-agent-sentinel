@@ -391,7 +391,30 @@
     "supprTooltip": "抑制来源:{{source}}{{reason}}",
     "reasonPart": " · 原因:{{reason}}",
     "empty": "暂无发现 · 扫描后显示",
-    "noMatch": "无匹配发现"
+    "noMatch": "无匹配发现",
+    "viewFlat": "平铺",
+    "viewByRule": "按规则聚合",
+    "catAll": "全部类别",
+    "statusAll": "全部状态",
+    "prioAll": "全部优先级",
+    "typeAll": "全部类型",
+    "hits": "命中",
+    "status": {
+      "open": "未处置",
+      "in_progress": "处置中",
+      "resolved": "已解决",
+      "false_positive": "误报",
+      "accepted": "已接受"
+    }
+  },
+  "category": {
+    "destructive_command": "危险命令",
+    "prompt_injection": "提示注入",
+    "baseline": "配置基线",
+    "skill_abuse": "技能滥用",
+    "combo": "组合风险",
+    "load_error": "加载错误",
+    "unknown": "未知"
   },
   "diff": {
     "title": "预览变更",

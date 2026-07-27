@@ -391,7 +391,30 @@
     "supprTooltip": "Suppression source: {{source}}{{reason}}",
     "reasonPart": " · Reason: {{reason}}",
     "empty": "No findings · run a scan to see results",
-    "noMatch": "No matching findings"
+    "noMatch": "No matching findings",
+    "viewFlat": "Flat",
+    "viewByRule": "By Rule",
+    "catAll": "All Categories",
+    "statusAll": "All Statuses",
+    "prioAll": "All Priorities",
+    "typeAll": "All Types",
+    "hits": "hits",
+    "status": {
+      "open": "Open",
+      "in_progress": "In Progress",
+      "resolved": "Resolved",
+      "false_positive": "False Positive",
+      "accepted": "Accepted"
+    }
+  },
+  "category": {
+    "destructive_command": "Dangerous Command",
+    "prompt_injection": "Prompt Injection",
+    "baseline": "Config Baseline",
+    "skill_abuse": "Skill Abuse",
+    "combo": "Combinatorial Risk",
+    "load_error": "Load Error",
+    "unknown": "Unknown"
   },
   "diff": {
     "title": "Preview changes",
