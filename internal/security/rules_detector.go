@@ -35,6 +35,10 @@ type RulesDetector struct {
 	// builtin + global 合并 + Validate 后的规则(Meta 与 Scan 基础层)。
 	// Scan 时再叠加项目规则得到 allRules。
 	baseRules []ruleengine.Rule
+	// builtin + global 的 ComboRule(Task 8 加载,Task 9 在 Scan 第二遍求值)。
+	// 已在 NewRulesDetector 构造时经 ValidateCombo 预编译(Requires[*].compiled 填充)。
+	// 项目 combo 暂不接(LoadForScan 丢弃项目 combo,保持"项目规则只单资产"语义)。
+	baseComboRules []ruleengine.ComboRule
 	// 构造时的加载/校验错误(builtin + global + baseline + suppressions)。
 	// Scan 时追加项目规则错误,合并成 load-error findings。
 	loadErrs []ruleengine.RuleLoadError
@@ -63,9 +67,16 @@ func NewRulesDetector(home string, cfg *config.DetectorsConfig) *RulesDetector {
 	// 内置 + 全局规则:LoadForScan(home, nil) = builtin + global(无项目),合并 + Validate。
 	// 用 LoadForScan 而非 LoadBuiltin+LoadDir 分开调,是为了复用 Merge+Validate 一次成型。
 	// 路径 Finding #5:全局规则目录在 LoadForScan 内硬编码,扫描侧不读 cfg(sentinel_rules_dir)。
-	rules, errs := ruleengine.LoadForScan(home, nil)
+	//
+	// combos(builtin + global 的 ComboRule):Task 8 加载并赋 d.baseComboRules,
+	// 经 ValidateCombo 预编译(Requires[*].compiled 填充)。Task 9 的 Scan 第二遍接 comboMatches 求值。
+	// ValidateCombo 错误进 d.loadErrs(load-error Finding,Severity=Info 不进健康分)。
+	rules, combos, errs := ruleengine.LoadForScan(home, nil)
+	validCombos, comboErrs := ruleengine.ValidateCombo(combos)
 	d.baseRules = rules
+	d.baseComboRules = validCombos
 	d.loadErrs = errs
+	d.loadErrs = append(d.loadErrs, comboErrs...)
 
 	// 抑制配置:文件不存在 → (nil,nil) 静默(用户尚未生成/创建,非错误)。
 	// 路径 Finding #5:扫描侧硬编码默认路径,不读 cfg(baseline_path/suppress_path 覆盖在
@@ -289,7 +300,8 @@ func (d *RulesDetector) loadProjectRules() ([]ruleengine.Rule, []ruleengine.Rule
 	var errs []ruleengine.RuleLoadError
 	for _, p := range projects {
 		dir := filepath.Join(p.Path, ".sentinel", "rules")
-		prules, perrs := ruleengine.LoadDir(dir, "project")
+		// 项目 combo 暂不接(_ 丢弃):保持"项目规则只单资产"语义,Task 8 范畴不扩。
+		prules, _, perrs := ruleengine.LoadDir(dir, "project")
 		errs = append(errs, perrs...)
 		for i := range prules {
 			prules[i].ProjectPath = p.Path

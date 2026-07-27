@@ -23,3 +23,36 @@ func TestOpConstants(t *testing.T) {
 		t.Error("bogus should be invalid")
 	}
 }
+
+// TestComboRuleYAMLDecode 验证 parseRuleYAML 能把 combo_rules 段解析为 []ComboRule,
+// 并正确填充 ID/Severity/Requires/AssetType。锁 Task 8 的 combo 加载契约。
+func TestComboRuleYAMLDecode(t *testing.T) {
+	data := []byte(`
+combo_rules:
+  - id: combo.test
+    severity: critical
+    description: "test combo"
+    requires:
+      - asset_type: settings
+        match: { field: skip_dangerous, op: eq, value: "true" }
+      - asset_type: permissions
+        match: { field: allow, op: contains, value: "Bash(*)" }
+`)
+	rules, combos, errs := parseRuleYAML(data, "test")
+	if len(errs) > 0 {
+		t.Fatalf("parse errs: %v", errs)
+	}
+	if len(rules) != 0 || len(combos) != 1 {
+		t.Fatalf("got %d rules, %d combos, want 0 rules 1 combo", len(rules), len(combos))
+	}
+	c := combos[0]
+	if c.ID != "combo.test" || c.Severity != "critical" {
+		t.Fatalf("combo = %+v", c)
+	}
+	if len(c.Requires) != 2 {
+		t.Fatalf("requires len = %d, want 2", len(c.Requires))
+	}
+	if c.Requires[0].AssetType != "settings" {
+		t.Fatalf("require[0] asset_type = %q", c.Requires[0].AssetType)
+	}
+}

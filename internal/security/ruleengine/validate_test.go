@@ -382,3 +382,60 @@ func TestValidAssetTypeIncludesCredential(t *testing.T) {
 		t.Fatal("validAssetType 应接受 \"credential\"")
 	}
 }
+
+// ── Task 8: ComboRule 校验 ──
+
+// TestValidateComboRejectsMissingRequires 验证无 requires 的 combo 被拒
+// (combo 至少 2 条 require 才有组合意义)。
+func TestValidateComboRejectsMissingRequires(t *testing.T) {
+	cr := []ComboRule{{ID: "combo.bad", Severity: "critical"}}
+	valid, errs := ValidateCombo(cr)
+	if len(valid) != 0 || len(errs) == 0 {
+		t.Fatalf("应拒绝无 requires 的 combo, got valid=%d errs=%d", len(valid), len(errs))
+	}
+}
+
+// TestValidateComboAcceptsValid 验证合法 combo(2 条 require + 合法 asset_type)通过。
+// MatchNode 空 raw 在求值时返回不命中,但 ValidateCombo 只校验结构(requires 非空 + asset_type 合法)。
+func TestValidateComboAcceptsValid(t *testing.T) {
+	cr := []ComboRule{{
+		ID: "combo.ok", Severity: "critical",
+		Requires: []ComboCondition{{
+			AssetType: "settings",
+			Match:     MatchNode{}, // 实际由 YAML 填,这里手动构造空(测试仅验不报 missing requires)
+		}, {
+			AssetType: "permissions",
+			Match:     MatchNode{},
+		}},
+	}}
+	valid, errs := ValidateCombo(cr)
+	if len(errs) != 0 {
+		t.Fatalf("应接受合法 combo, got errs: %v", errs)
+	}
+	if len(valid) != 1 {
+		t.Fatalf("got %d valid, want 1", len(valid))
+	}
+}
+
+// TestValidateComboPrecompilesRegex 验证 ValidateCombo 对每个 require 预编译
+// (compiled 字段非 nil + regexes 缓存填充),防 Task 9 comboMatches 复用时退化。
+// controller addendum 决议:ComboCondition 带 compiled *Rule,ValidateCombo 预编译正则。
+func TestValidateComboPrecompilesRegex(t *testing.T) {
+	cr := []ComboRule{{
+		ID: "combo.regex", Severity: "high",
+		Requires: []ComboCondition{
+			{AssetType: "hook", Match: MatchNode{raw: map[string]any{"field": "command", "op": "regex_match", "value": "(?i)curl.*sh"}}},
+			{AssetType: "settings", Match: MatchNode{raw: map[string]any{"field": "skip_dangerous", "op": "eq", "value": "true"}}},
+		},
+	}}
+	valid, errs := ValidateCombo(cr)
+	if len(errs) != 0 || len(valid) != 1 {
+		t.Fatalf("errs=%v valid=%d", errs, len(valid))
+	}
+	if valid[0].Requires[0].compiled == nil {
+		t.Fatal("require[0] 未预编译(compiled 为 nil)")
+	}
+	if valid[0].Requires[0].compiled.regexes == nil {
+		t.Fatal("预编译未填 regexes 缓存")
+	}
+}
