@@ -26,6 +26,9 @@ type rawSettings struct {
 		Ask   []string `json:"ask"`
 	} `json:"permissions"`
 	Hooks map[string][]rawHookEntry `json:"hooks"`
+	// SkipDangerousModePermissionPrompt 映射到 Fields["skip_dangerous"] 结构化字段
+	// (Task 7 L5):仅 true 时设字段,absent 不设(规则据此识别跳过危险模式提示)。
+	SkipDangerousModePermissionPrompt bool `json:"skipDangerousModePermissionPrompt"`
 	// 其余字段未单独建模;通过 base.Fields["raw"] 保留原始 JSON 供后续检测器使用。
 }
 
@@ -71,6 +74,11 @@ func parseSettings(path string, scope Scope) ([]Asset, error) {
 	}
 	if rs.Model != "" {
 		base.Fields["model"] = rs.Model
+	}
+	// L5:skip_dangerous 结构化字段(仅 true 时设,absent 不设;Task 10 基线规则据此匹配,
+	// 无需扫 raw 全文本)。absent != false 以免规则误判 false==false。
+	if rs.SkipDangerousModePermissionPrompt {
+		base.Fields["skip_dangerous"] = true
 	}
 	fillHash(&base)
 	out = append(out, base)
