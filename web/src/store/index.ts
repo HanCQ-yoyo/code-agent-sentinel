@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { apiGet, apiPost, apiPut, apiDelete, AuthError } from '../api/client'
-import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, ScheduleStatus, TreeNode, Project, PinnedProject, DirTagsResponse, RawFile, PreviewResult, EditResult, SuppressionItem, BaselineResult, DetectorsConfig, DashboardData, AgentScanResult, Agent, Finding } from '../types'
+import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, ScheduleStatus, TreeNode, Project, PinnedProject, DirTagsResponse, RawFile, PreviewResult, EditResult, SuppressionItem, BaselineResult, DetectorsConfig, DashboardData, AgentScanResult, Agent, Finding, FindingState } from '../types'
 import { type DirTag, type DirTagsMap } from '../lib/dirTags'
 import i18n from '../i18n'
 
@@ -59,6 +59,15 @@ interface State {
   // 全选 → ?agent=all 聚合(返回拼接 []Finding,每条带 agent_id);多选 → ?agent=id1,id2。
   findings: Finding[]
   fetchFindings: (agentID?: string) => Promise<void>
+  // Task 12:Finding 治理字段 CRUD(/api/finding-state)。后端落盘到 ~/.claude-sentinel/finding-states.json,
+  // API 读时把 status/priority/note 合并到 Finding 上(见 /api/findings 响应)。
+  // 三个 action 成功后都 fetchFindings() 重拉(不带参 = 用当前 agentQuery,与 runScan 后刷新模式一致)。
+  // setFindingState:POST /api/finding-state { fingerprint, status, priority?, note? } → upsert 单条。
+  // bulkAccept:POST /api/finding-state/bulk-accept { fingerprints, source } → 批量标记 accepted。
+  // resetFindingState:DELETE /api/finding-state/:fp → 清除该指纹的处置状态(回到 open 默认)。
+  setFindingState: (fingerprint: string, status: string, priority?: string, note?: string) => Promise<void>
+  bulkAccept: (fingerprints: string[]) => Promise<void>
+  resetFindingState: (fingerprint: string) => Promise<void>
   deleteHistory: (id: string) => Promise<void>
   fetchAgents: () => Promise<void>
   // Task 9:替换 setSelectedAgent。空数组=全选聚合;[id]=单选;[id1,id2]=多选。
@@ -264,6 +273,21 @@ export const useStore = create<State>((set, get) => ({
     const q = agentID != null ? `?agent=${encodeURIComponent(agentID)}` : get().agentQuery()
     const res = await wrap(() => apiGet<Finding[]>(`/api/findings${q}`), set)
     if (res) set({ findings: res })
+  },
+  // Task 12:Finding 治理字段 CRUD。用 apiPost/apiDelete + wrap(与项目其他 action 一致),
+  // 不用 raw fetch + authHeaders(brief 写法,实际项目无此封装)。成功后 fetchFindings() 重拉
+  // (后端合并 finding-state 到 Finding 上,前端 store.findings 整体更新,消费方自动重渲染)。
+  setFindingState: async (fingerprint, status, priority, note) => {
+    await wrap(() => apiPost<FindingState>('/api/finding-state', { fingerprint, status, priority, note }), set)
+    await get().fetchFindings()
+  },
+  bulkAccept: async (fingerprints) => {
+    await wrap(() => apiPost('/api/finding-state/bulk-accept', { fingerprints, source: 'bulk-accept' }), set)
+    await get().fetchFindings()
+  },
+  resetFindingState: async (fingerprint) => {
+    await wrap(() => apiDelete(`/api/finding-state/${encodeURIComponent(fingerprint)}`), set)
+    await get().fetchFindings()
   },
   deleteHistory: async (id) => {
     await wrap(() => apiDelete(`/api/history/${id}`), set)

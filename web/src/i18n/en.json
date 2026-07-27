@@ -292,7 +292,11 @@
     "script": "Script",
     "hook": "Hook",
     "mcp": "MCP",
-    "memory": "Memory"
+    "memory": "Memory",
+    "settings": "Settings",
+    "permissions": "Permissions",
+    "keybinding": "Keybinding",
+    "credential": "Credential"
   },
   "rawFile": {
     "loadFailed": "Load failed",

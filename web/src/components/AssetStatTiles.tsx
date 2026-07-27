@@ -1,26 +1,11 @@
 import { Card, Statistic } from 'antd'
 import { useTranslation } from 'react-i18next'
-import {
-  ToolOutlined, CodeOutlined, RobotOutlined, AppstoreOutlined,
-  SnippetsOutlined, ThunderboltOutlined, ClusterOutlined, FileTextOutlined,
-} from '@ant-design/icons'
-
-// 资产类型 → 显示名 i18n key + 图标 + 顺序。
-const specs: { type: string; labelKey: string; icon: React.ReactNode }[] = [
-  { type: 'skill', labelKey: 'assetStat.skill', icon: <ToolOutlined /> },
-  { type: 'command', labelKey: 'assetStat.command', icon: <CodeOutlined /> },
-  { type: 'agent', labelKey: 'assetStat.agent', icon: <RobotOutlined /> },
-  { type: 'plugin', labelKey: 'assetStat.plugin', icon: <AppstoreOutlined /> },
-  { type: 'script', labelKey: 'assetStat.script', icon: <SnippetsOutlined /> },
-  { type: 'hook', labelKey: 'assetStat.hook', icon: <ThunderboltOutlined /> },
-  { type: 'mcp_server', labelKey: 'assetStat.mcp', icon: <ClusterOutlined /> },
-  { type: 'memory', labelKey: 'assetStat.memory', icon: <FileTextOutlined /> },
-]
+import { ASSET_TYPE_META } from '../lib/assetTypes'
 
 export function AssetStatTiles({ counts }: { counts: Record<string, number> }) {
   const { t } = useTranslation()
-  const present = specs.filter((s) => (counts[s.type] ?? 0) > 0)
-  const tiles = present.length > 0 ? present : specs
+  const present = ASSET_TYPE_META.filter((s) => (counts[s.type] ?? 0) > 0)
+  const tiles = present.length > 0 ? present : ASSET_TYPE_META
   return (
     // 垂直居中根因:antd Card 根非 flex,旧 body 设 height:'100%' 解析为整卡高(含标题),
     // grid 的 alignContent:'center' 在超出实际可用高的容器里居中 → 视觉偏下。

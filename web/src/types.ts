@@ -24,6 +24,30 @@ export interface Finding {
   // snake_case(line/start_col/end_col)。供 UI(Task 18)在 Monaco 高亮命中行,不参与健康分。
   // 前端在 FindingDrawer→AssetSection 边界映射为 camelCase 传给 MonacoViewer.highlights。
   locations?: { line: number; start_col: number; end_col: number }[]
+  // 治理字段(Spec 1):统一处置生命周期 + Category 派生。
+  // status/priority/note 由用户经 /api/finding-state 维护(POST/DELETE),后端落盘到 ~/.claude-sentinel/finding-states.json。
+  // category 由 API 读时根据 rule_id 派生 attach(后端 Task 11),前端只读不写。
+  // contributing_rule_ids:combo 规则触发时记录所有命中的子规则 ID(后端 Task 11)。
+  status?: string         // open|in_progress|resolved|false_positive|accepted
+  priority?: string       // P0|P1|P2|P3
+  note?: string
+  category?: string       // 派生,API 读时 attach
+  contributing_rule_ids?: string[]
+}
+
+// Finding 处置状态(Spec 1)。后端 finding-states.json 的 status 字段取值之一。
+// open=未处置(默认);in_progress=处置中;resolved=已解决;false_positive=误报;accepted=已接受风险。
+export type FindingStatus = 'open' | 'in_progress' | 'resolved' | 'false_positive' | 'accepted'
+
+// /api/finding-state 单条记录(GET /api/finding-state/:fp 返回;POST/DELETE 体内/响应同结构)。
+// fingerprint 是稳定标识(后端 sha256 规则指纹);source 记录写入来源(web/bulk-accept/cli 等)。
+export interface FindingState {
+  fingerprint: string
+  status: FindingStatus
+  priority?: string
+  note?: string
+  source?: string
+  updated_at?: string
 }
 export interface HealthScore { score: number; band: string; deductions: { asset_name: string; rule_id: string; severity: Severity; points: number }[] }
 export interface DetectorStatus { id: string; available: boolean; reason?: string }
