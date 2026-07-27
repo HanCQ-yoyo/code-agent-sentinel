@@ -9,11 +9,12 @@ import { AssetEditor } from './AssetEditor'
 import { SEVERITY_ORDER, SEVERITY_LABEL_KEY } from '../lib/severity'
 import { detectorNameById, ruleNameById } from '../lib/i18n-names'
 import { useStore } from '../store'
+import { CapabilityPanel } from './CapabilityPanel'
 
 // AssetDetailPanel:资产详情。三消费方(Assets 列表抽屉 50% / 树右栏 480px sticky / /assets/:id 全页)
 // 共用此组件,签名 { asset, findings?, detectors? }。
 //
-// 四段层次(用户指定):基本信息 → 属性 → 风险列表 → 资产内容。
+// 五段层次(用户指定):基本信息 → 属性 → 能力面板 → 风险列表 → 资产内容。
 // 段间用足够间距(var(--space-xl))区分,体现「不同内容块」的层次感(原版间距太小、层次塌平)。
 // 三段内容标题(属性/风险列表/资产内容)用同一套 .asset-section-title(fs-lg 20px + 700 加粗),
 // 比「安全检查」按钮文字(fs-base 14px)大,作为可识别的分区标题。内容区 borderless 让标题统一。
@@ -109,7 +110,14 @@ export function AssetDetailPanel({ asset, highlights, findings, detectors, agent
         </div>
       </section>
 
-      {/* ③ 风险列表:4 列表格(风险名称/级别/检测器/规则)。标题与属性同一套 .asset-section-title。
+      {/* ③ 能力面板:按 asset.type 分发结构化展示(skill 的 allowed-tools / hook 的 event/command / mcp 的 env 等)。
+          memory 走 fields.outline(Task 9);script 无 fields 用 name/content 推导。空 → <Empty>。 */}
+      <section style={{ paddingBottom: 'var(--space-xl)' }}>
+        <div className="asset-section-title">{t('assetDetail.capability')}</div>
+        <CapabilityPanel asset={asset} />
+      </section>
+
+      {/* ④ 风险列表:4 列表格(风险名称/级别/检测器/规则)。标题与属性同一套 .asset-section-title。
           保留 <div data-testid="asset-risk-list"> 容器(e2e 钩子不动)。findings 未传不渲染。 */}
       {findings ? (
         <div data-testid="asset-risk-list" style={{ paddingBottom: 'var(--space-xl)' }}>
@@ -130,7 +138,7 @@ export function AssetDetailPanel({ asset, highlights, findings, detectors, agent
         </div>
       ) : null}
 
-      {/* ④ 资产内容:borderless ContentArea。AssetEditor 透传 borderless=true,内容区标题走
+      {/* ⑤ 资产内容:borderless ContentArea。AssetEditor 透传 borderless=true,内容区标题走
           .asset-section-title(与属性/风险同款,见 index.css .content-area-label 覆盖),
           消除 box-in-box。key={asset.id} 切资产重挂载,避免视图/草稿泄漏。 */}
       <div className="asset-detail-content" style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column' }}>
