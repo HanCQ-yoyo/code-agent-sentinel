@@ -12,6 +12,29 @@
 
 ---
 
+## Coding Agent 配置对齐(双 agent 资产发现 + credential/combo/managed-mcp 规则)
+
+- **合入日期**:2026-07-27(分支 `feat/coding-agent-config-alignment`,待合并后回填 main SHA)
+- **合入 SHA**:`合并后回填`(pre-merge;main fast-forward 预期,届时取末次提交 SHA)
+
+### 升级
+
+- **Codex 配置根分流**:`Engine` 按 agent spec 选择 `ClaudeDir`/`CodexDir`,修复 Codex 误用 `~/.claude.json` 根因(C1);Codex 项目级发现改读 sentinel 独立 `known_projects`,不再借 `~/.claude.json`(C1)。
+- **known_projects 独立清单**:`config.KnownProjects`/`KnownProject`/`ResolveKnownProjects`;`setup` 从 `~/.claude.json` projects 导入初始值(纯函数 `importKnownProjects`,文件缺失/JSON 损坏安全降级),用户可手改 `config.yaml` 增删。
+- **Claude 发现补齐(L1-L5)**:`managed-mcp.json`(企业模式提示)、全局 `.mcp.json`、项目 `hooks/` 目录、项目 `keybindings.json`、`settings.json` 的 `skip_dangerous_mode_permission_prompt` 字段。
+- **credential 资产类型(L6)**:`~/.aws/credentials` / `.env` / `.netrc` 等凭据文件建模为只读元数据资产(Content 不暴露明文);Codex `auth.json`(C4)+ 项目级敏感文件。
+- **Codex 项目级 .codex/config.toml(C2/C3)**:项目级 Codex 配置发现 + `[hooks.state]` 建模。
+- **结构化字段规则迁移**:settings/skill/agent 等结构化字段改走 `field:` op,精简匹配树(从 content 正则迁至字段精确匹配)。
+- **MCP 明文/managed-mcp 规则**:全局 `.mcp.json` `http://` URL 检测 + `managed-mcp.json` 企业模式提示。
+- **跨资产组合规则(6 条)**:`ComboRule` 类型 + 加载 + 校验;`RulesDetector` 第二遍跨资产组合求值。覆盖 skip-perm-combo / bash-wildcard + WebFetch(*) / 凭据外发 / Codex danger+never 等组合 critical finding。
+
+### 修复
+
+- Codex 项目级发现误借 `~/.claude.json`(C1):改读 `Engine.KnownProjects`(从 sentinel config 桥接)。
+- Codex 配置根误用 `~/.claude.json`(根因):`Engine` 按 agent spec 分流 `ClaudeDir`/`CodexDir`。
+
+---
+
 ## Codex CLI 支持
 
 - **合入日期**:2026-07-24

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/charmbracelet/huh"
@@ -49,6 +51,41 @@ func detectAgents(home string) []configengine.AgentSpec {
 // mergeAgents 把 setup 选择写入 cfg.Agents(保留其他字段,纯函数可测)。
 func mergeAgents(cfg *config.Config, selection []config.AgentCfg) {
 	cfg.Agents = selection
+}
+
+// importKnownProjects 从 ~/.claude.json 的 projects 字段读已知项目路径作 setup 初始值。
+//
+// 设计取舍(brief Task 11 + 控制器补充决议):
+//   - 纯函数,不依赖 runSetup(后者拒绝非 TTY,无法在 CI 单测;precedent: mergeAgents)。
+//   - 仅导入,不做 huh 增删屏(brief Step 3 注允许此最小实现;用户后续手改 config.yaml 增删)。
+//   - 文件不存在 / 无 projects 字段 / JSON 损坏 → 一律返回 nil(安全降级,不阻塞 setup)。
+//   - 真实 ~/.claude.json 可能被其他工具写坏;sentinel setup 不应因此报错。
+//   - 返回值按 map 迭代顺序(Go map 无序),调用方 ResolveKnownProjects 会按 Path 去重。
+//
+// 规格说明:Codex 无项目清单文件;sentinel 用独立清单,Claude 的 ~/.claude.json projects
+// 仅作 setup 探测补充,运行时不再作为 Codex 项目源(见 Task 4 fix: Engine 按 agent spec 分流)。
+func importKnownProjects(claudeJSONPath string) []config.KnownProject {
+	data, err := os.ReadFile(claudeJSONPath)
+	if err != nil {
+		return nil // 文件不存在 / 不可读 → 安全降级
+	}
+	var doc struct {
+		Projects map[string]json.RawMessage `json:"projects"`
+	}
+	if err := json.Unmarshal(data, &doc); err != nil {
+		return nil // JSON 损坏 → 安全降级(不阻塞 setup)
+	}
+	if len(doc.Projects) == 0 {
+		return nil
+	}
+	out := make([]config.KnownProject, 0, len(doc.Projects))
+	for path := range doc.Projects {
+		if path == "" {
+			continue
+		}
+		out = append(out, config.KnownProject{Path: path, Name: filepath.Base(path)})
+	}
+	return out
 }
 
 // runSetup 是 setup 主流程。非 TTY 报错;否则跑 huh 表单。
@@ -159,6 +196,10 @@ func runSetup(homeFlag, cfgPath string, allowMissing bool, in io.Reader, out io.
 		return fmt.Errorf("用户取消")
 	}
 	mergeAgents(cfg, selection)
+	// Task 11:从 ~/.claude.json projects 导入 known_projects 作项目清单初始值。
+	// 最小实现:仅导入,不做 huh 增删屏(brief Step 3 注允许;用户后续手改 config.yaml 增删)。
+	// 纯函数 importKnownProjects 处理文件缺失/JSON 损坏的安全降级,不阻塞 setup。
+	cfg.KnownProjects = importKnownProjects(filepath.Join(home, ".claude.json"))
 	if err := config.Save(cfgPath, cfg); err != nil {
 		return err
 	}

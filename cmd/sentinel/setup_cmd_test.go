@@ -85,3 +85,68 @@ func TestMergeSetupSelectionIntoConfig(t *testing.T) {
 		t.Error("merge 不应破坏其他字段")
 	}
 }
+
+// Task 11:importKnownProjects 从 ~/.claude.json 的 projects 字段读已知项目路径作初始值。
+// 测试纯函数(不调 runSetup——后者拒绝非 TTY,见 TestRunSetupRejectsNonTTY)。
+// 参考 addendum 的决议:runSetup 集成仅加一行 cfg.KnownProjects = importKnownProjects(...)。
+func TestImportKnownProjectsFromClaudeJSON(t *testing.T) {
+	home := t.TempDir()
+	proj := filepath.Join(home, "myproj")
+	if err := os.MkdirAll(proj, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// 造 ~/.claude.json 含 projects 映射(path 为 key,空对象为 value)。
+	claudeJSON := filepath.Join(home, ".claude.json")
+	body := `{"projects":{"` + proj + `":{}}}`
+	if err := os.WriteFile(claudeJSON, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := importKnownProjects(claudeJSON)
+	found := false
+	for _, p := range got {
+		if p.Path == proj {
+			found = true
+			if p.Name != filepath.Base(proj) {
+				t.Errorf("Name 应为 base(path), got %q want %q", p.Name, filepath.Base(proj))
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("应从 ~/.claude.json projects 导入 %q, got %+v", proj, got)
+	}
+}
+
+// TestImportKnownProjectsMissingFile 验证文件不存在时安全降级返回空(不 panic / 不 error)。
+func TestImportKnownProjectsMissingFile(t *testing.T) {
+	got := importKnownProjects(filepath.Join(t.TempDir(), "nonexistent.claude.json"))
+	if len(got) != 0 {
+		t.Fatalf("文件不存在应返回空切片(安全降级), got %+v", got)
+	}
+}
+
+// TestImportKnownProjectsCorruptJSON 验证损坏 JSON 时安全降级返回空(不 panic / 不 error)。
+// 真实 ~/.claude.json 可能被其他工具写坏;sentinel setup 不应因此阻塞。
+func TestImportKnownProjectsCorruptJSON(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, ".claude.json")
+	if err := os.WriteFile(p, []byte(`{not json`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := importKnownProjects(p)
+	if len(got) != 0 {
+		t.Fatalf("损坏 JSON 应返回空切片(安全降级), got %+v", got)
+	}
+}
+
+// TestImportKnownProjectsEmptyProjects 验证 projects 字段为空时返回空切片(边界值)。
+func TestImportKnownProjectsEmptyProjects(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, ".claude.json")
+	if err := os.WriteFile(p, []byte(`{"projects":{}}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := importKnownProjects(p)
+	if len(got) != 0 {
+		t.Fatalf("空 projects 应返回空切片, got %+v", got)
+	}
+}
