@@ -39,14 +39,14 @@ func TestNormalizePathExpand(t *testing.T) {
 }
 
 func TestNormalizeQueryModeNotStripped(t *testing.T) {
-	// command -v 是 query,不剥(dcg normalize.rs:735)
+	// command -v 是 query,不剥
 	if got := NormalizeCommand("command -v rm"); got != "command -v rm" {
 		t.Errorf("command -v 不应被剥: got %q", got)
 	}
 }
 
 func TestNormalizeDataAreaNotDecoded(t *testing.T) {
-	// echo $'rm -rf /' 里 $'...' 是数据,不解码(dcg normalize.rs:2808)
+	// echo $'rm -rf /' 里 $'...' 是数据,不解码
 	got := NormalizeCommand("echo $'rm -rf /'")
 	if strings.Contains(got, "echo rm") {
 		t.Errorf("数据区 ANSI-C 不应被解码: got %q", got)

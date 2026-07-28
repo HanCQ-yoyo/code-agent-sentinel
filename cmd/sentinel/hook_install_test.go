@@ -55,7 +55,7 @@ func TestInstallGuardHookPreservesExisting(t *testing.T) {
 		t.Fatalf("应合并到单个 Bash matcher, got %d", len(pre))
 	}
 	hooks := pre[0].(map[string]any)["hooks"].([]any)
-	// sentinel 应置首(dcg install.sh:1766)
+	// sentinel 应置首
 	if hooks[0].(map[string]any)["command"] != "/usr/local/bin/sentinel guard" {
 		t.Fatalf("sentinel 应置首, got %v", hooks[0])
 	}

@@ -9,11 +9,11 @@ import (
 	"strings"
 )
 
-// ErrInputTooLarge 表示 stdin 超过 maxBytes 上限(dcg HookReadError::InputTooLarge)。
+// ErrInputTooLarge 表示 stdin 超过 maxBytes 上限。
 var ErrInputTooLarge = errors.New("intercept: input too large")
 
 // HookInput 是 hook stdin 的宽松解析结果(Claude-only,全字段可选)。
-// 参考 dcg HookInput(hook.rs:21-75):所有字段 Option,Claude 走 tool_input.command。
+// 所有字段 Option,Claude 走 tool_input.command。
 type HookInput struct {
 	HookEventName string
 	ToolName      string
@@ -43,7 +43,7 @@ type rawHookInput struct {
 }
 
 // ParseHookInput 读 stdin(剥 UTF-8 BOM,带字节上限)解析为 HookInput。
-// 参考 dcg read_hook_input(hook.rs:467-490)。解析失败由调用方 fail-open。
+// 解析失败由调用方 fail-open。
 func ParseHookInput(r io.Reader, maxBytes int) (HookInput, error) {
 	var sb strings.Builder
 	buf := make([]byte, 4096)
@@ -62,7 +62,7 @@ func ParseHookInput(r io.Reader, maxBytes int) (HookInput, error) {
 			return HookInput{}, err
 		}
 	}
-	s := strings.TrimPrefix(sb.String(), "\ufeff") // 剥 BOM(dcg hook.rs:484)
+	s := strings.TrimPrefix(sb.String(), "\ufeff") // 剥 BOM
 	var raw rawHookInput
 	if err := json.Unmarshal([]byte(s), &raw); err != nil {
 		return HookInput{}, err
@@ -73,7 +73,7 @@ func ParseHookInput(r io.Reader, maxBytes int) (HookInput, error) {
 	}, nil
 }
 
-// hookOutput 是 deny/ask 的 stdout JSON 结构(dcg HookOutput,hook.rs:99-151)。
+// hookOutput 是 deny/ask 的 stdout JSON 结构。
 type hookOutput struct {
 	HookSpecificOutput hookSpecificOutput `json:"hookSpecificOutput"`
 }
@@ -87,7 +87,7 @@ type hookSpecificOutput struct {
 }
 
 // WriteDecision 写 stdout 决策。allow → 空 stdout(fail-open);deny/ask → 一行 JSON。
-// 参考 dcg main.rs deny 路径(hook.rs:1256-1274)。调用方负责 flush。
+// 调用方负责 flush。
 func WriteDecision(w io.Writer, dec Decision, reason, ruleID, severity, remediation string) {
 	if dec == DecisionAllow {
 		return // 空 stdout = allow

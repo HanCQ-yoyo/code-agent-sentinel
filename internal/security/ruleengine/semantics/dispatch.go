@@ -84,7 +84,7 @@ var snowQueryRe = regexp.MustCompile(`(?i)--query\s+['"]([^'"]*)['"]`)
 //   - SQL 无破坏性 keyword → Safe(抑制正则对 --query 内 SQL 的误报)
 //   - 无 --query 参数 → Unknown(snow sql 可能是交互式会话,交回正则)
 //
-// 对照 dcg database/snowflake.rs:本函数是 CLI --query 内联 SQL 的语义层入口;
+// 本函数是 CLI --query 内联 SQL 的语义层入口;
 // snow sql 交互式 stdin 输入的 SQL 由 destructive.snowflake.stdin-unverified 正则规则覆盖
 // (语义层不处理 stdin,因 stdin 内容不在命令文本里)。
 func snowflakeSemanticDecision(command string) SemanticResult {
@@ -111,7 +111,7 @@ func snowflakeSemanticDecision(command string) SemanticResult {
 }
 
 // snowRuleTargetRe 捕获破坏性 SQL 构造的 leading keyword + 紧邻目标 keyword,
-// 用于映射到具体 dcg_rule_id(修复最终 review C2)。
+// 用于映射到具体 rule_id(修复最终 review C2)。
 // ScanSQL 的 lexer 只保留破坏性 keyword token(DROP/TRUNCATE/...),不保留 DATABASE/
 // TABLE/SCHEMA 等目标 keyword,故无法从 DestructiveTokens 序列判定 DROP 的对象类型。
 // 这里在原始 SQL 文本上做正则提取(绕过 lexer 的 token 保留限制),已排除注释/字符串内
@@ -136,19 +136,19 @@ var snowUpdateTableSetRe = regexp.MustCompile(`(?i)\bUPDATE\s+\S+\s+SET\b`)
 // 导致 `TRUNCATE mytable` 落到 snowflake.drop 回退 → carrier 被扭曲为 high。
 var snowTruncateIdentRe = regexp.MustCompile(`(?i)\bTRUNCATE\s+[a-zA-Z_]`)
 
-// snowflakeRuleIDForSQL 把 SQL 文本里的破坏性构造映射到具体 dcg_rule_id,
+// snowflakeRuleIDForSQL 把 SQL 文本里的破坏性构造映射到具体 rule_id,
 // 对齐 destructive_commands.yaml 的 snowflake.* 条目(修复最终 review C2)。
 //
 // 修前:snowflakeSemanticDecision 统一返回 RuleID="snowflake.drop"(通用语义 RuleID,
-// 无对应 dcg_rule_id)→ pickSemanticCarrier strategy 1 miss → 回退 strategy 2 = 该域首条
+// 无对应 rule_id)→ pickSemanticCarrier strategy 1 miss → 回退 strategy 2 = 该域首条
 // 规则(按文件序 destructive.database.mongodb.stdin-unverified,severity high)→
 // (1) semantic finding severity 被扭曲成 high(DROP DATABASE 本应 critical);
 // (2) Gate 1 continue 抑制了正确的 critical 正则规则(snowflake.drop-database 等)。
 //
-// 修后:按破坏性构造返回具体 dcg_rule_id(如 DROP DATABASE → snowflake.drop-database),
+// 修后:按破坏性构造返回具体 rule_id(如 DROP DATABASE → snowflake.drop-database),
 // pickSemanticCarrier strategy 1 精确命中对应 YAML 规则,继承正确 severity/remediation。
 //
-// 映射规则(对齐 YAML 的 dcg_rule_id):
+// 映射规则(对齐 YAML 的 rule_id):
 //   - DROP DATABASE → snowflake.drop-database   (critical)
 //   - DROP SCHEMA   → snowflake.drop-schema      (critical)
 //   - DROP TABLE    → snowflake.drop-table       (critical)

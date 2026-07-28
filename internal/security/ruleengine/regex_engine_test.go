@@ -3,7 +3,7 @@ package ruleengine
 import "testing"
 
 // 需求:含 lookahead 的模式能编译并匹配;纯正则走 RE2 不变;dotall 透传。
-// dcg 的 ~737 条规则大量使用 lookahead/lookbehind(RE2 不支持),走 regexp2;
+// 规则大量使用 lookahead/lookbehind(RE2 不支持),走 regexp2;
 // 纯正则走 RE2(标准库 regexp),行为与原 compileRegexPattern 一致。
 
 func TestCompilePattern_Lookahead(t *testing.T) {

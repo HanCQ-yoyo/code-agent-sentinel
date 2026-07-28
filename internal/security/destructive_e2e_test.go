@@ -22,7 +22,7 @@ import (
 //
 // 覆盖:
 //   - hook 含 `rm -rf /` → 语义 Deny(filesystem)兜底,产 semantic.filesystem.rm-rf-root-home
-//     (critical,载体规则按 dcg_rule_id 精确匹配 rm-rf-root-home)。
+//     (critical,载体规则按 rule_id 精确匹配 rm-rf-root-home)。
 //   - hook 含 `git push -f origin main` → 语义 Deny(git)产 semantic.git.push-force-short
 //     (critical,载体规则 destructive.git.push-force-short)。
 //
@@ -31,7 +31,7 @@ import (
 //
 // 注意:destructive 规则 asset_type=hook(command 字段),故测试用 hook 资产而非 script。
 // script 走 content 字段,但 destructive 规则只声明 asset_type=hook,script 资产不匹配
-// (RulesDetector 按 r.AssetType 路由)。这是忠实 dcg 源的设计:destructive 规则针对
+// (RulesDetector 按 r.AssetType 路由)。destructive 规则针对
 // 命令行(hook command / mcp_server command),而非脚本正文。
 func TestDestructive_EndToEnd(t *testing.T) {
 	home := newRulesHome(t)
@@ -73,8 +73,8 @@ func TestDestructive_EndToEnd(t *testing.T) {
 			if len(parts) >= 3 {
 				// parts[0]=destructive|semantic, parts[1]=domain(git|filesystem|database|...),
 				// parts[2+]=子域/规则名。
-				// 语义 RuleID 是 semantic.<dcgdomain>.<pattern>(如 semantic.filesystem.rm-rf-root-home),
-				// dcg domain 段已映射到 sentinel domain(见 rules_detector.go semDenyRuleDomain)。
+				// 语义 RuleID 是 semantic.<domain>.<pattern>(如 semantic.filesystem.rm-rf-root-home),
+				// domain 段已映射到 sentinel domain(见 rules_detector.go semDenyRuleDomain)。
 				hitDomains[parts[1]] = true
 			}
 		}

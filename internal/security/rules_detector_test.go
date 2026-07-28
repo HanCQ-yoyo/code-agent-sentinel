@@ -161,8 +161,8 @@ func TestRulesDetectorMeta(t *testing.T) {
 	}
 	// 15 baseline (Task 10 +2:mcp-http-cleartext/managed-mcp-present) + 46 injection + 6 skill + 12 destructive.git + 26 destructive.filesystem (Task 5) + 112 destructive.database (Task 6) + 21 destructive.containers + 18 destructive.package_managers (Task 7) = 256 条内置规则
 	// (combo.yaml 6 条不计入 Meta().Rules,遍历 baseRules 不含 combo)
-	if len(m.Rules) != 256 {
-		t.Errorf("Rules 数 = %d, want 256 (15 baseline + 46 injection + 6 skill + 12 destructive.git + 26 destructive.filesystem + 112 destructive.database + 21 destructive.containers + 18 destructive.package_managers)", len(m.Rules))
+	if len(m.Rules) != 257 {
+		t.Errorf("Rules 数 = %d, want 257 (15 baseline + 46 injection + 6 skill + 12 destructive.git + 26 destructive.filesystem + 112 destructive.database + 21 destructive.containers + 18 destructive.package_managers + 1 test.intercept-probe)", len(m.Rules))
 	}
 	if m.Covers != nil {
 		t.Errorf("Covers 应为 nil, got %v", m.Covers)
@@ -421,11 +421,11 @@ func TestRulesDetector_SemanticNoFalsePositive(t *testing.T) {
 // 直接构造 finding(不经正则)。
 //
 // 期望:至少一条 semantic.filesystem.* finding 命中(语义 Deny 兜底)。
-// 语义 finding 的 RuleID 用 "semantic." 前缀 + dcg rule_id(如 semantic.filesystem.rm-rf-root-home),
+// 语义 finding 的 RuleID 用 "semantic." 前缀 + rule_id(如 semantic.filesystem.rm-rf-root-home),
 // 与正则规则 ID(destructive.filesystem.*)区分,便于审计追溯来源。
 //
 // review Important #1 回归断言:`rm -r -f /` 的语义 finding severity 必须是 critical
-// (载体规则按 dcg_rule_id == "filesystem.rm-rf-root-home" 精确匹配,继承 critical severity,
+// (载体规则按 rule_id == "filesystem.rm-rf-root-home" 精确匹配,继承 critical severity,
 // 而非首条域规则 sed-exec-unverified 的 high)。修前 bug:用首条域规则做载体 → high(失真)。
 func TestRulesDetector_SemanticCatchesSplitFlags(t *testing.T) {
 	home := newRulesHome(t)
@@ -446,10 +446,10 @@ func TestRulesDetector_SemanticCatchesSplitFlags(t *testing.T) {
 	for _, f := range findings {
 		if strings.HasPrefix(f.RuleID, "semantic.filesystem.") {
 			found = true
-			// review Important #1:severity 必须是 critical(载体规则按 dcg_rule_id 精确匹配)。
+			// review Important #1:severity 必须是 critical(载体规则按 rule_id 精确匹配)。
 			// rm -r -f / → semRuleID=filesystem.rm-rf-root-home → 载体 destructive.filesystem.rm-rf-root-home(critical)。
 			if f.Severity != SeverityCritical {
-				t.Errorf("semantic.filesystem.* finding severity = %s, want critical (carrier rule 应按 dcg_rule_id 精确匹配 rm-rf-root-home): %+v", f.Severity, f)
+				t.Errorf("semantic.filesystem.* finding severity = %s, want critical (carrier rule 应按 rule_id 精确匹配 rm-rf-root-home): %+v", f.Severity, f)
 			}
 			// RuleID 应是 semantic.filesystem.rm-rf-root-home(不是 rm-rf-general)。
 			if f.RuleID != "semantic.filesystem.rm-rf-root-home" {
@@ -467,7 +467,7 @@ func TestRulesDetector_SemanticCatchesSplitFlags(t *testing.T) {
 // `git reset --hard` 语义判 Deny,应产 semantic.git.reset-hard finding。
 // 同时验证正则规则本身也能命中(两者不冲突,语义 Deny 优先构造 finding 并 continue)。
 //
-// review Important #1 回归断言:severity 必须是 critical(载体规则按 dcg_rule_id ==
+// review Important #1 回归断言:severity 必须是 critical(载体规则按 rule_id ==
 // "git.reset-hard" 精确匹配 destructive.git.reset-hard,继承 critical severity,
 // 而非首条 git 域规则 checkout-discard 的 high)。修前 bug:用首条域规则做载体 → high(失真)。
 func TestRulesDetector_SemanticDenyGitResetHard(t *testing.T) {
@@ -489,9 +489,9 @@ func TestRulesDetector_SemanticDenyGitResetHard(t *testing.T) {
 	for _, f := range findings {
 		if f.RuleID == "semantic.git.reset-hard" {
 			found = true
-			// review Important #1:severity 必须是 critical(载体规则按 dcg_rule_id 精确匹配 git.reset-hard)。
+			// review Important #1:severity 必须是 critical(载体规则按 rule_id 精确匹配 git.reset-hard)。
 			if f.Severity != SeverityCritical {
-				t.Errorf("semantic.git.reset-hard severity = %s, want critical (carrier rule 应按 dcg_rule_id 精确匹配 destructive.git.reset-hard): %+v", f.Severity, f)
+				t.Errorf("semantic.git.reset-hard severity = %s, want critical (carrier rule 应按 rule_id 精确匹配 destructive.git.reset-hard): %+v", f.Severity, f)
 			}
 			break
 		}

@@ -21,7 +21,7 @@ type CompiledRegex interface {
 
 // needsBacktracking 检测模式是否含 RE2 不支持的 lookahead/lookbehind。
 // RE2 不支持 (?= / (?! / (?<= / (?<!。
-// dcg 的 safe_pattern 与 flag 遍历规则大量使用这些构造(~737 条规则),
+// safe_pattern 与 flag 遍历规则大量使用这些构造,
 // 检测到任一即返回 true,CompilePattern 会改走 regexp2 编译。
 // 注意:仅在模式体本身检测,不误报 (?P<name>(命名捕获)等合法 RE2 构造。
 func needsBacktracking(pattern string) bool {

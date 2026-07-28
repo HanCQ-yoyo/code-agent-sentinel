@@ -17,7 +17,7 @@ const (
 // SemanticResult 是语义解析返回。
 type SemanticResult struct {
 	Decision Decision
-	RuleID   string // 对齐 dcg rule_id(如 git.branch-force-delete);Deny 时填
+	RuleID   string // 规则的 rule_id 元数据(如 git.branch-force-delete);Deny 时填
 	Reason   string
 }
 
@@ -27,14 +27,14 @@ type SemanticResult struct {
 var gitCmdRe = regexp.MustCompile(`(?:^|[^\w-])(?:sudo\s+(?:\S+\s+)*|env\s+(?:[A-Za-z_]\w*=\S+\s+)+)?git\s+(.*)`)
 
 // GitSemanticDecision 对 git 命令做语义判断。
-// 精简版(对照 dcg core/git.rs 5668 行裁剪到核心):
+// 精简版(裁剪到核心):
 //  1. 提取 git 子命令 + args
 //  2. 破坏子命令(branch -D / reset --hard / checkout -- / clean -f / push -f / stash drop)→ Deny
 //  3. commit -m / tag -m / merge -m → Safe(数据区命令字面量不报)
 //  4. checkout -b / --orphan / restore --staged → Safe
 //  5. 其余 → Unknown(走正则)
 //
-// alias 展开留 v2:dcg 递归展开 git alias(git cleanup→branch -D),需读 .git/config,
+// alias 展开留 v2:递归展开 git alias(git cleanup→branch -D),需读 .git/config,
 // 在 configengine 无副作用约束下不宜实现。若 alias 漏报是刚需,Task 11 接入时补。
 func GitSemanticDecision(command string) SemanticResult {
 	m := gitCmdRe.FindStringSubmatch(command)

@@ -13,7 +13,7 @@ import (
 // 这两个 bug 都是 per-task review 漏掉的(因为 per-task 测试在隔离环境里用 Safe-producing
 // 命令,从没把它和真正的破坏性命令放同一 content 里):
 //   - C1:语义 Safe 决策按 asset 整体抑制,会漏报同一 content 其它行的真实破坏性命令。
-//   - C2:snowflake 语义 Deny 的 RuleID="snowflake.drop"(通用)无对应 dcg_rule_id,
+//   - C2:snowflake 语义 Deny 的 RuleID="snowflake.drop"(通用)无对应 rule_id,
 //     pickSemanticCarrier 回退到首条 database 规则(mongodb.stdin-unverified high),
 //     severity 被 high 覆盖,且 Gate 1 continue 抑制了正确的 critical 正则规则。
 
@@ -154,10 +154,10 @@ func TestC1_SingleLineSafeStillSuppressedWithinLine(t *testing.T) {
 	}
 }
 
-// ── C2:snowflake 语义 Deny 必须返回具体 dcg_rule_id,继承正确 severity ──
+// ── C2:snowflake 语义 Deny 必须返回具体 rule_id,继承正确 severity ──
 
 // TestC2_SnowflakeDropDatabaseCritical 验证 `snow sql --query 'DROP DATABASE d'`:
-// 语义 Deny 应返回 RuleID="snowflake.drop-database"(精确匹配 YAML 的 dcg_rule_id),
+// 语义 Deny 应返回 RuleID="snowflake.drop-database"(精确匹配 YAML 的 rule_id),
 // pickSemanticCarrier strategy 1 命中 destructive.database.snowflake.drop-database(critical),
 // semantic finding severity = critical(不是 high)。
 // 修前:返回通用 "snowflake.drop",strategy 1 miss → 回退到 strategy 2 = 首条 database
@@ -184,7 +184,7 @@ func TestC2_SnowflakeDropDatabaseCritical(t *testing.T) {
 		if f.RuleID == "semantic.snowflake.drop-database" {
 			found = true
 			if f.Severity != SeverityCritical {
-				t.Errorf("C2:semantic.snowflake.drop-database severity = %s, want critical (载体规则应按 dcg_rule_id 精确匹配 destructive.database.snowflake.drop-database): %+v", f.Severity, f)
+				t.Errorf("C2:semantic.snowflake.drop-database severity = %s, want critical (载体规则应按 rule_id 精确匹配 destructive.database.snowflake.drop-database): %+v", f.Severity, f)
 			}
 		}
 	}

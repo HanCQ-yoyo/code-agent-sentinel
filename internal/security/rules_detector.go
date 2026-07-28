@@ -173,9 +173,9 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 		semState := computeLineSemantic(cmdText)
 
 		// 预选每域语义 finding 载体规则(关卡 1 Deny 用):
-		// 按 dcg_rule_id == sem.RuleID 精确匹配(继承正确 severity/remediation);
+		// 按 rule_id == sem.RuleID 精确匹配(继承正确 severity/remediation);
 		// 无精确匹配回退到该域首条 asset_type 匹配规则(snowflake.drop 通用 RuleID 时,
-		// 修 C2 后 snowflake 语义返回具体 dcg_rule_id,通常 strategy 1 即命中)。
+		// 修 C2 后 snowflake 语义返回具体 rule_id,通常 strategy 1 即命中)。
 		// 见 pickSemanticCarrier 注释(修复 review Important #1)。
 		semCarriers := map[string]*ruleengine.Rule{}
 		for _, dom := range semState.denyOrder {
@@ -191,7 +191,7 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 			// 域规则全部 asset_type=hook + or-tree 覆盖 command/content/allow 字段,严格路由使其
 			// 只评估 AssetHook,AssetScript/Skill/Command/Agent/Memory/Permissions 的 rm -rf / 不会被
 			// destructive.* 精确规则检测(仅 injection.tm1 粗住 AssetScript,其余无覆盖)。
-			// 放宽:destructive 域规则(metadata.source=dcg 且 metadata.domain 属 destructive 五域)
+			// 放宽:destructive 域规则(metadata.source=builtin 且 metadata.domain 属 destructive 五域)
 			// 额外评估所有 command-bearing 资产类型(hook/mcp_server/script/skill/command/agent/
 			// memory/permissions),or-tree 内部按字段路由自然匹配。
 			// injection/baseline/skill 规则仍严格路由(它们 asset_type=script/hook/settings 靶向特定资产)。
@@ -377,7 +377,7 @@ func startsWithDotDot(rel string) bool {
 // 修复 review Important #1(destructive 域 asset_type=hook 覆盖缺口):
 //   - 严格路由:所有非 destructive 域规则(injection/baseline/skill 等)按 r.AssetType == a.Type
 //     精确匹配(它们 asset_type=script/hook/settings 靶向特定资产)。
-//   - 放宽路由:destructive 域规则(metadata.source=dcg 且 metadata.domain 属五域之一
+//   - 放宽路由:destructive 域规则(metadata.source=builtin 且 metadata.domain 属五域之一
 //     git/filesystem/database/containers/package_managers)虽声明 asset_type=hook,
 //     其 or-tree 覆盖 command/content/allow 三字段 → 额外评估所有 command-bearing 资产类型
 //     (hook/mcp_server/script/skill/command/agent/memory/permissions)。
@@ -393,7 +393,7 @@ func ruleAppliesToAsset(r ruleengine.Rule, assetType configengine.AssetType) boo
 	// 放宽:destructive 域规则额外评估 command-bearing 资产。
 	src, _ := r.Metadata["source"].(string)
 	domain, _ := r.Metadata["domain"].(string)
-	if src != "dcg" {
+	if src != "builtin" {
 		return false
 	}
 	switch domain {
@@ -505,7 +505,7 @@ func computeLineSemantic(cmdText string) lineSemanticState {
 //
 //	git → git, filesystem → filesystem, snowflake.* → database
 //
-// snowflake 语义 RuleID 现返回具体 dcg_rule_id(如 snowflake.drop-database,修复 C2),
+// snowflake 语义 RuleID 现返回具体 rule_id(如 snowflake.drop-database,修复 C2),
 // 首段仍是 "snowflake",映射到 sentinel 的 "database" 域。
 func mapSemDomain(ruleID string) string {
 	switch strings.SplitN(ruleID, ".", 2)[0] {
@@ -538,22 +538,22 @@ func (st lineSemanticState) findingInSafeLines(locs []ruleengine.Location) bool 
 // pickSemanticCarrier 为语义 Deny finding 预选载体规则(修复 review Important #1)。
 //
 // 选择策略(按优先级):
-//  1. 精确匹配:规则 Metadata["dcg_rule_id"] == semRuleID(如 semRuleID="filesystem.rm-rf-root-home"
-//     匹配 destructive.filesystem.rm-rf-root-home 的 dcg_rule_id)。继承正确 severity/remediation。
-//  2. 回退:该域首条 asset_type 匹配规则(snowflake.drop 是通用语义 RuleID,无对应 dcg_rule_id,
+//  1. 精确匹配:规则 Metadata["rule_id"] == semRuleID(如 semRuleID="filesystem.rm-rf-root-home"
+//     匹配 destructive.filesystem.rm-rf-root-home 的 rule_id)。继承正确 severity/remediation。
+//  2. 回退:该域首条 asset_type 匹配规则(snowflake.drop 是通用语义 RuleID,无对应 rule_id,
 //     回退到首条 database 规则做载体)。
 //  3. 若该域无任何匹配规则(理论不发生,Deny 必有对应域规则),返回 nil。
 //
-// semRuleID 是语义解析器返回的 dcg 风格 RuleID(如 "filesystem.rm-rf-root-home" / "git.reset-hard" /
-// "snowflake.drop")。规则的 dcg_rule_id 在 Tasks 4-7 转写时设置(与 dcg 源 rule_id 对齐)。
+// semRuleID 是语义解析器返回的 RuleID(如 "filesystem.rm-rf-root-home" / "git.reset-hard" /
+// "snowflake.drop")。规则的 rule_id 元数据与语义 RuleID 对齐。
 //
 // 修复前:用循环内首条域匹配规则做载体,若该规则 severity 与语义判定不匹配(如 rm -rf / →
 // 首条 sed-exec-unverified high,而非 rm-rf-root-home critical),finding severity 被扭曲,
 // 健康分扣分失真(underweighted 37.5%)。
 func pickSemanticCarrier(rules []ruleengine.Rule, a configengine.Asset, semDenyRuleDomain, semRuleID string) *ruleengine.Rule {
-	// 策略 1:精确匹配 dcg_rule_id == semRuleID。
+	// 策略 1:精确匹配 rule_id == semRuleID。
 	// 遍历全部规则(不止该域),因 semRuleID 含域段(如 "filesystem.rm-rf-root-home"),
-	// dcg_rule_id 也含域段,跨域不会误匹配。
+	// rule_id 也含域段,跨域不会误匹配。
 	if semRuleID != "" {
 		for i := range rules {
 			r := &rules[i]
@@ -563,7 +563,7 @@ func pickSemanticCarrier(rules []ruleengine.Rule, a configengine.Asset, semDenyR
 			if r.ProjectPath != "" && !pathInProject(a.SourcePath, r.ProjectPath) {
 				continue
 			}
-			if dcgID, _ := r.Metadata["dcg_rule_id"].(string); dcgID == semRuleID {
+			if ruleID, _ := r.Metadata["rule_id"].(string); ruleID == semRuleID {
 				return r
 			}
 		}
@@ -589,16 +589,16 @@ func pickSemanticCarrier(rules []ruleengine.Rule, a configengine.Asset, semDenyR
 // makeSemanticFinding 构造语义 Deny finding(关卡 1 用)。
 //
 // 与正则 finding 的区别:
-//   - RuleID:用 `semantic.<dcg_rule_id>`(如 semantic.filesystem.rm-rf-root-home),
+//   - RuleID:用 `semantic.<rule_id>`(如 semantic.filesystem.rm-rf-root-home),
 //     与正则规则 ID(destructive.filesystem.rm-rf-root-home)区分,便于 UI/审计追溯来源。
 //   - Evidence:用 sem.Reason(语义解析器的判定理由,如 "rm -rf /(递归强制删根/home)")
 //   - Severity/Locations:语义解析器不产位置信息,Locations 留空;Severity 复用载体规则的 severity
-//     (载体规则按 dcg_rule_id == sem.RuleID 精确匹配,如 rm -rf / → rm-rf-root-home critical,
+//     (载体规则按 rule_id == sem.RuleID 精确匹配,如 rm -rf / → rm-rf-root-home critical,
 //     语义 finding 继承正确 severity,健康分扣分不失真)
 //
-// RuleID 映射:sem.RuleID 是 dcg 风格(如 "filesystem.rm-rf-root-home" / "git.reset-hard"),
+// RuleID 映射:sem.RuleID 是语义解析器返回的 RuleID(如 "filesystem.rm-rf-root-home" / "git.reset-hard"),
 // 加 "semantic." 前缀避免与正则规则 ID 冲突(正则规则用 "destructive." 前缀)。
-// 载体规则 r 由 pickSemanticCarrier 预选(按 dcg_rule_id 精确匹配,fallback 到域首条规则)。
+// 载体规则 r 由 pickSemanticCarrier 预选(按 rule_id 精确匹配,fallback 到域首条规则)。
 // Fingerprint 仍用载体规则 r 算(稳定锚定规则意图,不受 Evidence 文本变化影响)。
 func makeSemanticFinding(d *RulesDetector, r ruleengine.Rule, a configengine.Asset,
 	sem semantics.SemanticResult) Finding {

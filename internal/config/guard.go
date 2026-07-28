@@ -13,7 +13,7 @@ type GuardConfig struct {
 	mu              sync.RWMutex
 	Enabled         bool   `yaml:"enabled" json:"enabled"`                     // 总开关
 	Policy          string `yaml:"policy" json:"policy"`                       // "deny"(v1 唯一;预留 warn/ask)
-	DeadlineMS      int    `yaml:"deadline_ms" json:"deadline_ms"`             // 评估预算 ms,默认 200(dcg HOOK_EVALUATION_BUDGET_MS)
+	DeadlineMS      int    `yaml:"deadline_ms" json:"deadline_ms"`             // 评估预算 ms,默认 200
 	MaxCommandBytes int    `yaml:"max_command_bytes" json:"max_command_bytes"` // 命令长度上限,超限 fail-open
 }
 

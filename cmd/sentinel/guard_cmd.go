@@ -242,11 +242,11 @@ func isSelfGuardCommand(cmd string) bool {
 }
 
 // severityForRule / remediationForRule 按语义 RuleID 找载体规则的 severity/remediation。
-// 语义 Deny 返回的 RuleID 是 dcg_rule_id(如 "git.reset-hard"),规则 Metadata["dcg_rule_id"]
+// 语义 Deny 返回的 RuleID 是 rule_id(如 "git.reset-hard"),规则 Metadata["rule_id"]
 // 与之对齐;未找到回退 high / 空(与静态层 pickSemanticCarrier 同语义)。
 func severityForRule(rules []ruleengine.Rule, ruleID string) string {
 	for _, r := range rules {
-		if dcr, _ := r.Metadata["dcg_rule_id"].(string); dcr == ruleID {
+		if rid, _ := r.Metadata["rule_id"].(string); rid == ruleID {
 			return r.Severity
 		}
 	}
@@ -254,14 +254,14 @@ func severityForRule(rules []ruleengine.Rule, ruleID string) string {
 }
 func remediationForRule(rules []ruleengine.Rule, ruleID string) string {
 	for _, r := range rules {
-		if dcr, _ := r.Metadata["dcg_rule_id"].(string); dcr == ruleID {
+		if rid, _ := r.Metadata["rule_id"].(string); rid == ruleID {
 			return r.Remediation
 		}
 	}
 	return ""
 }
 
-// makeRecord 构造拦截记录(allow/warn)。WorkingDir = 进程 cwd(spec §4.1,与 dcg 一致)。
+// makeRecord 构造拦截记录(allow/warn)。WorkingDir = 进程 cwd(spec §4.1)。
 func makeRecord(input intercept.HookInput, outcome, ruleID, severity, reason string, start time.Time) intercept.InterceptRecord {
 	cwd, _ := os.Getwd()
 	return intercept.InterceptRecord{

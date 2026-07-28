@@ -5,8 +5,7 @@ import (
 )
 
 // CollectKeywords 收集所有规则的 metadata.keywords(每域手工声明的元数据),去重保序。
-// 参考 dcg collect_enabled_keywords(packs/mod.rs:1730):只收集 pack 的 keywords 字段,
-// 不从正则提取。dcg 核查结论:关键词是手工声明的元数据,与 lookahead 正则正交。
+// 只收集 pack 的 keywords 字段,不从正则提取。关键词是手工声明的元数据,与 lookahead 正则正交。
 //
 // YAML 解码后 Rule.Metadata 是 map[string]any,metadata.keywords 的 flow-list
 // [rm, shred] 解码为 []any(每元素 any 持 string)。本函数按此类型断言。
@@ -34,13 +33,13 @@ func CollectKeywords(rules []Rule) []string {
 	return out
 }
 
-// QuickReject 快速放行判断(参考 dcg pack_aware_quick_reject,mod.rs:3030)。
+// QuickReject 快速放行判断。
 // 返回 true = 放行(跳过昂贵的 pack 正则精检),false = 进入精检。
 // 规则:
-//   - 空 keywords 保守返回 false(防漏放行,dcg mod.rs:3037)。
+//   - 空 keywords 保守返回 false(防漏放行)。
 //   - 命中任一关键词(词边界)→ false(进入精检)。
 //   - 未命中且无混淆字符(\ ' ")→ true(放行)。
-//   - 未命中但有混淆字符 → false(回退 normalize 重判,防 g\it 漏报,dcg mod.rs:3059)。
+//   - 未命中但有混淆字符 → false(回退 normalize 重判,防 g\it 漏报)。
 //
 // 语义:**命中关键词=进入精检(false);未命中=放行(true)**。
 // 多词关键词(含空白)走 matchMultiwordKeyword(容忍任意空白量)。
@@ -52,7 +51,7 @@ func QuickReject(cmd string, keywords []string) bool {
 	anyHit := false
 	for _, kw := range keywords {
 		if strings.ContainsAny(kw, " \t") {
-			// 多词关键词:容忍任意空白量(dcg keyword_matches_with_whitespace)
+			// 多词关键词:容忍任意空白量
 			if matchMultiwordKeyword(cmd, kw) {
 				anyHit = true
 				break
@@ -76,7 +75,7 @@ func QuickReject(cmd string, keywords []string) bool {
 	return true // 无混淆 → 放行
 }
 
-// containsWord 词边界子串匹配(dcg is_word_byte + contains_ascii_case_insensitive_word)。
+// containsWord 词边界子串匹配。
 // is_word_byte = alnum | '_'。词边界:匹配前后字节非 word byte(或串首/串尾)。
 // 大小写不敏感(ASCII fold),保证 GIT/git/Git 均命中关键词 git。
 func containsWord(haystack, needle []byte) bool {
@@ -97,7 +96,7 @@ func containsWord(haystack, needle []byte) bool {
 	return false
 }
 
-// isWordByte 判断字节是否为 word 字符(alnum | '_'),与 dcg is_word_byte 一致。
+// isWordByte 判断字节是否为 word 字符(alnum | '_')。
 // 非词字节(. / - 空格等)构成词边界。
 func isWordByte(b byte) bool {
 	return (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') || b == '_'
@@ -126,7 +125,7 @@ func toLower(b byte) byte {
 }
 
 // matchMultiwordKeyword 多词关键词匹配(容忍任意空白,如 "git push" 匹配 "git   push")。
-// 参考 dcg keyword_matches_with_whitespace。顺序匹配各词,中间允许任意空白。
+// 顺序匹配各词,中间允许任意空白。
 // 大小写不敏感(ToLower 比较)。
 func matchMultiwordKeyword(cmd, kw string) bool {
 	words := strings.Fields(kw)

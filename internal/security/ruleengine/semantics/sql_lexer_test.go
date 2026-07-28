@@ -60,7 +60,7 @@ func TestScanSQL_Truncate(t *testing.T) {
 	}
 }
 
-// --- 边界用例(对照 dcg snowflake.rs scan_sql 行为补齐)---
+// --- 边界用例 ---
 
 // TestScanSQL_DropInBlockCommentNotDestructive 验证 /* 块注释 */ 内的 DROP 不算。
 func TestScanSQL_DropInBlockCommentNotDestructive(t *testing.T) {
@@ -73,7 +73,7 @@ func TestScanSQL_DropInBlockCommentNotDestructive(t *testing.T) {
 }
 
 // TestScanSQL_DropInDoubleQuotedNotDestructive 验证双引号标识符内的 DROP 不算
-// (SQL 双引号是标识符引用,不是字符串字面量,但 dcg 仍将其作为 quoted 区跳过)。
+// (SQL 双引号是标识符引用,不是字符串字面量,但仍将其作为 quoted 区跳过)。
 func TestScanSQL_DropInDoubleQuotedNotDestructive(t *testing.T) {
 	s := ScanSQL(`SELECT "DROP TABLE x"`)
 	for _, tk := range s.DestructiveTokens {
@@ -83,7 +83,7 @@ func TestScanSQL_DropInDoubleQuotedNotDestructive(t *testing.T) {
 	}
 }
 
-// TestScanSQL_NestedBlockComment 验证嵌套 /* /* */ */ 块注释正确处理(dcg skip_block_comment 用 depth 计数)。
+// TestScanSQL_NestedBlockComment 验证嵌套 /* /* */ */ 块注释正确处理(用 depth 计数)。
 // 外层 */ 不应结束内层注释;只有 depth 归零才退出。
 func TestScanSQL_NestedBlockComment(t *testing.T) {
 	// 嵌套块注释里的 DROP 不应命中;外层退出后 SELECT 应正常。
@@ -96,7 +96,7 @@ func TestScanSQL_NestedBlockComment(t *testing.T) {
 }
 
 // TestScanSQL_SingleQuotedBackslashEscape 验证 \' 转义不提前结束单引号字符串
-// (dcg skip_quoted 处理 backslash escape)。
+// (处理 backslash escape)。
 func TestScanSQL_SingleQuotedBackslashEscape(t *testing.T) {
 	// 'it\'s DROP TABLE' — 字符串内的 DROP 不算,且 \' 不结束字符串。
 	s := ScanSQL(`SELECT 'it\'s DROP TABLE'`)
@@ -108,7 +108,7 @@ func TestScanSQL_SingleQuotedBackslashEscape(t *testing.T) {
 }
 
 // TestScanSQL_SingleQuotedDoubledQuote 验证 '' 转义不提前结束单引号字符串
-// (dcg skip_quoted 处理 doubled quote)。
+// (处理 doubled quote)。
 func TestScanSQL_SingleQuotedDoubledQuote(t *testing.T) {
 	// 'DROP TABLE ''s''' — '' 是字面量单引号,字符串未结束,DROP 不算。
 	s := ScanSQL(`SELECT 'DROP TABLE ''s'''`)
@@ -175,7 +175,7 @@ func TestScanSQL_CaseInsensitive(t *testing.T) {
 }
 
 // TestScanSQL_EmptyAndNoDestructive 验证空输入和无破坏性 keyword 返回空列表。
-// 注:UPDATE/GRANT/REVOKE/REMOVE/OVERWRITE/EXECUTE 都是破坏性 keyword(对齐 dcg snowflake),
+// 注:UPDATE/GRANT/REVOKE/REMOVE/OVERWRITE/EXECUTE 都是破坏性 keyword,
 // 不在此用例的"无破坏性"集合里。
 func TestScanSQL_EmptyAndNoDestructive(t *testing.T) {
 	for _, input := range []string{"", "SELECT 1", "INSERT INTO t VALUES (1)"} {
@@ -187,7 +187,7 @@ func TestScanSQL_EmptyAndNoDestructive(t *testing.T) {
 	}
 }
 
-// TestScanSQL_AdditionalDestructiveKeywords 验证 dcg snowflake keyword 列表(snowflake.rs:335-359)
+// TestScanSQL_AdditionalDestructiveKeywords 验证 keyword 列表
 // 中除 DROP/TRUNCATE/DELETE/ALTER 外的 6 个破坏性 keyword 都命中 DestructiveToken:
 // UPDATE/GRANT/REVOKE/REMOVE/OVERWRITE/EXECUTE。
 // lexer 是 pre-filter,WHERE 子句检查是规则层(Task 11)的职责,故任何 UPDATE keyword 都应命中。
@@ -220,7 +220,7 @@ func TestScanSQL_AdditionalDestructiveKeywords(t *testing.T) {
 	}
 }
 
-// TestScanSQL_AllTenDestructiveKeywords 验证 dcg snowflake 的全部 10 个破坏性 keyword
+// TestScanSQL_AllTenDestructiveKeywords 验证全部 10 个破坏性 keyword
 // (snowflake.rs:335-359) 在一条 SQL 里都命中。
 func TestScanSQL_AllTenDestructiveKeywords(t *testing.T) {
 	s := ScanSQL("DROP TABLE a; TRUNCATE TABLE b; DELETE FROM c; UPDATE d SET x=1; " +

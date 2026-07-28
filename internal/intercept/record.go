@@ -7,8 +7,8 @@ import (
 )
 
 // InterceptRecord 是单条命令的拦截决策事件。存 ~/.claude-sentinel/intercept/<id>.json。
-// 参考 dcg CommandEntry(schema.rs:318),精简:砍 exit_code/parent_command_id/hostname/
-// allowlist_layer/bypass_code(v1 纯 deny 无 allowlist)。加 ToolName(UI 筛选用)。
+// 精简:砍 exit_code/parent_command_id/hostname/allowlist_layer/bypass_code
+// (v1 纯 deny 无 allowlist)。加 ToolName(UI 筛选用)。
 // 命名空间:AgentProtocol="claude"(v1 固定),不复用 history/scheduler 的 AgentID。
 type InterceptRecord struct {
 	ID             string    `json:"id"`

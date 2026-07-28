@@ -90,7 +90,7 @@ func isPrintable(b []byte) bool {
 }
 
 // stripWrappers 剥离命令 wrapper:sudo / env VAR=... / command / 反斜杠续行。
-// 对应 dcg normalize 的 wrapper 剥离(简化版:前缀 wrapper + 续行折叠)。
+// 简化版:前缀 wrapper + 续行折叠。
 var (
 	sudoPrefixRe    = regexp.MustCompile(`(?i)^\s*sudo(?:\s+-\S+)*\s+`)
 	envPrefixRe     = regexp.MustCompile(`(?i)^\s*env(?:\s+[A-Za-z_]\w*=\S+)+\s+`)

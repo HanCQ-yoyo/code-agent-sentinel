@@ -9,8 +9,8 @@ import (
 )
 
 // InstallGuardHook 写 ~/.claude/settings.json 注册 sentinel guard 为 PreToolUse Bash hook。
-// 参考 dcg install.sh:1804-1821(新建)/1768-1778(合并)。幂等:已存在不重复加。
-// sentinel 置首(dcg:1766)。basename 精确匹配避免误匹配含 "sentinel" 子串的工具。
+// 幂等:已存在不重复加。
+// sentinel 置首。basename 精确匹配避免误匹配含 "sentinel" 子串的工具。
 // 返回 changed=true 表示文件被改写。
 func InstallGuardHook(settingsPath, sentinelPath string) (bool, error) {
 	settings, err := loadSettings(settingsPath)
@@ -106,7 +106,7 @@ func UninstallGuardHook(settingsPath string) (bool, error) {
 }
 
 // isSentinelGuardCommand 判断 command 是否是当前 sentinelPath 的 guard 调用(精确路径匹配)。
-// 参考 dcg install.sh:1678-1700 用 shlex.split + basename 的精确匹配思路。
+// 用 shlex.split + basename 的精确匹配思路。
 func isSentinelGuardCommand(command, sentinelPath string) bool {
 	parts := strings.Fields(command)
 	if len(parts) < 2 {

@@ -14,12 +14,12 @@
 
 ## 运行时风险指令拦截(Stage R2:Claude-only 最小版)
 
-- **合入日期**:2026-07-28(分支 `feat/dcg-stage-r2-runtime-intercept`,merge `824ef55` 到 main)
+- **合入日期**:2026-07-28(Stage R2 运行时拦截分支,merge `824ef55` 到 main)
 
 ### 升级
 
 - **`sentinel guard` 运行时拦截 hook**:作为 Claude Code `PreToolUse` Bash hook 运行,对单条 shell 命令跑 7 步管线(解析 → 递归短路 → quick-reject → normalize 反混淆 → heredoc 内联脚本提取 → pack 评估 → 决策输出+记录),实时 deny 破坏性命令(`rm -rf /`、`git reset --hard`、`sudo rm`、`$'\x72\x6d'` ANSI-C 编码、`bash -c "rm -rf /"` 内联脚本等)。fail-open 铁律:hook 永远 `exit 0`,deny 仅靠 stdout JSON 表达;解析失败 / 超时 / panic → allow 或 ask(超时)。
-- **反混淆状态机**(手写,参考 dcg `normalize.rs`,不引 shell parser):剥 sudo/env/command/exec/nohup/time/反斜杠 wrapper(迭代 ≤32)+ ANSI-C `$'\xNN'` 解码(仅 executable position,不动数据区)+ 去引号 + 路径展开(`/usr/bin/git`→`git`)。`command -v`/`-V` 查询模式不剥。
+- **反混淆状态机**(手写,不引 shell parser):剥 sudo/env/command/exec/nohup/time/反斜杠 wrapper(迭代 ≤32)+ ANSI-C `$'\xNN'` 解码(仅 executable position,不动数据区)+ 去引号 + 路径展开(`/usr/bin/git`→`git`)。`command -v`/`-V` 查询模式不剥。
 - **quick-reject 关键词快速放行**:每域手工声明在规则 `metadata.keywords`(`destructive_commands.yaml` 5 域 189 条规则),命中关键词进入精检,未命中且无混淆字符放行;空关键词列表保守不 reject(防漏放行);混淆字符(`\ ' "`)回退 normalize 重判。
 - **heredoc Tier1/2 提取 + 手写分段递归**:17 个 trigger 正则 + `<<` 引号感知扫描(零假阴性);提取 interpreter `-c`/here-string/`$()` 内层命令,手写分段(`$()`/`;`/`&&`/`||`/`|`)递归(深度上限 8,砍 AST)。
 - **规则库单一来源**:guard 合成 `configengine.Asset{Type:AssetCommand}` 走与静态 `RulesDetector` 同构的 `DispatchCommand → Eval` 路径,复用 `ruleengine.LoadBuiltin()`(`//go:embed`),绝不复制规则。
@@ -95,7 +95,7 @@
 
 ---
 
-## DCG 规则引擎搬运(危险命令语义解析 + 252 条规则)
+## 危险命令规则库(语义解析 + 252 条规则)
 
 - **合入日期**:2026-07-23 ~ 2026-07-24
 - **合入 SHA**:`98de9d5` → `48b57b7`(main,fast-forward,33 commits)
@@ -105,15 +105,15 @@
 - **统一规则引擎重构**(`internal/security/ruleengine`):规则 schema 类型化(11 个 op 枚举)+ 加载校验器(schema + 正则编译 + match 树)+ match 树求值器(11 op + and/or/not + content 保留字段 + deobfuscation)+ 指纹算法(锚定规则意图,确定性)。
 - **反混淆增强**:base64 多块越界修复、wrapper-strip 与 ANSI-C 解码、`regexp2` 分流编译层(支持 lookahead/lookbehind/反向引用,RE2 不兼容特性拒绝并附测试)。
 - **命中位置**:`Eval` 返回 `Location`(仅 content 字段叶子算位置),OR 失败兄弟路径不污染 Locations(消除过度高亮)。
-- **DCG 危险命令规则搬运**(Go 原生重写,源自 references/dcg,252 条):
+- **危险命令规则库**(Go 原生重写,252 条):
   - **filesystem 域**(26 dest + 32 safe→post_exclude)、**git 域**(12 dest + 6 safe)、**database 域**(mysql/mongodb/postgresql/redis/sqlite/snowflake/supabase/mariadb,112 条)、**containers 域**(docker/podman/compose,21 条)、**package_managers 域**(18 条)。
-  - **语义解析器**(Go 重写,非纯正则):snowflake SQL lexer(5 状态机排除注释/字符串)、filesystem `rm`(flag 扫描 + interactive 判定 + 管道 stdin)、core.git 语义解析器(子命令识别 + 数据区降级)。语义 finding 按 `dcg_rule_id` 精确匹配承运规则。
+  - **语义解析器**(Go 重写,非纯正则):snowflake SQL lexer(5 状态机排除注释/字符串)、filesystem `rm`(flag 扫描 + interactive 判定 + 管道 stdin)、core.git 语义解析器(子命令识别 + 数据区降级)。语义 finding 按 `rule_id` 精确匹配承运规则。
 - **post_exclude 遍历**:遍历全部匹配而非仅最左匹配;filesystem 补 `..` 路径遍历防护 + 去 `$TMPDIR` 过度包含。
 
 ### 修复
 
 - `C1 漏报`:语义 Safe 改按行 span-scoping;snowflake `UPDATE <table> SET` 与 `TRUNCATE <table>` 形式补全。
-- `C2 severity 失真`:snowflake 返回具体 `dcg_rule_id`;语义 finding 按 `dcg_rule_id` 精确匹配承运规则(修 severity 健康分失真)。
+- `C2 severity 失真`:snowflake 返回具体 `rule_id`;语义 finding 按 `rule_id` 精确匹配承运规则(修 severity 健康分失真)。
 - `rm --interactive=never` 误判 Safe(=force 非 interactive)修正;git 语义解析器剥离 `-c` 配置覆盖 flag(修 `reset --hard` 漏报)。
 - `asset_type=hook` 路由缺口:destructive 规则覆盖 command 类资产。
 

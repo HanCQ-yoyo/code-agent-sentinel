@@ -5,14 +5,14 @@ import (
 	"strings"
 )
 
-// MaxEmbeddedShellDepth 是 Tier2.5 递归深度上限(dcg MAX_EMBEDDED_SHELL_DEPTH,evaluator.rs:6523)。
+// MaxEmbeddedShellDepth 是 Tier2.5 递归深度上限。
 // 注意:深度判定用严格大于(>),保证 depth==MaxEmbeddedShellDepth 时仍提取一层,
 // 在 depth==MaxEmbeddedShellDepth+1 时停止递归。
 // 这样 TestExtractInlineScriptDepthLimit(传入 depth=MaxEmbeddedShellDepth)能至少
 // 提取一层 bash -c 内层,符合"深度上限内应至少提取一层"的契约。
 const MaxEmbeddedShellDepth = 8
 
-// heredocTriggerRes 是 Tier1 的 17 个触发正则(dcg HEREDOC_TRIGGER_PATTERNS,heredoc.rs:65-124)。
+// heredocTriggerRes 是 Tier1 的 17 个触发正则。
 // 零假阴性:必须触发所有 Tier2 会提取的。命中任一 → 进入 Tier2 提取。
 var heredocTriggerRes = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)\bpython[0-9.]*(?:\.exe)?\b.*?-[A-Za-z]*c[A-Za-z]*(?:\s|['"]|$)`),
@@ -34,7 +34,7 @@ var heredocTriggerRes = []*regexp.Regexp{
 	regexp.MustCompile(`<<-?\s*['"]?\w+['"]?`), // heredoc 操作符
 }
 
-// HasInlineScript 是 Tier1 触发检测(dcg check_triggers,heredoc.rs:440)。
+// HasInlineScript 是 Tier1 触发检测。
 // 零假阴性:任一 trigger 正则命中 或 含 active heredoc 操作符 → true。
 func HasInlineScript(cmd string) bool {
 	for _, re := range heredocTriggerRes {
@@ -45,7 +45,7 @@ func HasInlineScript(cmd string) bool {
 	return containsActiveHeredocOperator(cmd)
 }
 
-// containsActiveHeredocOperator 手写引号感知扫描:找 << 但跳过引号内的(dcg heredoc.rs:134)。
+// containsActiveHeredocOperator 手写引号感知扫描:找 << 但跳过引号内的。
 func containsActiveHeredocOperator(cmd string) bool {
 	inSingle, inDouble := false, false
 	for i := 0; i < len(cmd); i++ {
@@ -65,7 +65,7 @@ func containsActiveHeredocOperator(cmd string) bool {
 	return false
 }
 
-// inlineScriptRe 提取 interpreter -c "..." / '...' 内层内容(dcg INLINE_SCRIPT_*,heredoc.rs:1004)。
+// inlineScriptRe 提取 interpreter -c "..." / '...' 内层内容。
 // Go regexp(RE2)不支持反引用 \1,故用 alternation 两个分支:
 //   - 捕获组1=双引号内层内容 [^"]*(允许内层含单引号,如 python -c "...os.system('...')")
 //   - 捕获组2=单引号内层内容 [^']*(允许内层含双引号)
@@ -77,7 +77,7 @@ var inlineScriptRe = regexp.MustCompile(`(?i)\b(?:python[0-9.]*|ruby[0-9.]*|perl
 var hereStringRe = regexp.MustCompile(`<<<\s*(["']?)([^"'\n]*)`)
 
 // ExtractInlineScripts 是 Tier2 提取 + Tier2.5 手写分段递归。
-// 返回所有提取出的内层命令(v1 砍 AST,用手写 $()/反引号/;/&&/||/| 分段递归,dcg collect_command_segments)。
+// 返回所有提取出的内层命令(v1 砍 AST,用手写 $()/反引号/;/&&/||/| 分段递归)。
 // depth > MaxEmbeddedShellDepth 时停止递归(防无限)。
 //
 // 深度语义:depth 表示当前调用栈已嵌套的层数。depth==MaxEmbeddedShellDepth 时
@@ -126,7 +126,7 @@ func ExtractInlineScripts(cmd string, depth int) []string {
 	return out
 }
 
-// splitCommandSegments 手写分段:按 ; && || | 切分命令(dcg collect_command_segments,packs/mod.rs:2703,非 AST)。
+// splitCommandSegments 手写分段:按 ; && || | 切分命令(非 AST)。
 func splitCommandSegments(cmd string) []string {
 	var segs []string
 	var cur strings.Builder
@@ -183,7 +183,7 @@ func splitCommandSegments(cmd string) []string {
 	return segs
 }
 
-// extractCommandSubstitutions 提取 $() 内层命令(v1 手写,砍 dcg 的 ast-grep)。
+// extractCommandSubstitutions 提取 $() 内层命令(v1 手写,砍 AST)。
 // 简化:找 $(...) 配对 ),提取内层。反引号 `...` 同理。
 func extractCommandSubstitutions(cmd string) []string {
 	var out []string

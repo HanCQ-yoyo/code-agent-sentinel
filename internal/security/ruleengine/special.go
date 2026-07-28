@@ -190,7 +190,7 @@ func applyPostExclude(hitCtx string, patterns []CompiledRegex) bool {
 }
 
 // compilePostExcludePatterns 将 rule.PostExclude 字符串列表编译为正则列表。
-// 使用 CompilePattern(含 regexp2 分流):post_exclude 来源于 dcg safe_pattern,
+// 使用 CompilePattern(含 regexp2 分流):post_exclude 来源于 safe_pattern,
 // 可能含 lookahead/lookbehind,故不能用纯 RE2 编译。
 // 校验时已验证过,此处重建(Task 3 约定:post_exclude 不缓存)。
 func compilePostExcludePatterns(rule *Rule) []CompiledRegex {

@@ -140,7 +140,7 @@ func TestDestructive_GitDomain(t *testing.T) {
 
 // TestDestructive_DatabaseDomain — Task 6:database 域 7 子域规则(112 dest + 57 safe→post_exclude)。
 // 增量构建:每转写完一个子域就追加该子域的测试用例并提交。
-// 规则名对齐 dcg database/<sub>.rs 的 pattern name。
+// 规则名对齐 database/<sub> 的 pattern name。
 //
 // 注意跨子域重叠:SQL 关键字(DROP DATABASE/TABLE/TRUNCATE/DELETE FROM)同时
 // 命中 mysql 和 postgresql 规则。使用 anyHit 验证期望规则在命中集中;safe 用例
@@ -235,7 +235,7 @@ func TestDestructive_DatabaseDomain(t *testing.T) {
 		{"supabase-sso-remove", "supabase sso remove provider-id", "command", "destructive.database.supabase.supabase-sso-remove"},
 		{"supabase-config-push", "supabase config push", "command", "destructive.database.supabase.supabase-config-push"},
 		{"supabase-stop-no-backup", "supabase stop --no-backup", "command", "destructive.database.supabase.supabase-stop-no-backup"},
-		// dry-run=false 不被 post_exclude 排除(忠实 dcg safe_pattern 语义)
+		// dry-run=false 不被 post_exclude 排除
 		{"supabase-db-push-dry-run-false", "supabase db push --dry-run=false", "command", "destructive.database.supabase.supabase-db-push"},
 	}
 	for _, c := range hitCases {
@@ -306,7 +306,7 @@ func TestDestructive_DatabaseDomain(t *testing.T) {
 // 覆盖:rm-rf /、rm -rf ~、find / -delete、unlink /etc/passwd 等 dest 命中;
 // safe 不误报:rm -i file(无 -rf 标志不匹配)、rm /tmp/foo(post_exclude 排除 tmp 路径)。
 //
-// 规则名对齐 dcg core/filesystem.rs 的 pattern name(如 rm-rf-root-home 而非 rm-root-absolute)。
+// 规则名对齐 filesystem 的 pattern name(如 rm-rf-root-home 而非 rm-root-absolute)。
 func TestDestructive_FilesystemDomain(t *testing.T) {
 	rules, _, errs := LoadBuiltin()
 	if len(errs) > 0 {
@@ -359,7 +359,7 @@ func TestDestructive_FilesystemDomain(t *testing.T) {
 		{"chmod-normal", "chmod 644 file", "command", ""},                    // 无 chmod 规则(filesystem 域)
 		{"rm-help-safe", "rm --help", "command", ""},                         // 无 -rf,不匹配
 		// 回归守卫(Important #1):`..` 路径遍历不得被 tmp post_exclude 抑制。
-		// dcg safe_pattern 含 `(?!\.\.(?:/|\s|$)|[^\s]*/\.\.(?:/|\s|$))` 防护;
+		// safe_pattern 含 `(?!\.\.(?:/|\s|$)|[^\s]*/\.\.(?:/|\s|$))` 防护;
 		// sentinel post_exclude 加 `(?!.*\.\.(?:/|\s|$))` lookahead 忠实对齐。
 		// 未修复前 `rm -rf /tmp/foo/../etc` 被错误抑制(hitCtx 以 /tmp/ 开头 → post_exclude 命中 → 漏报)。
 		// rm 规则 hitCtx 贪婪消费完整路径(/tmp/foo/../etc 以 / 起始满足 root-home)→ 命中 root-home;
@@ -375,13 +375,13 @@ func TestDestructive_FilesystemDomain(t *testing.T) {
 		{"tar-remove-files-tmp-traversal", "tar --remove-files -cf out.tar /tmp/foo/../etc", "command", "destructive.filesystem.tar-remove-files-general"},
 		{"dd-tmp-traversal", "dd if=/dev/zero of=/tmp/foo/../etc/passwd", "command", "destructive.filesystem.dd-overwrite-general"},
 		// 回归守卫(Important #2):$TMPDIR 由调用方控制,可能解析为 /etc 或 /。
-		// dcg safe_pattern 刻意不含 $TMPDIR;sentinel post_exclude 原误加 → 已移除。
+		// safe_pattern 刻意不含 $TMPDIR;sentinel post_exclude 原误加 → 已移除。
 		// 未修复前 `rm -rf $TMPDIR/foo` 被错误抑制(危险方向漏报)。
 		{"rm-rf-tmpdir-var", "rm -rf $TMPDIR/foo", "command", "destructive.filesystem.rm-rf-general"},
 		{"rm-rf-tmpdir-brace", "rm -rf ${TMPDIR}/foo", "command", "destructive.filesystem.rm-rf-general"},
 		{"rm-recursive-force-tmpdir", "rm --recursive --force $TMPDIR/foo", "command", "destructive.filesystem.rm-recursive-force-long"},
 		// redirect-truncate-dynamic-path(Important #3):5 分支 regex,此前无测试覆盖。
-		// dcg 源测试用例(见 references/.../filesystem.rs:5049):变量路径、命令替换、
+		// 源测试用例:变量路径、命令替换、
 		// 通配符路径、^ 转义路径、%! Windows 变量。命中 destructive.filesystem.redirect-truncate-dynamic-path。
 		{"redirect-truncate-dynamic-var", "echo data > $LOG_FILE", "command", "destructive.filesystem.redirect-truncate-dynamic-path"},
 		{"redirect-truncate-dynamic-backtick", "echo data 2> `dynamic-path`", "command", "destructive.filesystem.redirect-truncate-dynamic-path"},
@@ -402,7 +402,7 @@ func TestDestructive_FilesystemDomain(t *testing.T) {
 // TestDestructive_ContainersDomain — Task 7:containers 域 3 子域规则
 // (docker 9 dest + 10 safe / podman 8 + 8 / compose 4 + 7)。
 // 增量构建:每转写完一个子域就追加该子域的测试用例并提交。
-// 规则名对齐 dcg containers/<sub>.rs 的 pattern name。
+// 规则名对齐 containers/<sub> 的 pattern name。
 //
 // 关键:docker 与 podman 的 volume-prune severity 不同(docker=High,podman=Critical)。
 // safe_patterns 用 `^\s*docker\b` 或 `(?=\s|$)` 尾锚点保证不匹配 dest 规则的 hitCtx
@@ -512,12 +512,12 @@ func TestDestructive_ContainersDomain(t *testing.T) {
 }
 
 // TestDestructive_PackageManagersDomain — Task 7:package_managers 域 18 dest + 18 safe。
-// 规则名对齐 dcg package_managers/mod.rs 的 pattern name(无子域,直接 destructive.package_managers.<name>)。
-// dcg 源全部用 3-arg destructive_pattern! → 默认 High severity。
+// 规则名对齐 package_managers 的 pattern name(无子域,直接 destructive.package_managers.<name>)。
+// 全部用 3-arg destructive_pattern! → 默认 High severity。
 // safe_pattern 用 (?=\\s|\$) 尾锚点 + 中间 flag-value 限定,dest hitCtx 含破坏子命令
 // (publish/uninstall/...)后接参数 → safe 不匹配 → 无需 post_exclude。
-// publish 类规则自带 --dry-run 负向先行断言,--dry-run=false / --no-dry-run 不被排除
-// (忠实 dcg safe_pattern 语义),亦不需 post_exclude。
+// publish 类规则自带 --dry-run 负向先行断言,--dry-run=false / --no-dry-run 不被排除,
+// 亦不需 post_exclude。
 //
 // 关键测试:--dry-run 不命中(安全),--dry-run=false / --no-dry-run 仍命中(危险)。
 // 包名含破坏子命令前缀(uninstall-tool / unpublish-ci)不误匹配(尾锚点 (?=\\s|\$))。

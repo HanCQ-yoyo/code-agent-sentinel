@@ -21,8 +21,7 @@ type SQLScan struct {
 	HasComment bool
 }
 
-// destructiveKeywords 是破坏性 SQL keyword,对齐 dcg snowflake 包 keyword 列表
-// (references/destructive_command_guard/src/packs/database/snowflake.rs:335-359,共 10 个):
+// destructiveKeywords 是破坏性 SQL keyword(共 10 个):
 // DROP/TRUNCATE/DELETE/UPDATE/ALTER/GRANT/REVOKE/REMOVE/OVERWRITE/EXECUTE。
 // 复合 keyword(DROP TABLE)不在 lexer 层拼装;Task 11 在 RulesDetector 里按相邻 keyword token 判定。
 var destructiveKeywords = map[string]bool{
@@ -38,26 +37,25 @@ var destructiveKeywords = map[string]bool{
 	"EXECUTE":   true,
 }
 
-// lexerState 是 SQL lexer 状态机状态(对照 dcg snowflake.rs scan_sql / lex_statements)。
+// lexerState 是 SQL lexer 状态机状态。
 type lexerState int
 
 const (
 	stateNormal lexerState = iota
-	stateLineComment  // -- ... \n (dcg 也在 \r 处终止)
-	stateBlockComment // /* ... */ (dcg skip_block_comment 用 depth 计数支持嵌套)
-	stateSingleQuoted // '...' (dcg skip_quoted 处理 \' 与 '' 转义)
-	stateDoubleQuoted // "..." (dcg skip_quoted 处理 "" 转义)
+	stateLineComment  // -- ... \n (也在 \r 处终止)
+	stateBlockComment // /* ... */ (用 depth 计数支持嵌套)
+	stateSingleQuoted // '...' (处理 \' 与 '' 转义)
+	stateDoubleQuoted // "..." (处理 "" 转义)
 	stateDollarQuoted // $$...$$ (Snowflake dollar-quoting)
 )
 
 // ScanSQL 逐字节扫 SQL,产出 token。状态机确保注释/字符串内的 keyword 不进 DestructiveTokens。
 //
-// 对照 dcg database/snowflake.rs:1240 scan_sql / 1508 lex_statements / 1659 skip_block_comment /
-// 1630 skip_quoted。与 dcg 对齐的关键修正(超出 brief 原版):
-//   - 块注释嵌套(dcg skip_block_comment depth 计数);brief 原版只看第一个 */。
-//   - 单引号字符串支持 \' 反斜杠转义与 '' 双引号转义(dcg skip_quoted);brief 原版遇 ' 即结束。
-//   - 双引号标识符支持 "" 转义(dcg skip_quoted);brief 原版遇 " 即结束。
-//   - 行注释在 \r 处也终止(dcg lex_statements line 1521 匹配 \n | \r)。
+// 关键修正(超出 brief 原版):
+//   - 块注释嵌套(depth 计数);brief 原版只看第一个 */。
+//   - 单引号字符串支持 \' 反斜杠转义与 '' 双引号转义;brief 原版遇 ' 即结束。
+//   - 双引号标识符支持 "" 转义;brief 原版遇 " 即结束。
+//   - 行注释在 \r 处也终止(匹配 \n | \r)。
 //   - keyword Line 指向 keyword 起始行,而非 flush 时的当前行
 //     (brief 原版 flush 闭包在 \n 后才 flush,会把上一行 keyword 记成下一行)。
 func ScanSQL(payload string) *SQLScan {
@@ -67,7 +65,7 @@ func ScanSQL(payload string) *SQLScan {
 	line := 1
 	// tokenStartLine 记录当前 token 起始行,避免 \n 后 flush 把 keyword 记到下一行。
 	tokenStartLine := 1
-	// blockDepth 是 stateBlockComment 的嵌套深度计数器(dcg skip_block_comment line 1659)。
+	// blockDepth 是 stateBlockComment 的嵌套深度计数器。
 	// 进入块注释时置 1,遇嵌套 /* 加 1,遇 */ 减 1,归零即退出。
 	blockDepth := 0
 
@@ -124,13 +122,13 @@ func ScanSQL(payload string) *SQLScan {
 				flush()
 			}
 		case stateLineComment:
-			// dcg lex_statements line 1521:遇 \n 或 \r 即终止行注释。
+			// 遇 \n 或 \r 即终止行注释。
 			if c == '\n' || c == '\r' {
 				state = stateNormal
 			}
 		case stateBlockComment:
-			// dcg skip_block_comment line 1659:depth 计数支持嵌套 /* /* */ */。
-			// brief 原版无嵌套,会在外层 */ 提前退出,把内层 DROP 当代码;此处对齐 dcg。
+			// depth 计数支持嵌套 /* /* */ */。
+			// brief 原版无嵌套,会在外层 */ 提前退出,把内层 DROP 当代码;此处修复。
 			if c == '/' && i+1 < n && bytes[i+1] == '*' {
 				blockDepth++
 				i++ // 消费 '*'
@@ -142,7 +140,7 @@ func ScanSQL(payload string) *SQLScan {
 				i++ // 消费 '/'
 			}
 		case stateSingleQuoted:
-			// dcg skip_quoted line 1634:'\' 反斜杠转义下一字符;'' 双引号转义为字面量单引号。
+			// '\' 反斜杠转义下一字符;'' 双引号转义为字面量单引号。
 			if c == '\\' && i+1 < n {
 				i++ // 跳过被转义字符
 			} else if c == '\'' {
@@ -153,7 +151,7 @@ func ScanSQL(payload string) *SQLScan {
 				}
 			}
 		case stateDoubleQuoted:
-			// dcg skip_quoted line 1643:"" 双引号转义为字面量双引号。
+			// "" 双引号转义为字面量双引号。
 			if c == '"' {
 				if i+1 < n && bytes[i+1] == '"' {
 					i++ // "" 转义,字符串未结束
@@ -162,7 +160,7 @@ func ScanSQL(payload string) *SQLScan {
 				}
 			}
 		case stateDollarQuoted:
-			// dcg lex_statements line 1539:遇 $$ 结束 dollar-quoted。
+			// 遇 $$ 结束 dollar-quoted。
 			if c == '$' && i+1 < n && bytes[i+1] == '$' {
 				state = stateNormal
 				i++ // 消费第二个 '$'
@@ -180,7 +178,7 @@ func ScanSQL(payload string) *SQLScan {
 }
 
 // isSQLWordChar 判断 SQL word 字符(字母/数字/下划线)。
-// dcg lex_statements line 1586 用 ascii_alphabetic + _;此处用 unicode.IsLetter
+// 此处用 unicode.IsLetter
 // 以支持非 ASCII 标识符(Snowflake 允许 Unicode 标识符),与 brief 一致。
 func isSQLWordChar(r rune) bool {
 	return unicode.IsLetter(r) || unicode.IsDigit(r) || r == '_'

@@ -1,12 +1,10 @@
 # destructive_commands.yaml —— 危险命令检测规则
 #
-# 规则源自 destructive_command_guard(dcg,MIT License with OpenAI/Anthropic Rider),
-# 经机械转写为 sentinel 声明式 YAML。
-# dcg copyright (c) 2026 Jeffrey Emanuel(见 references/destructive_command_guard/LICENSE)。
-# 转写保留原规则语义(name/severity/reason/suggestion),正则按 sentinel RE2+regexp2 引擎适配。
+# 声明式 YAML 规则,覆盖 git/filesystem/database/containers/package_managers 五域。
+# 正则按 sentinel RE2+regexp2 引擎适配。
 #
 # 命名空间:destructive.<domain>.<pattern>
-# severity 对齐 dcg 枚举:critical/high/medium/low(健康分系数见 health.go:23)
+# severity 枚举:critical/high/medium/low(健康分系数见 health.go:23)
 # safe_pattern(白名单)映射为对应 dest 规则的 post_exclude(命中后排除安全子模式)。
 # 含 lookahead/lookbehind 的正则走 regexp2(Task 1 分流)。
 #
@@ -15,8 +13,8 @@
 # 因 RulesDetector.Covers() 返回 nil(全资产路由),规则按 asset_type 字段自动路由。
 
 rules:
-  # ===== git 域(源 dcg core/git.rs:4207-4462,12 dest + 5 safe→post_exclude)=====
-  # severity 直接映射 dcg 枚举(reset-hard/clean-force/push-force-*/stash-clear=Critical;
+  # ===== git 域(12 dest + 5 safe→post_exclude)=====
+  # severity 枚举(reset-hard/clean-force/push-force-*/stash-clear=Critical;
   # checkout-*/restore-*/reset-merge/branch-force-delete=High;stash-drop=Medium)。
   # 正则适配:[[:alnum:]_]→\w;(?:^|[^[:alnum:]_-])→(?:^|[^\w-]);YAML 双引号内 \\。
 
@@ -32,7 +30,7 @@ rules:
     post_exclude:
       - "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*checkout\\s+-b\\s+"        # safe: checkout-new-branch
       - "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*checkout\\s+--orphan\\s+"  # safe: checkout-orphan
-    metadata: { source: dcg, domain: git, dcg_rule_id: "git.checkout-discard", keywords: [git] }
+    metadata: { source: builtin, domain: git, rule_id: "git.checkout-discard", keywords: [git] }
     remediation: "改用 git stash 保存改动,git diff 预览后再丢弃"
 
   - id: destructive.git.checkout-ref-discard
@@ -47,7 +45,7 @@ rules:
     post_exclude:
       - "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*checkout\\s+-b\\s+"        # safe: checkout-new-branch
       - "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*checkout\\s+--orphan\\s+"  # safe: checkout-orphan
-    metadata: { source: dcg, domain: git, dcg_rule_id: "git.checkout-ref-discard", keywords: [git] }
+    metadata: { source: builtin, domain: git, rule_id: "git.checkout-ref-discard", keywords: [git] }
     remediation: "改用 git stash 保存改动,git show <ref>:<path> 预览后再覆盖"
 
   - id: destructive.git.restore-worktree
@@ -62,7 +60,7 @@ rules:
     post_exclude:
       - "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*restore\\b(?=\\s)(?=.*\\s--staged\\b)(?!.*\\s(?:--worktree|-W)\\b)"  # safe: restore-staged-long
       - "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*restore\\b(?=\\s)(?=.*\\s-S\\b)(?!.*\\s(?:--worktree|-W)\\b)"       # safe: restore-staged-short
-    metadata: { source: dcg, domain: git, dcg_rule_id: "git.restore-worktree", keywords: [git] }
+    metadata: { source: builtin, domain: git, rule_id: "git.restore-worktree", keywords: [git] }
     remediation: "改用 git restore --staged 仅取消暂存,或 git stash 保存改动"
 
   - id: destructive.git.restore-worktree-explicit
@@ -77,7 +75,7 @@ rules:
     post_exclude:
       - "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*restore\\b(?=\\s)(?=.*\\s--staged\\b)(?!.*\\s(?:--worktree|-W)\\b)"  # safe: restore-staged-long
       - "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*restore\\b(?=\\s)(?=.*\\s-S\\b)(?!.*\\s(?:--worktree|-W)\\b)"       # safe: restore-staged-short
-    metadata: { source: dcg, domain: git, dcg_rule_id: "git.restore-worktree-explicit", keywords: [git] }
+    metadata: { source: builtin, domain: git, rule_id: "git.restore-worktree-explicit", keywords: [git] }
     remediation: "改用 git restore --staged 仅取消暂存,保留工作区改动"
 
   - id: destructive.git.reset-hard
@@ -89,7 +87,7 @@ rules:
         - { field: command, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*reset\\s+--hard\\b" }
         - { field: content, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*reset\\s+--hard\\b" }
         - { field: allow, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*reset\\s+--hard\\b" }
-    metadata: { source: dcg, domain: git, dcg_rule_id: "git.reset-hard", keywords: [git] }
+    metadata: { source: builtin, domain: git, rule_id: "git.reset-hard", keywords: [git] }
     remediation: "改用 git stash 保存改动,确认后再 reset"
 
   - id: destructive.git.reset-merge
@@ -101,7 +99,7 @@ rules:
         - { field: command, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*reset\\s+--merge\\b" }
         - { field: content, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*reset\\s+--merge\\b" }
         - { field: allow, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*reset\\s+--merge\\b" }
-    metadata: { source: dcg, domain: git, dcg_rule_id: "git.reset-merge", keywords: [git] }
+    metadata: { source: builtin, domain: git, rule_id: "git.reset-merge", keywords: [git] }
     remediation: "改用 git stash 保存改动,git merge --abort 安全中止合并"
 
   - id: destructive.git.clean-force
@@ -116,7 +114,7 @@ rules:
     post_exclude:
       - "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*clean\\s+-[a-z]*n[a-z]*"  # safe: clean-dry-run-short
       - "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*clean\\s+--dry-run"       # safe: clean-dry-run-long
-    metadata: { source: dcg, domain: git, dcg_rule_id: "git.clean-force", keywords: [git] }
+    metadata: { source: builtin, domain: git, rule_id: "git.clean-force", keywords: [git] }
     remediation: "改用 git clean -n 预览,git clean -i 交互选择"
 
   - id: destructive.git.push-force-long
@@ -128,7 +126,7 @@ rules:
         - { field: command, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:[^\\s&;|`()<>]+\\s+)*push\\s+(?:[^\\s&;|`()<>]+\\s+)*--force(?![-a-z])" }
         - { field: content, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:[^\\s&;|`()<>]+\\s+)*push\\s+(?:[^\\s&;|`()<>]+\\s+)*--force(?![-a-z])" }
         - { field: allow, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:[^\\s&;|`()<>]+\\s+)*push\\s+(?:[^\\s&;|`()<>]+\\s+)*--force(?![-a-z])" }
-    metadata: { source: dcg, domain: git, dcg_rule_id: "git.push-force-long", keywords: [git] }
+    metadata: { source: builtin, domain: git, rule_id: "git.push-force-long", keywords: [git] }
     remediation: "改用 git push --force-with-lease,失败说明远程有新提交"
 
   - id: destructive.git.push-force-short
@@ -140,7 +138,7 @@ rules:
         - { field: command, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:[^\\s&;|`()<>]+\\s+)*push\\s+(?:[^\\s&;|`()<>]+\\s+)*-[a-zA-Z]*f[a-zA-Z]*\\b" }
         - { field: content, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:[^\\s&;|`()<>]+\\s+)*push\\s+(?:[^\\s&;|`()<>]+\\s+)*-[a-zA-Z]*f[a-zA-Z]*\\b" }
         - { field: allow, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:[^\\s&;|`()<>]+\\s+)*push\\s+(?:[^\\s&;|`()<>]+\\s+)*-[a-zA-Z]*f[a-zA-Z]*\\b" }
-    metadata: { source: dcg, domain: git, dcg_rule_id: "git.push-force-short", keywords: [git] }
+    metadata: { source: builtin, domain: git, rule_id: "git.push-force-short", keywords: [git] }
     remediation: "改用 git push --force-with-lease,失败说明远程有新提交"
 
   - id: destructive.git.branch-force-delete
@@ -152,7 +150,7 @@ rules:
         - { field: command, op: regex_match, value: "(?:^|[^\\w-])(?i:(?:git(?:\\.exe)?\\s+(?:[^\\s&;|`()<>]+\\s+)*branch|git-branch(?:\\.exe)?))\\s+(?:[^\\s&;|`()<>]+\\s+)*(?:-[a-zA-Z]*[dDfMC][a-zA-Z]*(?:\\s|$)|--(?:d(?:e(?:l(?:e(?:t(?:e)?)?)?)?)?|forc(?:e)?)(?:\\s|$))" }
         - { field: content, op: regex_match, value: "(?:^|[^\\w-])(?i:(?:git(?:\\.exe)?\\s+(?:[^\\s&;|`()<>]+\\s+)*branch|git-branch(?:\\.exe)?))\\s+(?:[^\\s&;|`()<>]+\\s+)*(?:-[a-zA-Z]*[dDfMC][a-zA-Z]*(?:\\s|$)|--(?:d(?:e(?:l(?:e(?:t(?:e)?)?)?)?)?|forc(?:e)?)(?:\\s|$))" }
         - { field: allow, op: regex_match, value: "(?:^|[^\\w-])(?i:(?:git(?:\\.exe)?\\s+(?:[^\\s&;|`()<>]+\\s+)*branch|git-branch(?:\\.exe)?))\\s+(?:[^\\s&;|`()<>]+\\s+)*(?:-[a-zA-Z]*[dDfMC][a-zA-Z]*(?:\\s|$)|--(?:d(?:e(?:l(?:e(?:t(?:e)?)?)?)?)?|forc(?:e)?)(?:\\s|$))" }
-    metadata: { source: dcg, domain: git, dcg_rule_id: "git.branch-force-delete", keywords: [git] }
+    metadata: { source: builtin, domain: git, rule_id: "git.branch-force-delete", keywords: [git] }
     remediation: "先 git branch -vv / --merged 检查,确认后再删除"
 
   - id: destructive.git.stash-drop
@@ -164,7 +162,7 @@ rules:
         - { field: command, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*stash\\s+drop\\b" }
         - { field: content, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*stash\\s+drop\\b" }
         - { field: allow, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*stash\\s+drop\\b" }
-    metadata: { source: dcg, domain: git, dcg_rule_id: "git.stash-drop", keywords: [git] }
+    metadata: { source: builtin, domain: git, rule_id: "git.stash-drop", keywords: [git] }
     remediation: "改用 git stash pop(成功才删除)或 git stash apply(不删除)"
 
   - id: destructive.git.stash-clear
@@ -176,11 +174,11 @@ rules:
         - { field: command, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*stash\\s+clear\\b" }
         - { field: content, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*stash\\s+clear\\b" }
         - { field: allow, op: regex_match, value: "(?:^|[^\\w-])git\\s+(?:\\S+\\s+)*stash\\s+clear\\b" }
-    metadata: { source: dcg, domain: git, dcg_rule_id: "git.stash-clear", keywords: [git] }
+    metadata: { source: builtin, domain: git, rule_id: "git.stash-clear", keywords: [git] }
     remediation: "改用 git stash drop stash@{n} 逐条删除,先 git stash list 检查"
-  # ===== filesystem 域(源 dcg core/filesystem.rs,26 dest + 20 safe→post_exclude)=====
-  # severity 直接映射 dcg 枚举(见各规则注释)。
-  # 正则适配:dcg 原始 regex 经 sentinel 适配——root-home 规则扩展 [^|;&\s]* 消费路径 token,
+  # ===== filesystem 域(26 dest + 20 safe→post_exclude)=====
+  # severity 枚举(见各规则注释)。
+  # 正则适配:root-home 规则扩展 [^|;&\s]* 消费路径 token,
   # 使 hitCtx 包含完整路径,从而 post_exclude 可区分 /tmp(安全)与 /etc(危险)。
   # safe_pattern(32 条)映射为对应 dest 规则的 post_exclude,正则适配为 hitCtx 子串匹配。
   # lookahead/lookbehind 走 regexp2(Task 1 分流)。YAML 双引号内 \ 双写、" 转义。
@@ -188,14 +186,14 @@ rules:
   - id: destructive.filesystem.sed-exec-unverified
     severity: high
     asset_type: hook
-    description: "GNU sed executes shell input that dcg cannot statically verify."
+    description: "GNU sed executes shell input that cannot be statically verified."
     match:
       or:
         - { field: command, op: regex_match, value: "(?!)" }
         - { field: content, op: regex_match, value: "(?!)" }
         - { field: allow, op: regex_match, value: "(?!)" }
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.sed-exec-unverified", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.sed-exec-unverified", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.cp-sensitive-then-delete
     severity: critical
@@ -206,8 +204,8 @@ rules:
         - { field: command, op: regex_match, value: "\\bcp\\b[^|;&]*(?:\\s(?:-[A-Za-z]*a[A-Za-z]*|--archive)\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)[^|;&\\s'\"]*[^|;&]*(?:&&|;|\\|\\|)[^|;&]*\\brm\\b[^|;&]*\\s(?:-[A-Za-z]*[rR][A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*[rR][A-Za-z]*|-[rR]\\s+-f|-f\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)" }
         - { field: content, op: regex_match, value: "\\bcp\\b[^|;&]*(?:\\s(?:-[A-Za-z]*a[A-Za-z]*|--archive)\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)[^|;&\\s'\"]*[^|;&]*(?:&&|;|\\|\\|)[^|;&]*\\brm\\b[^|;&]*\\s(?:-[A-Za-z]*[rR][A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*[rR][A-Za-z]*|-[rR]\\s+-f|-f\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)" }
         - { field: allow, op: regex_match, value: "\\bcp\\b[^|;&]*(?:\\s(?:-[A-Za-z]*a[A-Za-z]*|--archive)\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)[^|;&\\s'\"]*[^|;&]*(?:&&|;|\\|\\|)[^|;&]*\\brm\\b[^|;&]*\\s(?:-[A-Za-z]*[rR][A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*[rR][A-Za-z]*|-[rR]\\s+-f|-f\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)" }
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.cp-sensitive-then-delete", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.cp-sensitive-then-delete", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.ln-symlink-sensitive-then-delete
     severity: critical
@@ -218,8 +216,8 @@ rules:
         - { field: command, op: regex_match, value: "\\bln\\b[^|;&]*\\s-[A-Za-z]*s[A-Za-z]*[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)[^|;&\\s'\"]*[^|;&]*(?:&&|;|\\|\\|)[^|;&]*\\brm\\b[^|;&]*\\s(?:-[A-Za-z]*[rR][A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*[rR][A-Za-z]*|-[rR]\\s+-f|-f\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)" }
         - { field: content, op: regex_match, value: "\\bln\\b[^|;&]*\\s-[A-Za-z]*s[A-Za-z]*[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)[^|;&\\s'\"]*[^|;&]*(?:&&|;|\\|\\|)[^|;&]*\\brm\\b[^|;&]*\\s(?:-[A-Za-z]*[rR][A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*[rR][A-Za-z]*|-[rR]\\s+-f|-f\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)" }
         - { field: allow, op: regex_match, value: "\\bln\\b[^|;&]*\\s-[A-Za-z]*s[A-Za-z]*[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)[^|;&\\s'\"]*[^|;&]*(?:&&|;|\\|\\|)[^|;&]*\\brm\\b[^|;&]*\\s(?:-[A-Za-z]*[rR][A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*[rR][A-Za-z]*|-[rR]\\s+-f|-f\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)" }
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.ln-symlink-sensitive-then-delete", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.ln-symlink-sensitive-then-delete", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.rsync-sensitive-then-delete
     severity: critical
@@ -230,8 +228,8 @@ rules:
         - { field: command, op: regex_match, value: "\\brsync\\b[^|;&]*(?:\\s(?:-[A-Za-z]*a[A-Za-z]*|--archive)\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)[^|;&\\s'\"]*[^|;&]*(?:&&|;|\\|\\|)[^|;&]*\\brm\\b[^|;&]*\\s(?:-[A-Za-z]*[rR][A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*[rR][A-Za-z]*|-[rR]\\s+-f|-f\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)" }
         - { field: content, op: regex_match, value: "\\brsync\\b[^|;&]*(?:\\s(?:-[A-Za-z]*a[A-Za-z]*|--archive)\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)[^|;&\\s'\"]*[^|;&]*(?:&&|;|\\|\\|)[^|;&]*\\brm\\b[^|;&]*\\s(?:-[A-Za-z]*[rR][A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*[rR][A-Za-z]*|-[rR]\\s+-f|-f\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)" }
         - { field: allow, op: regex_match, value: "\\brsync\\b[^|;&]*(?:\\s(?:-[A-Za-z]*a[A-Za-z]*|--archive)\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)[^|;&\\s'\"]*[^|;&]*(?:&&|;|\\|\\|)[^|;&]*\\brm\\b[^|;&]*\\s(?:-[A-Za-z]*[rR][A-Za-z]*f[A-Za-z]*|-[A-Za-z]*f[A-Za-z]*[rR][A-Za-z]*|-[rR]\\s+-f|-f\\s+-[rR]|--recursive\\s+--force|--force\\s+--recursive)[^|;&]*?(?:\\s|=)(?:['\"\\\\]|\\$['\"])?(?:/tmp/|/var/tmp/|\\$TMPDIR/|\\$\\{TMPDIR\\}/)" }
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rsync-sensitive-then-delete", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.rsync-sensitive-then-delete", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.rm-rf-root-home
     severity: critical
@@ -245,8 +243,8 @@ rules:
     post_exclude:
       - "rm\\s+-[a-zA-Z]*[rR][a-zA-Z]*f[a-zA-Z]*\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
       - "rm\\s+-[a-zA-Z]*f[a-zA-Z]*[rR][a-zA-Z]*\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rm-rf-root-home", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.rm-rf-root-home", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.rm-r-f-separate-root-home
     severity: critical
@@ -260,8 +258,8 @@ rules:
     post_exclude:
       - "rm\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+(-[a-zA-Z]+\\s+)*-f\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
       - "rm\\s+(-[a-zA-Z]+\\s+)*-f\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rm-r-f-separate-root-home", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.rm-r-f-separate-root-home", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.rm-recursive-force-root-home
     severity: critical
@@ -275,8 +273,8 @@ rules:
     post_exclude:
       - "rm\\s+.*--recursive.*--force\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
       - "rm\\s+.*--force.*--recursive\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rm-recursive-force-root-home", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.rm-recursive-force-root-home", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.rm-rf-general
     severity: high
@@ -290,8 +288,8 @@ rules:
     post_exclude:
       - "rm\\s+-[a-zA-Z]*[rR][a-zA-Z]*f[a-zA-Z]*\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
       - "rm\\s+-[a-zA-Z]*f[a-zA-Z]*[rR][a-zA-Z]*\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rm-rf-general", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.rm-rf-general", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.rm-r-f-separate
     severity: high
@@ -305,8 +303,8 @@ rules:
     post_exclude:
       - "rm\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+(-[a-zA-Z]+\\s+)*-f\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
       - "rm\\s+(-[a-zA-Z]+\\s+)*-f\\s+(-[a-zA-Z]+\\s+)*-[rR]\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rm-r-f-separate", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.rm-r-f-separate", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.rm-recursive-force-long
     severity: high
@@ -320,8 +318,8 @@ rules:
     post_exclude:
       - "rm\\s+.*--recursive.*--force\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
       - "rm\\s+.*--force.*--recursive\\s+['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.rm-recursive-force-long", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.rm-recursive-force-long", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.find-delete-root-home
     severity: critical
@@ -335,8 +333,8 @@ rules:
     post_exclude:
       - "\\bfind\\b\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\bfind\\b\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.find-delete-root-home", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.find-delete-root-home", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.find-delete-general
     severity: high
@@ -350,8 +348,8 @@ rules:
     post_exclude:
       - "\\bfind\\b\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\bfind\\b\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.find-delete-general", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.find-delete-general", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.unlink-root-home
     severity: critical
@@ -366,8 +364,8 @@ rules:
       - "\\bunlink\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\bunlink\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\bunlink\\s+(?:--help|--version)\\b"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.unlink-root-home", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.unlink-root-home", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.unlink-general
     severity: high
@@ -382,8 +380,8 @@ rules:
       - "\\bunlink\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\bunlink\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\bunlink\\s+(?:--help|--version)\\b"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.unlink-general", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.unlink-general", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.truncate-zero-root-home
     severity: critical
@@ -399,8 +397,8 @@ rules:
       - "\\btruncate\\b[^|;&]*?\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\btruncate\\s+(?:-s\\s+\\+\\S+|--size=\\+\\S+)\\b"
       - "\\btruncate\\s+(?:--help|--version)\\b"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.truncate-zero-root-home", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.truncate-zero-root-home", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.truncate-zero-general
     severity: high
@@ -416,8 +414,8 @@ rules:
       - "\\btruncate\\b[^|;&]*?\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\btruncate\\s+(?:-s\\s+\\+\\S+|--size=\\+\\S+)\\b"
       - "\\btruncate\\s+(?:--help|--version)\\b"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.truncate-zero-general", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.truncate-zero-general", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.shred-root-home
     severity: critical
@@ -432,8 +430,8 @@ rules:
       - "\\bshred\\b[^|;&]*?\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\bshred\\b[^|;&]*?\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\bshred\\s+(?:--help|--version)\\b"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.shred-root-home", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.shred-root-home", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.shred-general
     severity: high
@@ -448,8 +446,8 @@ rules:
       - "\\bshred\\b[^|;&]*?\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\bshred\\b[^|;&]*?\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\bshred\\s+(?:--help|--version)\\b"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.shred-general", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.shred-general", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.tar-remove-files-root-home
     severity: critical
@@ -463,8 +461,8 @@ rules:
     post_exclude:
       - "\\btar\\b[^|;&]*?\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\btar\\b[^|;&]*?\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.tar-remove-files-root-home", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.tar-remove-files-root-home", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.tar-remove-files-general
     severity: high
@@ -478,8 +476,8 @@ rules:
     post_exclude:
       - "\\btar\\b[^|;&]*?\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\btar\\b[^|;&]*?\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.tar-remove-files-general", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.tar-remove-files-general", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.dd-overwrite-root-home
     severity: critical
@@ -493,8 +491,8 @@ rules:
     post_exclude:
       - "\\bof=['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
       - "\\bdd\\s+(?:--help|--version)\\b"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.dd-overwrite-root-home", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.dd-overwrite-root-home", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.dd-overwrite-general
     severity: high
@@ -508,8 +506,8 @@ rules:
     post_exclude:
       - "\\bof=['\\\"\\\\]?(?!.*\\.\\.(?:/|\\s|$))(?:/tmp/|/var/tmp/)"
       - "\\bdd\\s+(?:--help|--version)\\b"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.dd-overwrite-general", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.dd-overwrite-general", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.mv-sensitive-source-root-home
     severity: critical
@@ -524,8 +522,8 @@ rules:
       - "\\bmv\\b[^|;&]*?\\s+/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\bmv\\b[^|;&]*?\\s+/var/tmp/(?!.*\\.\\.(?:/|\\s|$))"
       - "\\bmv\\s+(?:--help|--version)\\b"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.mv-sensitive-source-root-home", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.mv-sensitive-source-root-home", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.mv-dynamic-path
     severity: high
@@ -538,8 +536,8 @@ rules:
         - { field: allow, op: regex_match, value: "\\bmv\\b[^|;&]*[\\\\$`]" }
     post_exclude:
       - "\\bmv\\s+(?:--help|--version)\\b"
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.mv-dynamic-path", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.mv-dynamic-path", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.redirect-truncate-root-home
     severity: critical
@@ -550,8 +548,8 @@ rules:
         - { field: command, op: regex_match, value: "(?<![<>])(?:&>|>&|\\*>|(?:[0-9]+|\\{[A-Za-z_][A-Za-z0-9_]*\\})?>\\|?)\\s*(?:['\"\\\\]|\\$['\"])?(?!/dev/(?:null|zero|full)\\b)(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&\\s]*" }
         - { field: content, op: regex_match, value: "(?<![<>])(?:&>|>&|\\*>|(?:[0-9]+|\\{[A-Za-z_][A-Za-z0-9_]*\\})?>\\|?)\\s*(?:['\"\\\\]|\\$['\"])?(?!/dev/(?:null|zero|full)\\b)(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&\\s]*" }
         - { field: allow, op: regex_match, value: "(?<![<>])(?:&>|>&|\\*>|(?:[0-9]+|\\{[A-Za-z_][A-Za-z0-9_]*\\})?>\\|?)\\s*(?:['\"\\\\]|\\$['\"])?(?!/dev/(?:null|zero|full)\\b)(?:/(?:etc|usr|bin|sbin|root|boot|lib|lib64|var|home|sys|proc|dev|opt)(?:/|(?=[\\s\\)'\"]|$))|/(?=[\\s\\)'\"]|$)|~(?=\\s|$|/|\\))|\\$\\{?HOME\\b)[^|;&\\s]*" }
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.redirect-truncate-root-home", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.redirect-truncate-root-home", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
   - id: destructive.filesystem.redirect-truncate-dynamic-path
     severity: high
@@ -562,13 +560,13 @@ rules:
         - { field: command, op: regex_match, value: "(?<![<>])(?:&>|>&|\\*>|(?:[0-9]+|\\{[A-Za-z_][A-Za-z0-9_]*\\})?>\\|?)\\s*(?:[^|;&\\s]*[\\\\$`]|~[A-Za-z_][^|;&\\s]*|(?!(?:/tmp|/var/tmp)(?:/|(?=[\\s|;&]|$)))/[^|;&\\s]*['\"?*\\[][^|;&\\s]*|[%!][^|;&\\s]*|\\^(?!(?:/tmp|/var/tmp)(?:/|(?=[\\s|;&]|$)))[^|;&\\s]+)" }
         - { field: content, op: regex_match, value: "(?<![<>])(?:&>|>&|\\*>|(?:[0-9]+|\\{[A-Za-z_][A-Za-z0-9_]*\\})?>\\|?)\\s*(?:[^|;&\\s]*[\\\\$`]|~[A-Za-z_][^|;&\\s]*|(?!(?:/tmp|/var/tmp)(?:/|(?=[\\s|;&]|$)))/[^|;&\\s]*['\"?*\\[][^|;&\\s]*|[%!][^|;&\\s]*|\\^(?!(?:/tmp|/var/tmp)(?:/|(?=[\\s|;&]|$)))[^|;&\\s]+)" }
         - { field: allow, op: regex_match, value: "(?<![<>])(?:&>|>&|\\*>|(?:[0-9]+|\\{[A-Za-z_][A-Za-z0-9_]*\\})?>\\|?)\\s*(?:[^|;&\\s]*[\\\\$`]|~[A-Za-z_][^|;&\\s]*|(?!(?:/tmp|/var/tmp)(?:/|(?=[\\s|;&]|$)))/[^|;&\\s]*['\"?*\\[][^|;&\\s]*|[%!][^|;&\\s]*|\\^(?!(?:/tmp|/var/tmp)(?:/|(?=[\\s|;&]|$)))[^|;&\\s]+)" }
-    metadata: { source: dcg, domain: filesystem, dcg_rule_id: "filesystem.redirect-truncate-dynamic-path", keywords: [rm, shred, truncate, unlink] }
-    remediation: "参考 dcg 建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
+    metadata: { source: builtin, domain: filesystem, rule_id: "filesystem.redirect-truncate-dynamic-path", keywords: [rm, shred, truncate, unlink] }
+    remediation: "参考安全建议:使用具体路径、先 ls/find 预览、或改用安全替代命令"
 
-  # ===== database.mongodb 域(源 dcg database/mongodb.rs,6 dest + 5 safe)=====
-  # severity 直接映射 dcg 枚举(drop-database=Critical;drop-collection/delete-all/
+  # ===== database.mongodb 域(6 dest + 5 safe)=====
+  # severity 枚举(drop-database=Critical;drop-collection/delete-all/
   # mongorestore-drop/collection-drop=High;stdin-unverified=High)。
-  # dcg safe_pattern(5 条)针对整条命令做 ^-anchored 负向 lookahead,确保含破坏性方法
+  # safe_pattern(5 条)针对整条命令做 ^-anchored 负向 lookahead,确保含破坏性方法
   # 时不放行 read 操作。sentinel 中 destructive 正则只匹配破坏性方法本身(.dropDatabase()
   # / .drop() / .deleteMany({}) 等),read 操作(find/count/aggregate/explain)不匹配,
   # 故无 false-positive 风险;post_exclude 不适用(hitCtx 子串不含全命令上下文)。
@@ -576,13 +574,13 @@ rules:
   - id: destructive.database.mongodb.stdin-unverified
     severity: high
     asset_type: hook
-    description: "mongosh receives indirect input that dcg cannot statically verify."
+    description: "mongosh receives indirect input that cannot be statically verified."
     match:
       or:
         - { field: command, op: regex_match, value: "(?!)" }
         - { field: content, op: regex_match, value: "(?!)" }
         - { field: allow, op: regex_match, value: "(?!)" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "mongodb.stdin-unverified", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "mongodb.stdin-unverified", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Materialize and review the exact JavaScript before piping or redirecting it into mongosh."
 
   - id: destructive.database.mongodb.drop-database
@@ -594,7 +592,7 @@ rules:
         - { field: command, op: regex_match, value: "\\.dropDatabase\\s*\\(" }
         - { field: content, op: regex_match, value: "\\.dropDatabase\\s*\\(" }
         - { field: allow, op: regex_match, value: "\\.dropDatabase\\s*\\(" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "mongodb.drop-database", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "mongodb.drop-database", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "dropDatabase() removes the current database completely. Backup first: mongodump --db=dbname --out=/path/to/backup"
 
   - id: destructive.database.mongodb.drop-collection
@@ -606,7 +604,7 @@ rules:
         - { field: command, op: regex_match, value: "\\.drop\\s*\\(\\s*\\)|\\.dropCollection\\s*\\(" }
         - { field: content, op: regex_match, value: "\\.drop\\s*\\(\\s*\\)|\\.dropCollection\\s*\\(" }
         - { field: allow, op: regex_match, value: "\\.drop\\s*\\(\\s*\\)|\\.dropCollection\\s*\\(" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "mongodb.drop-collection", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "mongodb.drop-collection", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "drop() removes the entire collection. Backup first: mongodump --db=dbname --collection=collname"
 
   - id: destructive.database.mongodb.delete-all
@@ -618,7 +616,7 @@ rules:
         - { field: command, op: regex_match, value: "\\.(?:remove|deleteMany)\\s*\\(\\s*\\{\\s*\\}\\s*\\)" }
         - { field: content, op: regex_match, value: "\\.(?:remove|deleteMany)\\s*\\(\\s*\\{\\s*\\}\\s*\\)" }
         - { field: allow, op: regex_match, value: "\\.(?:remove|deleteMany)\\s*\\(\\s*\\{\\s*\\}\\s*\\)" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "mongodb.delete-all", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "mongodb.delete-all", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "An empty filter {} matches ALL documents. Add filter criteria: db.collection.deleteMany({ status: 'expired' })"
 
   - id: destructive.database.mongodb.mongorestore-drop
@@ -630,7 +628,7 @@ rules:
         - { field: command, op: regex_match, value: "mongorestore\\s+.*--drop" }
         - { field: content, op: regex_match, value: "mongorestore\\s+.*--drop" }
         - { field: allow, op: regex_match, value: "mongorestore\\s+.*--drop" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "mongodb.mongorestore-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "mongodb.mongorestore-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "mongorestore --drop drops collections before restoring them. Restore to a different database first or remove --drop."
 
   - id: destructive.database.mongodb.collection-drop
@@ -642,29 +640,29 @@ rules:
         - { field: command, op: regex_match, value: "db\\.[a-zA-Z_][a-zA-Z0-9_]*\\.drop\\s*\\(" }
         - { field: content, op: regex_match, value: "db\\.[a-zA-Z_][a-zA-Z0-9_]*\\.drop\\s*\\(" }
         - { field: allow, op: regex_match, value: "db\\.[a-zA-Z_][a-zA-Z0-9_]*\\.drop\\s*\\(" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "mongodb.collection-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "mongodb.collection-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "db.<collection>.drop() deletes the collection and all documents. Backup first and check stats."
 
-  # ===== database.mysql 域(源 dcg database/mysql.rs,11 dest + 5 safe)=====
-  # severity 直接映射 dcg 枚举(drop-database/mysqladmin-drop/reset-master=Critical;
+  # ===== database.mysql 域(11 dest + 5 safe)=====
+  # severity 枚举(drop-database/mysqladmin-drop/reset-master=Critical;
   # drop-table/truncate-table/delete-without-where/mysqldump-add-drop-database/grant-all=High;
   # mysqldump-add-drop-table/drop-user=Medium;stdin-unverified=High)。
-  # dcg safe_pattern(5 条:select/show/describe/mysqldump-no-drop/mysql-select)针对整条
+  # safe_pattern(5 条:select/show/describe/mysqldump-no-drop/mysql-select)针对整条
   # 命令做 ^-anchored 匹配。sentinel 中 destructive 正则只匹配破坏性 SQL 关键字
   # (DROP DATABASE/TABLE/TRUNCATE/DELETE FROM/RESET MASTER 等),read 操作不匹配,
   # 故无 false-positive 风险;post_exclude 不适用。
-  # delete-without-where 正则要求表名后紧跟 ; 或 $,带 WHERE 子句不匹配(忠实 dcg 语义)。
+  # delete-without-where 正则要求表名后紧跟 ; 或 $,带 WHERE 子句不匹配。
 
   - id: destructive.database.mysql.stdin-unverified
     severity: high
     asset_type: hook
-    description: "mysql/mariadb receives indirect input that dcg cannot statically verify."
+    description: "mysql/mariadb receives indirect input that cannot be statically verified."
     match:
       or:
         - { field: command, op: regex_match, value: "(?!)" }
         - { field: content, op: regex_match, value: "(?!)" }
         - { field: allow, op: regex_match, value: "(?!)" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.stdin-unverified", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "mysql.stdin-unverified", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Materialize and review the exact SQL before piping or redirecting it into the client."
 
   - id: destructive.database.mysql.drop-database
@@ -676,7 +674,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bDROP\\s+DATABASE\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bDROP\\s+DATABASE\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bDROP\\s+DATABASE\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.drop-database", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "mysql.drop-database", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Backup first: mysqldump -h host -u user -p dbname > backup.sql. Verify: SHOW DATABASES LIKE 'dbname'."
 
   - id: destructive.database.mysql.drop-table
@@ -688,7 +686,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bDROP\\s+TABLE\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bDROP\\s+TABLE\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bDROP\\s+TABLE\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.drop-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "mysql.drop-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Backup table first: mysqldump dbname tablename > table_backup.sql. Preview: SELECT COUNT(*) FROM tablename."
 
   - id: destructive.database.mysql.truncate-table
@@ -700,7 +698,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)TRUNCATE\\s+(?:TABLE\\s+)?[a-zA-Z_]" }
         - { field: content, op: regex_match, value: "(?i)TRUNCATE\\s+(?:TABLE\\s+)?[a-zA-Z_]" }
         - { field: allow, op: regex_match, value: "(?i)TRUNCATE\\s+(?:TABLE\\s+)?[a-zA-Z_]" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.truncate-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "mysql.truncate-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "TRUNCATE is non-transactional in MySQL. Check row count first: SELECT COUNT(*) FROM tablename."
 
   - id: destructive.database.mysql.delete-without-where
@@ -712,7 +710,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)DELETE\\s+FROM\\s+(?:(?:[a-zA-Z_][a-zA-Z0-9_]*|`[^`]+`)(?:\\.(?:[a-zA-Z_][a-zA-Z0-9_]*|`[^`]+`))?)\\s*(?:;|$)" }
         - { field: content, op: regex_match, value: "(?i)DELETE\\s+FROM\\s+(?:(?:[a-zA-Z_][a-zA-Z0-9_]*|`[^`]+`)(?:\\.(?:[a-zA-Z_][a-zA-Z0-9_]*|`[^`]+`))?)\\s*(?:;|$)" }
         - { field: allow, op: regex_match, value: "(?i)DELETE\\s+FROM\\s+(?:(?:[a-zA-Z_][a-zA-Z0-9_]*|`[^`]+`)(?:\\.(?:[a-zA-Z_][a-zA-Z0-9_]*|`[^`]+`))?)\\s*(?:;|$)" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.delete-without-where", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "mysql.delete-without-where", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Add a WHERE clause: DELETE FROM tablename WHERE condition. Preview: SELECT COUNT(*) FROM tablename."
 
   - id: destructive.database.mysql.mysqladmin-drop
@@ -724,7 +722,7 @@ rules:
         - { field: command, op: regex_match, value: "mysqladmin\\s+.*drop\\b" }
         - { field: content, op: regex_match, value: "mysqladmin\\s+.*drop\\b" }
         - { field: allow, op: regex_match, value: "mysqladmin\\s+.*drop\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.mysqladmin-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "mysql.mysqladmin-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "mysqladmin drop is CLI equivalent of DROP DATABASE. Backup first: mysqldump dbname > backup.sql."
 
   - id: destructive.database.mysql.mysqldump-add-drop-database
@@ -736,7 +734,7 @@ rules:
         - { field: command, op: regex_match, value: "mysqldump\\s+.*--add-drop-database" }
         - { field: content, op: regex_match, value: "mysqldump\\s+.*--add-drop-database" }
         - { field: allow, op: regex_match, value: "mysqldump\\s+.*--add-drop-database" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.mysqldump-add-drop-database", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "mysql.mysqldump-add-drop-database", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Restore to a new database first. Without --add-drop-database: mysqldump dbname > backup.sql."
 
   - id: destructive.database.mysql.mysqldump-add-drop-table
@@ -748,7 +746,7 @@ rules:
         - { field: command, op: regex_match, value: "mysqldump\\s+.*--add-drop-table" }
         - { field: content, op: regex_match, value: "mysqldump\\s+.*--add-drop-table" }
         - { field: allow, op: regex_match, value: "mysqldump\\s+.*--add-drop-table" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.mysqldump-add-drop-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "mysql.mysqldump-add-drop-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Use --skip-add-drop-table to disable drops: mysqldump --skip-add-drop-table dbname > backup.sql."
 
   - id: destructive.database.mysql.grant-all
@@ -760,7 +758,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)GRANT\\s+ALL\\s+(?:PRIVILEGES\\s+)?ON\\s+\\*\\.\\*" }
         - { field: content, op: regex_match, value: "(?i)GRANT\\s+ALL\\s+(?:PRIVILEGES\\s+)?ON\\s+\\*\\.\\*" }
         - { field: allow, op: regex_match, value: "(?i)GRANT\\s+ALL\\s+(?:PRIVILEGES\\s+)?ON\\s+\\*\\.\\*" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.grant-all", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "mysql.grant-all", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Limit to specific database: GRANT ALL ON specific_db.* TO 'user'@'host'."
 
   - id: destructive.database.mysql.drop-user
@@ -772,7 +770,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bDROP\\s+USER\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bDROP\\s+USER\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bDROP\\s+USER\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.drop-user", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "mysql.drop-user", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Document privileges first: SHOW GRANTS FOR 'user'@'host'. Consider: ALTER USER 'user'@'host' ACCOUNT LOCK."
 
   - id: destructive.database.mysql.reset-master
@@ -784,27 +782,27 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bRESET\\s+MASTER\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bRESET\\s+MASTER\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bRESET\\s+MASTER\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "mysql.reset-master", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "mysql.reset-master", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Use PURGE BINARY LOGS BEFORE 'date' for selective cleanup. Check replicas first: SHOW SLAVE STATUS."
 
-  # ===== database.postgresql 域(源 dcg database/postgresql.rs,8 dest + 2 safe)=====
-  # severity 直接映射 dcg 枚举(drop-database/drop-schema/dropdb-cli=Critical;
+  # ===== database.postgresql 域(8 dest + 2 safe)=====
+  # severity 枚举(drop-database/drop-schema/dropdb-cli=Critical;
   # drop-table/truncate-table/delete-without-where/pg-dump-clean=High;
   # stdin-unverified=High)。
-  # dcg safe_pattern(2 条:pg-dump-no-clean/select-query)无需 post_exclude:
+  # safe_pattern(2 条:pg-dump-no-clean/select-query)无需 post_exclude:
   # destructive 正则只匹配破坏性 SQL 关键字或 --clean/-c 标志,read 操作不匹配。
-  # delete-without-where 正则支持 PostgreSQL 双引号标识符("Users"),忠实 dcg。
+  # delete-without-where 正则支持 PostgreSQL 双引号标识符("Users")。
 
   - id: destructive.database.postgresql.stdin-unverified
     severity: high
     asset_type: hook
-    description: "psql receives indirect input that dcg cannot statically verify."
+    description: "psql receives indirect input that cannot be statically verified."
     match:
       or:
         - { field: command, op: regex_match, value: "(?!)" }
         - { field: content, op: regex_match, value: "(?!)" }
         - { field: allow, op: regex_match, value: "(?!)" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "postgresql.stdin-unverified", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "postgresql.stdin-unverified", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Materialize and review the exact SQL before piping or redirecting it into psql."
 
   - id: destructive.database.postgresql.drop-database
@@ -816,7 +814,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bDROP\\s+DATABASE\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bDROP\\s+DATABASE\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bDROP\\s+DATABASE\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "postgresql.drop-database", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "postgresql.drop-database", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Backup first: pg_dump -h host -U user dbname > backup.sql. Verify: psql -c '\\l' | grep dbname."
 
   - id: destructive.database.postgresql.drop-table
@@ -828,7 +826,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bDROP\\s+TABLE\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bDROP\\s+TABLE\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bDROP\\s+TABLE\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "postgresql.drop-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "postgresql.drop-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Backup table first: pg_dump -t tablename dbname > table_backup.sql. Preview: SELECT COUNT(*) FROM tablename."
 
   - id: destructive.database.postgresql.drop-schema
@@ -840,7 +838,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bDROP\\s+SCHEMA\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bDROP\\s+SCHEMA\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bDROP\\s+SCHEMA\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "postgresql.drop-schema", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "postgresql.drop-schema", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "List schema contents first. Backup: pg_dump -n schema_name dbname > schema_backup.sql. Use RESTRICT to fail if not empty."
 
   - id: destructive.database.postgresql.truncate-table
@@ -852,7 +850,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bTRUNCATE\\s+(?:TABLE\\s+)?[a-zA-Z_]" }
         - { field: content, op: regex_match, value: "(?i)\\bTRUNCATE\\s+(?:TABLE\\s+)?[a-zA-Z_]" }
         - { field: allow, op: regex_match, value: "(?i)\\bTRUNCATE\\s+(?:TABLE\\s+)?[a-zA-Z_]" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "postgresql.truncate-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "postgresql.truncate-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Wrap in transaction: BEGIN; TRUNCATE tablename; -- verify, then COMMIT or ROLLBACK."
 
   - id: destructive.database.postgresql.delete-without-where
@@ -864,7 +862,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)DELETE\\s+FROM\\s+(?:(?:[a-zA-Z_][a-zA-Z0-9_]*|\"[^\"]+\")(?:\\.(?:[a-zA-Z_][a-zA-Z0-9_]*|\"[^\"]+\"))?)\\s*(?:;|$)" }
         - { field: content, op: regex_match, value: "(?i)DELETE\\s+FROM\\s+(?:(?:[a-zA-Z_][a-zA-Z0-9_]*|\"[^\"]+\")(?:\\.(?:[a-zA-Z_][a-zA-Z0-9_]*|\"[^\"]+\"))?)\\s*(?:;|$)" }
         - { field: allow, op: regex_match, value: "(?i)DELETE\\s+FROM\\s+(?:(?:[a-zA-Z_][a-zA-Z0-9_]*|\"[^\"]+\")(?:\\.(?:[a-zA-Z_][a-zA-Z0-9_]*|\"[^\"]+\"))?)\\s*(?:;|$)" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "postgresql.delete-without-where", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "postgresql.delete-without-where", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Add a WHERE clause: DELETE FROM tablename WHERE condition. Preview: SELECT COUNT(*) FROM tablename."
 
   - id: destructive.database.postgresql.dropdb-cli
@@ -876,7 +874,7 @@ rules:
         - { field: command, op: regex_match, value: "\\bdropdb\\s+" }
         - { field: content, op: regex_match, value: "\\bdropdb\\s+" }
         - { field: allow, op: regex_match, value: "\\bdropdb\\s+" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "postgresql.dropdb-cli", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "postgresql.dropdb-cli", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "dropdb is CLI equivalent of DROP DATABASE. Backup first: pg_dump dbname > backup.sql. List: psql -c '\\l'."
 
   - id: destructive.database.postgresql.pg-dump-clean
@@ -888,32 +886,32 @@ rules:
         - { field: command, op: regex_match, value: "pg_dump\\s+.*(?:--clean|-c\\b)" }
         - { field: content, op: regex_match, value: "pg_dump\\s+.*(?:--clean|-c\\b)" }
         - { field: allow, op: regex_match, value: "pg_dump\\s+.*(?:--clean|-c\\b)" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "postgresql.pg-dump-clean", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "postgresql.pg-dump-clean", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Restore to a new database first. Without --clean: pg_dump dbname > backup.sql."
 
-  # ===== database.redis 域(源 dcg database/redis.rs,14 dest + 6 safe)=====
-  # severity 直接映射 dcg 枚举(flushall/debug-crash/config-dangerous/
+  # ===== database.redis 域(14 dest + 6 safe)=====
+  # severity 枚举(flushall/debug-crash/config-dangerous/
   # config-set-maxmemory/config-set-maxmemory-policy=Critical;
   # flushdb/debug-sleep/shutdown/config-set-save/config-set-appendonly/
   # config-rewrite/mass-delete-pipeline=High;config-resetstat=Medium;
   # stdin-unverified=High)。
-  # dcg safe_pattern(6 条:get/scan/info/keys/dbsize/config-get)含 ^-anchored 负向
+  # safe_pattern(6 条:get/scan/info/keys/dbsize/config-get)含 ^-anchored 负向
   # lookahead,确保含破坏性关键字时不放行 read 操作。sentinel 中 destructive 正则
   # 只匹配破坏性命令(FLUSHALL/FLUSHDB/DEBUG SEGFAULT/CONFIG SET 等),
   # read 操作(GET/SCAN/INFO/KEYS/DBSIZE/CONFIG GET)不匹配,故无 false-positive。
-  # 正则完全按 dcg 源(无 redis-cli 前缀锚定),忠实 dcg keyword gate 语义:
-  # dcg 关键字含 FLUSHALL/FLUSHDB/DEBUG 等,含这些字的命令即触发包,正则再匹配。
+  # 正则无 redis-cli 前缀锚定,keyword gate 语义:
+  # 关键字含 FLUSHALL/FLUSHDB/DEBUG 等,含这些字的命令即触发包,正则再匹配。
 
   - id: destructive.database.redis.stdin-unverified
     severity: high
     asset_type: hook
-    description: "redis-cli receives indirect input that dcg cannot statically verify."
+    description: "redis-cli receives indirect input that cannot be statically verified."
     match:
       or:
         - { field: command, op: regex_match, value: "(?!)" }
         - { field: content, op: regex_match, value: "(?!)" }
         - { field: allow, op: regex_match, value: "(?!)" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.stdin-unverified", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "redis.stdin-unverified", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Materialize and review the exact Redis commands before piping or redirecting them into the client."
 
   - id: destructive.database.redis.flushall
@@ -925,7 +923,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bFLUSHALL\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bFLUSHALL\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bFLUSHALL\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.flushall", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "redis.flushall", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Check database sizes first: INFO keyspace / DBSIZE. Consider FLUSHDB (current db only) or DEL specific keys."
 
   - id: destructive.database.redis.flushdb
@@ -937,7 +935,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bFLUSHDB\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bFLUSHDB\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bFLUSHDB\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.flushdb", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "redis.flushdb", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Check current database and key count: CLIENT INFO / DBSIZE. Prefer audited per-key cleanup."
 
   - id: destructive.database.redis.config-resetstat
@@ -949,7 +947,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bCONFIG\\s+RESETSTAT\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bCONFIG\\s+RESETSTAT\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bCONFIG\\s+RESETSTAT\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.config-resetstat", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "redis.config-resetstat", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Capture INFO and monitoring data first, then run this manually only when resetting counters is intentional."
 
   - id: destructive.database.redis.mass-delete-pipeline
@@ -961,7 +959,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bredis-cli\\b.*\\b(?:KEYS\\b|--scan\\b|SCAN\\b).*\\|\\s*xargs\\s+(?:-\\S+(?:\\s+\\S+)?\\s+)*redis-cli(?:\\s+\\S+)*\\s+(?:DEL|UNLINK)\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bredis-cli\\b.*\\b(?:KEYS\\b|--scan\\b|SCAN\\b).*\\|\\s*xargs\\s+(?:-\\S+(?:\\s+\\S+)?\\s+)*redis-cli(?:\\s+\\S+)*\\s+(?:DEL|UNLINK)\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bredis-cli\\b.*\\b(?:KEYS\\b|--scan\\b|SCAN\\b).*\\|\\s*xargs\\s+(?:-\\S+(?:\\s+\\S+)?\\s+)*redis-cli(?:\\s+\\S+)*\\s+(?:DEL|UNLINK)\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.mass-delete-pipeline", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "redis.mass-delete-pipeline", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Inspect first: redis-cli --scan --pattern 'prefix:*' | head -50. Count and back up before selective deletion."
 
   - id: destructive.database.redis.debug-crash
@@ -973,7 +971,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bDEBUG\\s+(?:SEGFAULT|CRASH)\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bDEBUG\\s+(?:SEGFAULT|CRASH)\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bDEBUG\\s+(?:SEGFAULT|CRASH)\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.debug-crash", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "redis.debug-crash", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "These commands should be disabled in production: CONFIG SET debug-command no."
 
   - id: destructive.database.redis.debug-sleep
@@ -985,7 +983,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bDEBUG\\s+SLEEP\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bDEBUG\\s+SLEEP\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bDEBUG\\s+SLEEP\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.debug-sleep", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "redis.debug-sleep", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Disable in production: CONFIG SET debug-command no."
 
   - id: destructive.database.redis.shutdown
@@ -997,7 +995,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bSHUTDOWN\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bSHUTDOWN\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bSHUTDOWN\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.shutdown", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "redis.shutdown", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Check for unsaved changes: INFO persistence (rdb_changes_since_last_save). Ensure proper restart mechanism."
 
   - id: destructive.database.redis.config-dangerous
@@ -1009,7 +1007,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+(?:dir|dbfilename|slaveof|replicaof)\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+(?:dir|dbfilename|slaveof|replicaof)\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+(?:dir|dbfilename|slaveof|replicaof)\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.config-dangerous", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "redis.config-dangerous", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Disable in production: rename-command CONFIG \"\". Use ACLs to restrict these commands."
 
   - id: destructive.database.redis.config-set-maxmemory
@@ -1021,7 +1019,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+maxmemory\\b(?:\\s|$)" }
         - { field: content, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+maxmemory\\b(?:\\s|$)" }
         - { field: allow, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+maxmemory\\b(?:\\s|$)" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.config-set-maxmemory", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "redis.config-set-maxmemory", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Check current usage first: INFO memory (used_memory vs maxmemory). Prefer gradual reduction."
 
   - id: destructive.database.redis.config-set-maxmemory-policy
@@ -1033,7 +1031,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+maxmemory-policy\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+maxmemory-policy\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+maxmemory-policy\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.config-set-maxmemory-policy", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "redis.config-set-maxmemory-policy", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Check current policy: CONFIG GET maxmemory-policy. Ensure application handles new eviction behavior."
 
   - id: destructive.database.redis.config-set-save
@@ -1045,7 +1043,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+save\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+save\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+save\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.config-set-save", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "redis.config-set-save", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Check current persistence: CONFIG GET save / CONFIG GET appendonly. Ensure at least one persistence mechanism remains active."
 
   - id: destructive.database.redis.config-set-appendonly
@@ -1057,7 +1055,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+appendonly\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+appendonly\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bCONFIG\\s+SET\\s+appendonly\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.config-set-appendonly", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "redis.config-set-appendonly", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Check other persistence mechanisms: CONFIG GET save. Ensure at least one remains active."
 
   - id: destructive.database.redis.config-rewrite
@@ -1069,27 +1067,27 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bCONFIG\\s+REWRITE\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bCONFIG\\s+REWRITE\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bCONFIG\\s+REWRITE\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "redis.config-rewrite", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "redis.config-rewrite", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Review current runtime changes first: CONFIG GET *. Ensure no dangerous CONFIG SET changes are pending."
 
-  # ===== database.sqlite 域(源 dcg database/sqlite.rs,5 dest + 4 safe)=====
-  # severity 直接映射 dcg 枚举(drop-table/delete-without-where=Critical;
+  # ===== database.sqlite 域(5 dest + 4 safe)=====
+  # severity 枚举(drop-table/delete-without-where=Critical;
   # sqlite3-stdin=High;vacuum-into=Medium;stdin-unverified=High)。
-  # dcg safe_pattern(4 条:select-query/sqlite3-dot-command/dot-command-standalone/
+  # safe_pattern(4 条:select-query/sqlite3-dot-command/dot-command-standalone/
   # explain)无需 post_exclude:destructive 正则只匹配破坏性 SQL 关键字,
   # read 操作(SELECT/EXPLAIN/.schema/.tables/.dump/.backup)不匹配。
-  # delete-without-where 正则比 mysql/pg 简单(无引号标识符),忠实 dcg sqlite 源。
+  # delete-without-where 正则比 mysql/pg 简单(无引号标识符)。
 
   - id: destructive.database.sqlite.stdin-unverified
     severity: high
     asset_type: hook
-    description: "sqlite3 receives indirect input that dcg cannot statically verify."
+    description: "sqlite3 receives indirect input that cannot be statically verified."
     match:
       or:
         - { field: command, op: regex_match, value: "(?!)" }
         - { field: content, op: regex_match, value: "(?!)" }
         - { field: allow, op: regex_match, value: "(?!)" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "sqlite.stdin-unverified", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "sqlite.stdin-unverified", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Materialize and review the exact SQL before piping or redirecting it into sqlite3."
 
   - id: destructive.database.sqlite.drop-table
@@ -1101,7 +1099,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)\\bDROP\\s+TABLE\\b" }
         - { field: content, op: regex_match, value: "(?i)\\bDROP\\s+TABLE\\b" }
         - { field: allow, op: regex_match, value: "(?i)\\bDROP\\s+TABLE\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "sqlite.drop-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "sqlite.drop-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "View structure first: .schema tablename. Backup: .dump tablename or .backup before dropping."
 
   - id: destructive.database.sqlite.delete-without-where
@@ -1113,7 +1111,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)DELETE\\s+FROM\\s+[a-zA-Z_][a-zA-Z0-9_]*\\s*(?:;|$)" }
         - { field: content, op: regex_match, value: "(?i)DELETE\\s+FROM\\s+[a-zA-Z_][a-zA-Z0-9_]*\\s*(?:;|$)" }
         - { field: allow, op: regex_match, value: "(?i)DELETE\\s+FROM\\s+[a-zA-Z_][a-zA-Z0-9_]*\\s*(?:;|$)" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "sqlite.delete-without-where", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "sqlite.delete-without-where", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Check row count first: SELECT COUNT(*) FROM table. Add WHERE clause or use transactions: BEGIN; DELETE ...; verify; COMMIT/ROLLBACK."
 
   - id: destructive.database.sqlite.vacuum-into
@@ -1125,7 +1123,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)VACUUM\\s+INTO\\s+" }
         - { field: content, op: regex_match, value: "(?i)VACUUM\\s+INTO\\s+" }
         - { field: allow, op: regex_match, value: "(?i)VACUUM\\s+INTO\\s+" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "sqlite.vacuum-into", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "sqlite.vacuum-into", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Check if target file exists before running. Use a unique filename with timestamp."
 
   - id: destructive.database.sqlite.sqlite3-stdin
@@ -1137,17 +1135,17 @@ rules:
         - { field: command, op: regex_match, value: "sqlite3\\s+[^\\s]+\\s+<\\s+" }
         - { field: content, op: regex_match, value: "sqlite3\\s+[^\\s]+\\s+<\\s+" }
         - { field: allow, op: regex_match, value: "sqlite3\\s+[^\\s]+\\s+<\\s+" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "sqlite.sqlite3-stdin", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "sqlite.sqlite3-stdin", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Review the SQL file contents first. Use .backup before running. Wrap file contents in BEGIN/COMMIT."
 
-  # ===== database.snowflake 域(源 dcg database/snowflake.rs,50 dest + 0 safe)=====
+  # ===== database.snowflake 域(50 dest + 0 safe)=====
   # snowflake 特殊:50 条规则匹配 snow sql 内联 SQL。本 Task 先纯正则转写(匹配
   # SQL 关键字),Task 9 重写 SQL lexer 后改走语义求值。
-  # severity 直接映射 dcg 枚举(见各规则)。
-  # 语义规则(前 40):dcg 源 regex 为 (?!)(不可满足),由 scan_sql 语义层求值。
+  # severity 枚举(见各规则)。
+  # 语义规则(前 40):源 regex 为 (?!)(不可满足),由 scan_sql 语义层求值。
   # sentinel 纯正则版用 snow\b.*\b<SQL_KEYWORDS>\b 近似匹配,不精确(可能匹配
   # 注释/字符串中的关键字)但可接受 — Task 9 的 lexer 修复。
-  # CLI 规则(后 10):dcg 源 regex 直接转写(匹配 snow <subcommand> drop 形态)。
+  # CLI 规则(后 10):源 regex 直接转写(匹配 snow <subcommand> drop 形态)。
   # 0 safe_pattern → 无 post_exclude。
 
   # --- 语义规则(40 条)---
@@ -1155,13 +1153,13 @@ rules:
   - id: destructive.database.snowflake.stdin-unverified
     severity: high
     asset_type: hook
-    description: "snow sql receives SQL or a source that dcg cannot completely verify."
+    description: "snow sql receives SQL or a source that cannot be completely verified."
     match:
       or:
         - { field: command, op: regex_match, value: "(?!)" }
         - { field: content, op: regex_match, value: "(?!)" }
         - { field: allow, op: regex_match, value: "(?!)" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.stdin-unverified", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.stdin-unverified", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Materialize the exact rendered SQL, keep all !source inputs local, and review every statement before execution."
 
   - id: destructive.database.snowflake.drop-database
@@ -1173,7 +1171,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bDROP\\s+DATABASE\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bDROP\\s+DATABASE\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bDROP\\s+DATABASE\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.drop-database", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.drop-database", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Verify with SHOW DATABASES and consider CREATE DATABASE <name>_backup CLONE <name> first."
 
   - id: destructive.database.snowflake.drop-schema
@@ -1185,7 +1183,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bDROP\\s+SCHEMA\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bDROP\\s+SCHEMA\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bDROP\\s+SCHEMA\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.drop-schema", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.drop-schema", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Review schema contents, prefer RESTRICT, and clone the schema before broad DDL."
 
   - id: destructive.database.snowflake.drop-table
@@ -1197,7 +1195,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:TABLE|EXTERNAL\\s+TABLE|EVENT\\s+TABLE|HYBRID\\s+TABLE|ICEBERG\\s+TABLE)\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:TABLE|EXTERNAL\\s+TABLE|EVENT\\s+TABLE|HYBRID\\s+TABLE|ICEBERG\\s+TABLE)\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:TABLE|EXTERNAL\\s+TABLE|EVENT\\s+TABLE|HYBRID\\s+TABLE|ICEBERG\\s+TABLE)\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.drop-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.drop-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Verify the target, inspect retention, and create a zero-copy clone before dropping."
 
   - id: destructive.database.snowflake.replace-database
@@ -1209,7 +1207,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+DATABASE\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+DATABASE\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+DATABASE\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.replace-database", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.replace-database", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Create and validate a separate database or clone instead of replacing the active database."
 
   - id: destructive.database.snowflake.replace-schema
@@ -1221,7 +1219,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+SCHEMA\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+SCHEMA\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+SCHEMA\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.replace-schema", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.replace-schema", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Clone the schema and test the migration against the clone before changing production."
 
   - id: destructive.database.snowflake.replace-table
@@ -1233,7 +1231,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+(?:TABLE|EXTERNAL\\s+TABLE|EVENT\\s+TABLE|HYBRID\\s+TABLE|ICEBERG\\s+TABLE)\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+(?:TABLE|EXTERNAL\\s+TABLE|EVENT\\s+TABLE|HYBRID\\s+TABLE|ICEBERG\\s+TABLE)\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+(?:TABLE|EXTERNAL\\s+TABLE|EVENT\\s+TABLE|HYBRID\\s+TABLE|ICEBERG\\s+TABLE)\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.replace-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.replace-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Build and validate a separate table or clone, then use a reviewed cutover operation."
 
   - id: destructive.database.snowflake.truncate-table
@@ -1245,7 +1243,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bTRUNCATE\\s+(?:TABLE\\s+)?[a-zA-Z_]" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bTRUNCATE\\s+(?:TABLE\\s+)?[a-zA-Z_]" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bTRUNCATE\\s+(?:TABLE\\s+)?[a-zA-Z_]" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.truncate-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.truncate-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Preview the row count and clone the table before truncating."
 
   - id: destructive.database.snowflake.delete-all
@@ -1257,7 +1255,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bDELETE\\s+FROM\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bDELETE\\s+FROM\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bDELETE\\s+FROM\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.delete-all", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.delete-all", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Add a reviewed WHERE predicate and run the equivalent SELECT and COUNT first."
     # 注意:纯正则版不区分有无 WHERE,bounded-delete 规则单独处理带 WHERE 的 DELETE。
 
@@ -1270,7 +1268,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bUPDATE\\s+\\S+\\s+SET\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bUPDATE\\s+\\S+\\s+SET\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bUPDATE\\s+\\S+\\s+SET\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.update-all", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.update-all", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Add a reviewed WHERE predicate and preview the exact target rows first."
 
   - id: destructive.database.snowflake.drop-data-product
@@ -1282,7 +1280,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:VIEW|MATERIALIZED\\s+VIEW|DYNAMIC\\s+TABLE)\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:VIEW|MATERIALIZED\\s+VIEW|DYNAMIC\\s+TABLE)\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:VIEW|MATERIALIZED\\s+VIEW|DYNAMIC\\s+TABLE)\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.drop-data-product", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.drop-data-product", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Inspect dependencies and validate a replacement object before removing the live query surface."
 
   - id: destructive.database.snowflake.drop-ingestion-object
@@ -1294,7 +1292,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:STAGE|PIPE|STREAM|TASK)\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:STAGE|PIPE|STREAM|TASK)\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:STAGE|PIPE|STREAM|TASK)\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.drop-ingestion-object", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.drop-ingestion-object", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Inspect pipeline dependencies and state before removing an ingestion or scheduling object."
 
   - id: destructive.database.snowflake.drop-warehouse
@@ -1306,7 +1304,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bDROP\\s+WAREHOUSE\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bDROP\\s+WAREHOUSE\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bDROP\\s+WAREHOUSE\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.drop-warehouse", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.drop-warehouse", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Inspect warehouse consumers and prefer a reversible suspend after reviewing active workloads."
 
   - id: destructive.database.snowflake.drop-principal
@@ -1318,7 +1316,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:USER|ROLE|DATABASE\\s+ROLE|APPLICATION\\s+ROLE)\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:USER|ROLE|DATABASE\\s+ROLE|APPLICATION\\s+ROLE)\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:USER|ROLE|DATABASE\\s+ROLE|APPLICATION\\s+ROLE)\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.drop-principal", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.drop-principal", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Review grants and dependencies, then disable access reversibly before deleting a principal."
 
   - id: destructive.database.snowflake.drop-security-object
@@ -1330,7 +1328,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:INTEGRATION|API\\s+INTEGRATION|SECURITY\\s+INTEGRATION|STORAGE\\s+INTEGRATION|NOTIFICATION\\s+INTEGRATION|EXTERNAL\\s+ACCESS\\s+INTEGRATION|NETWORK\\s+POLICY|SHARE)\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:INTEGRATION|API\\s+INTEGRATION|SECURITY\\s+INTEGRATION|STORAGE\\s+INTEGRATION|NOTIFICATION\\s+INTEGRATION|EXTERNAL\\s+ACCESS\\s+INTEGRATION|NETWORK\\s+POLICY|SHARE)\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:INTEGRATION|API\\s+INTEGRATION|SECURITY\\s+INTEGRATION|STORAGE\\s+INTEGRATION|NOTIFICATION\\s+INTEGRATION|EXTERNAL\\s+ACCESS\\s+INTEGRATION|NETWORK\\s+POLICY|SHARE)\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.drop-security-object", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.drop-security-object", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Review all consumers, grants, and recovery options before removing the security or sharing object."
 
   - id: destructive.database.snowflake.drop-programmable-object
@@ -1342,7 +1340,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:FILE\\s+FORMAT|SEQUENCE|FUNCTION|EXTERNAL\\s+FUNCTION|PROCEDURE)\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:FILE\\s+FORMAT|SEQUENCE|FUNCTION|EXTERNAL\\s+FUNCTION|PROCEDURE)\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bDROP\\s+(?:FILE\\s+FORMAT|SEQUENCE|FUNCTION|EXTERNAL\\s+FUNCTION|PROCEDURE)\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.drop-programmable-object", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.drop-programmable-object", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Inspect object dependencies and preserve the current definition before removal."
 
   - id: destructive.database.snowflake.remove-stage-files
@@ -1354,7 +1352,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bREMOVE\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bREMOVE\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bREMOVE\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.remove-stage-files", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.remove-stage-files", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "LIST the exact stage path and verify retention or a backup before removing files."
 
   - id: destructive.database.snowflake.pause-pipe
@@ -1366,7 +1364,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bALTER\\s+PIPE\\b.*PIPE_EXECUTION_PAUSED\\s+TRUE\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bALTER\\s+PIPE\\b.*PIPE_EXECUTION_PAUSED\\s+TRUE\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bALTER\\s+PIPE\\b.*PIPE_EXECUTION_PAUSED\\s+TRUE\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.pause-pipe", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.pause-pipe", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Inspect pipe status and downstream freshness requirements before pausing ingestion."
 
   - id: destructive.database.snowflake.suspend-task
@@ -1378,7 +1376,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bALTER\\s+TASK\\b.*\\bSUSPEND\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bALTER\\s+TASK\\b.*\\bSUSPEND\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bALTER\\s+TASK\\b.*\\bSUSPEND\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.suspend-task", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.suspend-task", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Inspect task dependencies and active runs before suspending the task."
 
   - id: destructive.database.snowflake.execute-task
@@ -1390,7 +1388,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bEXECUTE\\s+TASK\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bEXECUTE\\s+TASK\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bEXECUTE\\s+TASK\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.execute-task", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.execute-task", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Inspect the task definition, owner privileges, graph dependencies, and active runs before forcing execution."
 
   - id: destructive.database.snowflake.suspend-warehouse
@@ -1402,7 +1400,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bALTER\\s+WAREHOUSE\\b.*\\bSUSPEND\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bALTER\\s+WAREHOUSE\\b.*\\bSUSPEND\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bALTER\\s+WAREHOUSE\\b.*\\bSUSPEND\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.suspend-warehouse", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.suspend-warehouse", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Inspect active queries and dependent tasks before suspending compute."
 
   - id: destructive.database.snowflake.broad-revoke
@@ -1414,7 +1412,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bREVOKE\\b.*\\b(?:ALL|ACCOUNT|OWNERSHIP|ROLE|DATABASE\\s+ROLE)\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bREVOKE\\b.*\\b(?:ALL|ACCOUNT|OWNERSHIP|ROLE|DATABASE\\s+ROLE)\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bREVOKE\\b.*\\b(?:ALL|ACCOUNT|OWNERSHIP|ROLE|DATABASE\\s+ROLE)\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.broad-revoke", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.broad-revoke", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Review current grants and identify every affected principal before revoking access."
 
   - id: destructive.database.snowflake.broad-grant
@@ -1426,7 +1424,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bGRANT\\b.*\\b(?:ALL\\b|ON\\s+ACCOUNT\\b|ROLE\\s+ACCOUNTADMIN\\b)" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bGRANT\\b.*\\b(?:ALL\\b|ON\\s+ACCOUNT\\b|ROLE\\s+ACCOUNTADMIN\\b)" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bGRANT\\b.*\\b(?:ALL\\b|ON\\s+ACCOUNT\\b|ROLE\\s+ACCOUNTADMIN\\b)" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.broad-grant", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.broad-grant", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Grant only the required privileges on specific objects to a least-privilege role."
 
   - id: destructive.database.snowflake.transfer-ownership
@@ -1438,7 +1436,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bGRANT\\s+OWNERSHIP\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bGRANT\\s+OWNERSHIP\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bGRANT\\s+OWNERSHIP\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.transfer-ownership", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.transfer-ownership", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Inventory outbound privileges and review COPY/REVOKE CURRENT GRANTS semantics before transferring ownership."
 
   - id: destructive.database.snowflake.alter-table-drop-column
@@ -1450,7 +1448,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bALTER\\s+TABLE\\b.*\\bDROP\\s+COLUMN\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bALTER\\s+TABLE\\b.*\\bDROP\\s+COLUMN\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bALTER\\s+TABLE\\b.*\\bDROP\\s+COLUMN\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.alter-table-drop-column", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.alter-table-drop-column", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Clone the table and validate all downstream consumers before removing the column."
 
   - id: destructive.database.snowflake.alter-table-swap
@@ -1462,7 +1460,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bALTER\\s+TABLE\\b.*\\bSWAP\\s+WITH\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bALTER\\s+TABLE\\b.*\\bSWAP\\s+WITH\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bALTER\\s+TABLE\\b.*\\bSWAP\\s+WITH\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.alter-table-swap", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.alter-table-swap", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Verify both fully qualified tables and compare row counts and schemas before swapping."
 
   - id: destructive.database.snowflake.insert-overwrite
@@ -1474,7 +1472,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bINSERT\\s+OVERWRITE\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bINSERT\\s+OVERWRITE\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bINSERT\\s+OVERWRITE\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.insert-overwrite", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.insert-overwrite", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Write to and validate a separate table before a reviewed cutover."
 
   - id: destructive.database.snowflake.copy-overwrite
@@ -1486,7 +1484,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bCOPY\\s+INTO\\b.*\\bOVERWRITE\\s*=\\s*TRUE\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bCOPY\\s+INTO\\b.*\\bOVERWRITE\\s*=\\s*TRUE\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bCOPY\\s+INTO\\b.*\\bOVERWRITE\\s*=\\s*TRUE\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.copy-overwrite", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.copy-overwrite", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Export to a versioned path and LIST the destination before copying."
 
   - id: destructive.database.snowflake.put-overwrite
@@ -1498,7 +1496,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bPUT\\b.*\\bOVERWRITE\\s*=\\s*TRUE\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bPUT\\b.*\\bOVERWRITE\\s*=\\s*TRUE\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bPUT\\b.*\\bOVERWRITE\\s*=\\s*TRUE\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.put-overwrite", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.put-overwrite", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Upload to a versioned stage path and LIST existing files first."
 
   - id: destructive.database.snowflake.replace-live-object
@@ -1510,7 +1508,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+(?:PIPE|STREAM|TASK|STAGE|INTEGRATION|API\\s+INTEGRATION|SECURITY\\s+INTEGRATION|STORAGE\\s+INTEGRATION|NOTIFICATION\\s+INTEGRATION|EXTERNAL\\s+ACCESS\\s+INTEGRATION|CATALOG\\s+INTEGRATION|SHARE|PROCEDURE|FUNCTION|EXTERNAL\\s+FUNCTION|VIEW|MATERIALIZED\\s+VIEW|DYNAMIC\\s+TABLE)\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+(?:PIPE|STREAM|TASK|STAGE|INTEGRATION|API\\s+INTEGRATION|SECURITY\\s+INTEGRATION|STORAGE\\s+INTEGRATION|NOTIFICATION\\s+INTEGRATION|EXTERNAL\\s+ACCESS\\s+INTEGRATION|CATALOG\\s+INTEGRATION|SHARE|PROCEDURE|FUNCTION|EXTERNAL\\s+FUNCTION|VIEW|MATERIALIZED\\s+VIEW|DYNAMIC\\s+TABLE)\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bCREATE\\s+OR\\s+REPLACE\\s+(?:PIPE|STREAM|TASK|STAGE|INTEGRATION|API\\s+INTEGRATION|SECURITY\\s+INTEGRATION|STORAGE\\s+INTEGRATION|NOTIFICATION\\s+INTEGRATION|EXTERNAL\\s+ACCESS\\s+INTEGRATION|CATALOG\\s+INTEGRATION|SHARE|PROCEDURE|FUNCTION|EXTERNAL\\s+FUNCTION|VIEW|MATERIALIZED\\s+VIEW|DYNAMIC\\s+TABLE)\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.replace-live-object", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.replace-live-object", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Create and validate a separate object before changing the live definition."
 
   - id: destructive.database.snowflake.bounded-delete
@@ -1522,7 +1520,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bDELETE\\s+FROM\\b.*\\bWHERE\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bDELETE\\s+FROM\\b.*\\bWHERE\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bDELETE\\s+FROM\\b.*\\bWHERE\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.bounded-delete", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.bounded-delete", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Run the equivalent SELECT and COUNT against a clone before deleting rows."
 
   - id: destructive.database.snowflake.bounded-update
@@ -1534,7 +1532,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bUPDATE\\s+\\S+\\s+SET\\b.*\\bWHERE\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bUPDATE\\s+\\S+\\s+SET\\b.*\\bWHERE\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bUPDATE\\s+\\S+\\s+SET\\b.*\\bWHERE\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.bounded-update", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.bounded-update", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Preview affected rows and validate the update against a clone first."
 
   - id: destructive.database.snowflake.merge-data
@@ -1546,7 +1544,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bMERGE\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bMERGE\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bMERGE\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.merge-data", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.merge-data", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Validate source uniqueness and preview matched and unmatched rows against a clone."
 
   - id: destructive.database.snowflake.copy-into-table
@@ -1558,7 +1556,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bCOPY\\s+INTO\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bCOPY\\s+INTO\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bCOPY\\s+INTO\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.copy-into-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.copy-into-table", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Validate the staged files and load into a clone or scratch table first."
     # 注意:纯正则版 copy-overwrite 与 copy-into-table 都匹配 COPY INTO,
     # 但 copy-overwrite 额外要求 OVERWRITE=TRUE。两者可能同时命中(可接受)。
@@ -1572,7 +1570,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bALTER\\s+(?:DATABASE|SCHEMA|TABLE)\\b.*\\bRENAME\\s+TO\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bALTER\\s+(?:DATABASE|SCHEMA|TABLE)\\b.*\\bRENAME\\s+TO\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bALTER\\s+(?:DATABASE|SCHEMA|TABLE)\\b.*\\bRENAME\\s+TO\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.rename-object", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.rename-object", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Inventory consumers and stage a coordinated cutover before renaming the object."
 
   - id: destructive.database.snowflake.alter-column
@@ -1584,7 +1582,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bALTER\\s+TABLE\\b.*\\b(?:ALTER|MODIFY)\\s+COLUMN\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bALTER\\s+TABLE\\b.*\\b(?:ALTER|MODIFY)\\s+COLUMN\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bALTER\\s+TABLE\\b.*\\b(?:ALTER|MODIFY)\\s+COLUMN\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.alter-column", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.alter-column", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Validate type, nullability, default, and policy changes against a clone first."
 
   - id: destructive.database.snowflake.warehouse-settings
@@ -1596,7 +1594,7 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bALTER\\s+WAREHOUSE\\b.*\\bSET\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bALTER\\s+WAREHOUSE\\b.*\\bSET\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bALTER\\s+WAREHOUSE\\b.*\\bSET\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.warehouse-settings", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.warehouse-settings", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Review active consumers, size, scaling, and auto-suspend settings before applying changes."
 
   - id: destructive.database.snowflake.abort-query
@@ -1608,19 +1606,19 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*!abort\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*!abort\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*!abort\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.abort-query", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.abort-query", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Inspect query history and confirm the exact query ID before aborting it."
 
   - id: destructive.database.snowflake.interactive-edit
     severity: high
     asset_type: hook
-    description: "!edit executes SQL modified in an external editor that dcg cannot inspect in advance."
+    description: "!edit executes SQL modified in an external editor that cannot be inspected in advance."
     match:
       or:
         - { field: command, op: regex_match, value: "snow\\b.*!edit\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*!edit\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*!edit\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.interactive-edit", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.interactive-edit", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Materialize the final SQL in a reviewed local file and execute it with snow sql -f."
 
   - id: destructive.database.snowflake.execute-immediate
@@ -1632,10 +1630,10 @@ rules:
         - { field: command, op: regex_match, value: "snow\\b.*\\bEXECUTE\\s+IMMEDIATE\\b" }
         - { field: content, op: regex_match, value: "snow\\b.*\\bEXECUTE\\s+IMMEDIATE\\b" }
         - { field: allow, op: regex_match, value: "snow\\b.*\\bEXECUTE\\s+IMMEDIATE\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.execute-immediate", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.execute-immediate", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Materialize and review the exact rendered SQL, including templates and variables, before executing it."
 
-  # --- CLI 规则(10 条,dcg 源 regex 直接转写)---
+  # --- CLI 规则(10 条,源 regex 直接转写)---
 
   - id: destructive.database.snowflake.cli-object-drop-database
     severity: critical
@@ -1646,7 +1644,7 @@ rules:
         - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+object\\s+drop\\s+(?:database|schema)\\b" }
         - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+object\\s+drop\\s+(?:database|schema)\\b" }
         - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+object\\s+drop\\s+(?:database|schema)\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-object-drop-database", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.cli-object-drop-database", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Verify with snow object list database / snow object describe. Consider CREATE DATABASE <name>_backup CLONE <name> first."
 
   - id: destructive.database.snowflake.cli-object-drop
@@ -1658,7 +1656,7 @@ rules:
         - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+object\\s+drop\\b" }
         - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+object\\s+drop\\b" }
         - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+object\\s+drop\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-object-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.cli-object-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Inspect first with snow object describe <type> <name>. --force skips the confirmation prompt."
 
   - id: destructive.database.snowflake.cli-stage-drop
@@ -1670,7 +1668,7 @@ rules:
         - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+stage\\s+drop\\b" }
         - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+stage\\s+drop\\b" }
         - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+stage\\s+drop\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-stage-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.cli-stage-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "List contents first with snow stage list-files <stage>. Dropped stages cannot be recovered."
 
   - id: destructive.database.snowflake.cli-stage-remove
@@ -1682,7 +1680,7 @@ rules:
         - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+stage\\s+remove\\b" }
         - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+stage\\s+remove\\b" }
         - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+stage\\s+remove\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-stage-remove", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.cli-stage-remove", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Preview with snow stage list-files <stage> and consider copying the files out first."
 
   - id: destructive.database.snowflake.cli-app-teardown
@@ -1694,7 +1692,7 @@ rules:
         - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+app\\s+teardown\\b" }
         - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+app\\s+teardown\\b" }
         - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+app\\s+teardown\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-app-teardown", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.cli-app-teardown", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "snow app teardown drops the application object and development artifacts. Anyone using the app loses access immediately."
 
   - id: destructive.database.snowflake.cli-app-version-drop
@@ -1706,7 +1704,7 @@ rules:
         - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+app\\s+version\\s+drop\\b" }
         - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+app\\s+version\\s+drop\\b" }
         - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+app\\s+version\\s+drop\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-app-version-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.cli-app-version-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Dropping an application package version prevents new installs and upgrades of that version."
 
   - id: destructive.database.snowflake.cli-snowpark-drop
@@ -1718,7 +1716,7 @@ rules:
         - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+snowpark\\s+drop\\b" }
         - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+snowpark\\s+drop\\b" }
         - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+snowpark\\s+drop\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-snowpark-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.cli-snowpark-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "snow snowpark drop function/procedure drops the named object. Downstream callers fail until redeployed."
 
   - id: destructive.database.snowflake.cli-spcs-drop
@@ -1730,7 +1728,7 @@ rules:
         - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+spcs\\s+(?:service|compute-pool|image-repository)\\s+drop\\b" }
         - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+spcs\\s+(?:service|compute-pool|image-repository)\\s+drop\\b" }
         - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+spcs\\s+(?:service|compute-pool|image-repository)\\s+drop\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-spcs-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.cli-spcs-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Dropping an SPCS service stops and removes the running workload. Dropping a compute pool removes compute for every service on it."
 
   - id: destructive.database.snowflake.cli-dbt-drop
@@ -1742,7 +1740,7 @@ rules:
         - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+dbt\\s+drop\\b" }
         - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+dbt\\s+drop\\b" }
         - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+dbt\\s+drop\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-dbt-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.cli-dbt-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "snow dbt drop removes the named DBT PROJECT object. Scheduled runs and tasks referencing it fail until redeployed."
 
   - id: destructive.database.snowflake.cli-dcm-drop
@@ -1754,22 +1752,22 @@ rules:
         - { field: command, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+dcm\\s+drop\\b" }
         - { field: content, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+dcm\\s+drop\\b" }
         - { field: allow, op: regex_match, value: "(?:^|[\\s;&|(])snow(?:\\s+--?[^\\s;&|]+(?:\\s+[^-\\s;&|][^\\s;&|]*)?)*\\s+dcm\\s+drop\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "snowflake.cli-dcm-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "snowflake.cli-dcm-drop", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "snow dcm drop removes the named DCM PROJECT object, including its deployment history."
 
-  # ===== database.supabase 域(源 dcg database/supabase.rs,18 dest + 35 safe)=====
-  # severity 直接映射 dcg 枚举(db-reset/db-push/migration-repair/migration-down/
+  # ===== database.supabase 域(18 dest + 35 safe)=====
+  # severity 枚举(db-reset/db-push/migration-repair/migration-down/
   # projects-delete/sso-remove=Critical;db-shell-destructive/migration-squash/
   # functions-delete/storage-rm/secrets-unset/orgs-delete/branches-delete/
   # domains-delete/vanity-subdomains-delete/network-restrictions-update/
   # config-push/stop-no-backup=High)。
-  # dcg safe_pattern(35 条)绝大多数匹配 read-only 子命令(db diff/lint/dump/
+  # safe_pattern(35 条)绝大多数匹配 read-only 子命令(db diff/lint/dump/
   # migration list/functions list/secrets list/storage ls 等),sentinel 中 destructive
   # 正则只匹配破坏性子命令(reset/push/delete/down/squash 等),read-only 不匹配,
   # 故无 false-positive 风险。
   # 例外:supabase-db-push-dry-run safe_pattern 匹配带 --dry-run 的 db push。
   # destructive 正则扩展 .* 消费完整命令(含 --dry-run),post_exclude 排除
-  # --dry-run(=true)形态。--dry-run=false / --no-dry-run 不被排除(忠实 dcg)。
+  # --dry-run(=true)形态。--dry-run=false / --no-dry-run 不被排除。
 
   - id: destructive.database.supabase.supabase-db-reset
     severity: critical
@@ -1780,7 +1778,7 @@ rules:
         - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+db\\s+reset" }
         - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+db\\s+reset" }
         - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+db\\s+reset" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-db-reset", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "supabase.supabase-db-reset", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Dump the database before resetting: supabase db dump -f backup.sql. Review differences: supabase db diff."
 
   - id: destructive.database.supabase.supabase-db-push
@@ -1794,7 +1792,7 @@ rules:
         - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+db\\s+push\\b.*" }
     post_exclude:
       - "--dry-run(?:=true)?(?:\\s|$)"
-    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-db-push", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "supabase.supabase-db-push", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Always preview: supabase db push --dry-run. Dump remote first: supabase db dump -f backup.sql --linked."
 
   - id: destructive.database.supabase.supabase-db-shell-destructive
@@ -1806,7 +1804,7 @@ rules:
         - { field: command, op: regex_match, value: "(?i)supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+db\\s+shell\\s+.*\\b(DROP|TRUNCATE|DELETE|ALTER)\\b" }
         - { field: content, op: regex_match, value: "(?i)supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+db\\s+shell\\s+.*\\b(DROP|TRUNCATE|DELETE|ALTER)\\b" }
         - { field: allow, op: regex_match, value: "(?i)supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+db\\s+shell\\s+.*\\b(DROP|TRUNCATE|DELETE|ALTER)\\b" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-db-shell-destructive", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "supabase.supabase-db-shell-destructive", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Dump the database before running destructive commands: supabase db dump -f backup.sql."
 
   - id: destructive.database.supabase.supabase-migration-repair
@@ -1818,7 +1816,7 @@ rules:
         - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+migration\\s+repair" }
         - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+migration\\s+repair" }
         - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+migration\\s+repair" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-migration-repair", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "supabase.supabase-migration-repair", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Review migration status: supabase migration list. Dump database before repairing: supabase db dump -f backup.sql."
 
   - id: destructive.database.supabase.supabase-migration-down
@@ -1830,7 +1828,7 @@ rules:
         - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+migration\\s+down" }
         - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+migration\\s+down" }
         - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+migration\\s+down" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-migration-down", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "supabase.supabase-migration-down", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Review applied migrations: supabase migration list. Dump database: supabase db dump -f backup.sql --linked."
 
   - id: destructive.database.supabase.supabase-migration-squash
@@ -1842,7 +1840,7 @@ rules:
         - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+migration\\s+squash" }
         - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+migration\\s+squash" }
         - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+migration\\s+squash" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-migration-squash", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "supabase.supabase-migration-squash", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Review migrations before squashing: supabase migration list. Dump database: supabase db dump -f backup.sql."
 
   - id: destructive.database.supabase.supabase-functions-delete
@@ -1854,7 +1852,7 @@ rules:
         - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+functions\\s+delete" }
         - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+functions\\s+delete" }
         - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+functions\\s+delete" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-functions-delete", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "supabase.supabase-functions-delete", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "List functions first: supabase functions list. Download source before deleting: supabase functions download {name}."
 
   - id: destructive.database.supabase.supabase-storage-rm
@@ -1866,7 +1864,7 @@ rules:
         - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+storage\\s+rm" }
         - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+storage\\s+rm" }
         - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+storage\\s+rm" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-storage-rm", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "supabase.supabase-storage-rm", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "List contents before deleting: supabase storage ls {path}. Copy files locally: supabase storage cp {path} ./backup/."
 
   - id: destructive.database.supabase.supabase-secrets-unset
@@ -1878,7 +1876,7 @@ rules:
         - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+secrets\\s+unset" }
         - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+secrets\\s+unset" }
         - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+secrets\\s+unset" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-secrets-unset", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "supabase.supabase-secrets-unset", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "List secrets before removing: supabase secrets list."
 
   - id: destructive.database.supabase.supabase-projects-delete
@@ -1890,7 +1888,7 @@ rules:
         - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+projects\\s+delete" }
         - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+projects\\s+delete" }
         - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+projects\\s+delete" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-projects-delete", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "supabase.supabase-projects-delete", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Dump the database before deleting: supabase db dump -f backup.sql --linked. Verify: supabase projects list."
 
   - id: destructive.database.supabase.supabase-orgs-delete
@@ -1902,7 +1900,7 @@ rules:
         - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+orgs\\s+delete" }
         - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+orgs\\s+delete" }
         - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+orgs\\s+delete" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-orgs-delete", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "supabase.supabase-orgs-delete", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "List organization projects first: supabase projects list. Verify: supabase orgs list."
 
   - id: destructive.database.supabase.supabase-branches-delete
@@ -1914,7 +1912,7 @@ rules:
         - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+branches\\s+delete" }
         - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+branches\\s+delete" }
         - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+branches\\s+delete" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-branches-delete", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "supabase.supabase-branches-delete", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Verify the branch first: supabase branches list. Inspect: supabase branches get --id {branch_id}."
 
   - id: destructive.database.supabase.supabase-domains-delete
@@ -1926,7 +1924,7 @@ rules:
         - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+domains\\s+delete" }
         - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+domains\\s+delete" }
         - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+domains\\s+delete" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-domains-delete", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "supabase.supabase-domains-delete", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Check current domain configuration: supabase domains get."
 
   - id: destructive.database.supabase.supabase-vanity-subdomains-delete
@@ -1938,7 +1936,7 @@ rules:
         - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+vanity-subdomains\\s+delete" }
         - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+vanity-subdomains\\s+delete" }
         - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+vanity-subdomains\\s+delete" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-vanity-subdomains-delete", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "supabase.supabase-vanity-subdomains-delete", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Check current configuration: supabase vanity-subdomains get."
 
   - id: destructive.database.supabase.supabase-network-restrictions-update
@@ -1950,7 +1948,7 @@ rules:
         - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+network-restrictions\\s+update" }
         - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+network-restrictions\\s+update" }
         - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+network-restrictions\\s+update" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-network-restrictions-update", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "supabase.supabase-network-restrictions-update", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Check current restrictions first: supabase network-restrictions get."
 
   - id: destructive.database.supabase.supabase-sso-remove
@@ -1962,7 +1960,7 @@ rules:
         - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+sso\\s+remove" }
         - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+sso\\s+remove" }
         - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+sso\\s+remove" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-sso-remove", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "supabase.supabase-sso-remove", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "List providers before removing: supabase sso list. Inspect: supabase sso show --id {provider_id}."
 
   - id: destructive.database.supabase.supabase-config-push
@@ -1974,7 +1972,7 @@ rules:
         - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+config\\s+push" }
         - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+config\\s+push" }
         - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+config\\s+push" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-config-push", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "supabase.supabase-config-push", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Review your local config.toml before pushing. Inspect remote state: supabase inspect db bloat."
 
   - id: destructive.database.supabase.supabase-stop-no-backup
@@ -1986,18 +1984,18 @@ rules:
         - { field: command, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+stop\\b.*--no-backup" }
         - { field: content, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+stop\\b.*--no-backup" }
         - { field: allow, op: regex_match, value: "supabase(?:\\s+--?\\S+(?:\\s+\\S+)?)*\\s+stop\\b.*--no-backup" }
-    metadata: { source: dcg, domain: database, dcg_rule_id: "supabase.supabase-stop-no-backup", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
+    metadata: { source: builtin, domain: database, rule_id: "supabase.supabase-stop-no-backup", keywords: [drop, truncate, delete, psql, mysql, redis-cli, snow] }
     remediation: "Use 'supabase stop' without --no-backup to preserve data backups."
 
   # ============================================================================
-  # containers 域(源 dcg containers/{docker,podman,compose}.rs)
+  # containers 域(docker/podman/compose)
   # ============================================================================
-  # severity 映射 dcg 源:docker=system/volume/network/rm/rmi/volume-rm/stop-all=High,
+  # severity 映射:docker=system/volume/network/rm/rmi/volume-rm/stop-all=High,
   #   image/container-prune=Medium;podman=volume-prune=Critical(注意与 docker 不同),
   #   其余与 docker 同(含 pod-prune=Medium);compose=down-volumes=Critical,
   #   down-rmi-all/rm-volumes=High,rm-force=Medium。
-  # 正则适配:[[:alnum:]_]→\w;YAML 双引号内 \\。dest 正则忠实 dcg 源(含 \\b.*?\\b 形态)。
-  # safe_pattern 映射:dcg safe 用 `^\s*docker\b...$` 全行锚定或 `(?=\s|$)` 尾锚点,
+  # 正则适配:[[:alnum:]_]→\w;YAML 双引号内 \\。dest 正则(含 \\b.*?\\b 形态)。
+  # safe_pattern 映射:safe 用 `^\s*docker\b...$` 全行锚定或 `(?=\s|$)` 尾锚点,
   #   dest regex 命中的 hitCtx 是子串(非全行),safe 无法匹配 → 无需 post_exclude。
   #   dest 自带 --dry-run 负向先行断言(npm-publish 等)同样不需 post_exclude。
 
@@ -2011,7 +2009,7 @@ rules:
         - { field: command, op: regex_match, value: "docker\\b.*?\\bsystem\\s+prune" }
         - { field: content, op: regex_match, value: "docker\\b.*?\\bsystem\\s+prune" }
         - { field: allow, op: regex_match, value: "docker\\b.*?\\bsystem\\s+prune" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "docker.system-prune", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "docker.system-prune", keywords: [docker, podman, compose] }
     remediation: "Preview first: docker system df. Safer: docker container prune or docker image prune."
 
   - id: destructive.containers.docker.volume-prune
@@ -2023,7 +2021,7 @@ rules:
         - { field: command, op: regex_match, value: "docker\\b.*?\\bvolume\\s+prune" }
         - { field: content, op: regex_match, value: "docker\\b.*?\\bvolume\\s+prune" }
         - { field: allow, op: regex_match, value: "docker\\b.*?\\bvolume\\s+prune" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "docker.volume-prune", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "docker.volume-prune", keywords: [docker, podman, compose] }
     remediation: "List first: docker volume ls -f dangling=true. Remove specific: docker volume rm <name>."
 
   - id: destructive.containers.docker.network-prune
@@ -2035,7 +2033,7 @@ rules:
         - { field: command, op: regex_match, value: "docker\\b.*?\\bnetwork\\s+prune" }
         - { field: content, op: regex_match, value: "docker\\b.*?\\bnetwork\\s+prune" }
         - { field: allow, op: regex_match, value: "docker\\b.*?\\bnetwork\\s+prune" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "docker.network-prune", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "docker.network-prune", keywords: [docker, podman, compose] }
     remediation: "List first: docker network ls. Remove specific: docker network rm <name>."
 
   - id: destructive.containers.docker.image-prune
@@ -2047,7 +2045,7 @@ rules:
         - { field: command, op: regex_match, value: "docker\\b.*?\\bimage\\s+prune" }
         - { field: content, op: regex_match, value: "docker\\b.*?\\bimage\\s+prune" }
         - { field: allow, op: regex_match, value: "docker\\b.*?\\bimage\\s+prune" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "docker.image-prune", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "docker.image-prune", keywords: [docker, podman, compose] }
     remediation: "Preview: docker images -f dangling=true. Remove specific: docker rmi <image>."
 
   - id: destructive.containers.docker.container-prune
@@ -2059,7 +2057,7 @@ rules:
         - { field: command, op: regex_match, value: "docker\\b.*?\\bcontainer\\s+prune" }
         - { field: content, op: regex_match, value: "docker\\b.*?\\bcontainer\\s+prune" }
         - { field: allow, op: regex_match, value: "docker\\b.*?\\bcontainer\\s+prune" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "docker.container-prune", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "docker.container-prune", keywords: [docker, podman, compose] }
     remediation: "Preview: docker ps -a -f status=exited. Remove specific: docker rm <container>."
 
   - id: destructive.containers.docker.rm-force
@@ -2071,7 +2069,7 @@ rules:
         - { field: command, op: regex_match, value: "docker\\b.*?\\brm\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
         - { field: content, op: regex_match, value: "docker\\b.*?\\brm\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
         - { field: allow, op: regex_match, value: "docker\\b.*?\\brm\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "docker.rm-force", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "docker.rm-force", keywords: [docker, podman, compose] }
     remediation: "Graceful shutdown first: docker stop <container>, then docker rm <container>."
 
   - id: destructive.containers.docker.rmi-force
@@ -2083,7 +2081,7 @@ rules:
         - { field: command, op: regex_match, value: "docker\\b.*?\\brmi\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
         - { field: content, op: regex_match, value: "docker\\b.*?\\brmi\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
         - { field: allow, op: regex_match, value: "docker\\b.*?\\brmi\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "docker.rmi-force", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "docker.rmi-force", keywords: [docker, podman, compose] }
     remediation: "Check usage: docker ps -a --filter ancestor=<image>. Safe remove: docker rmi <image>."
 
   - id: destructive.containers.docker.volume-rm
@@ -2095,7 +2093,7 @@ rules:
         - { field: command, op: regex_match, value: "docker\\b.*?\\bvolume\\s+rm" }
         - { field: content, op: regex_match, value: "docker\\b.*?\\bvolume\\s+rm" }
         - { field: allow, op: regex_match, value: "docker\\b.*?\\bvolume\\s+rm" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "docker.volume-rm", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "docker.volume-rm", keywords: [docker, podman, compose] }
     remediation: "Inspect first: docker volume inspect <volume>. Backup before removal."
 
   - id: destructive.containers.docker.stop-all
@@ -2107,11 +2105,11 @@ rules:
         - { field: command, op: regex_match, value: "docker\\b.*?\\b(?:stop|kill)\\s+\\$\\(" }
         - { field: content, op: regex_match, value: "docker\\b.*?\\b(?:stop|kill)\\s+\\$\\(" }
         - { field: allow, op: regex_match, value: "docker\\b.*?\\b(?:stop|kill)\\s+\\$\\(" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "docker.stop-all", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "docker.stop-all", keywords: [docker, podman, compose] }
     remediation: "Be specific: docker stop <name>. Or filter: docker stop $(docker ps -q -f name=myapp)."
 
-  # ===== containers.podman(源 containers/podman.rs,8 dest + 8 safe)=====
-  # 注意:podman volume-prune=Critical(docker 为 High,忠实 dcg 源)。
+  # ===== containers.podman(8 dest + 8 safe)=====
+  # 注意:podman volume-prune=Critical(docker 为 High)。
   - id: destructive.containers.podman.system-prune
     severity: high
     asset_type: hook
@@ -2121,7 +2119,7 @@ rules:
         - { field: command, op: regex_match, value: "podman\\b.*?\\bsystem\\s+prune" }
         - { field: content, op: regex_match, value: "podman\\b.*?\\bsystem\\s+prune" }
         - { field: allow, op: regex_match, value: "podman\\b.*?\\bsystem\\s+prune" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "podman.system-prune", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "podman.system-prune", keywords: [docker, podman, compose] }
     remediation: "Preview first: podman system df. Safer: podman container prune or podman image prune."
 
   - id: destructive.containers.podman.volume-prune
@@ -2133,7 +2131,7 @@ rules:
         - { field: command, op: regex_match, value: "podman\\b.*?\\bvolume\\s+prune" }
         - { field: content, op: regex_match, value: "podman\\b.*?\\bvolume\\s+prune" }
         - { field: allow, op: regex_match, value: "podman\\b.*?\\bvolume\\s+prune" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "podman.volume-prune", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "podman.volume-prune", keywords: [docker, podman, compose] }
     remediation: "List first: podman volume ls. Remove specific: podman volume rm <name>."
 
   - id: destructive.containers.podman.pod-prune
@@ -2145,7 +2143,7 @@ rules:
         - { field: command, op: regex_match, value: "podman\\b.*?\\bpod\\s+prune" }
         - { field: content, op: regex_match, value: "podman\\b.*?\\bpod\\s+prune" }
         - { field: allow, op: regex_match, value: "podman\\b.*?\\bpod\\s+prune" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "podman.pod-prune", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "podman.pod-prune", keywords: [docker, podman, compose] }
     remediation: "List first: podman pod ps -a. Remove specific: podman pod rm <pod>."
 
   - id: destructive.containers.podman.image-prune
@@ -2157,7 +2155,7 @@ rules:
         - { field: command, op: regex_match, value: "podman\\b.*?\\bimage\\s+prune" }
         - { field: content, op: regex_match, value: "podman\\b.*?\\bimage\\s+prune" }
         - { field: allow, op: regex_match, value: "podman\\b.*?\\bimage\\s+prune" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "podman.image-prune", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "podman.image-prune", keywords: [docker, podman, compose] }
     remediation: "Preview: podman images -f dangling=true. Remove specific: podman rmi <image>."
 
   - id: destructive.containers.podman.container-prune
@@ -2169,7 +2167,7 @@ rules:
         - { field: command, op: regex_match, value: "podman\\b.*?\\bcontainer\\s+prune" }
         - { field: content, op: regex_match, value: "podman\\b.*?\\bcontainer\\s+prune" }
         - { field: allow, op: regex_match, value: "podman\\b.*?\\bcontainer\\s+prune" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "podman.container-prune", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "podman.container-prune", keywords: [docker, podman, compose] }
     remediation: "Preview: podman ps -a -f status=exited. Remove specific: podman rm <container>."
 
   - id: destructive.containers.podman.rm-force
@@ -2181,7 +2179,7 @@ rules:
         - { field: command, op: regex_match, value: "podman\\b.*?\\brm\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
         - { field: content, op: regex_match, value: "podman\\b.*?\\brm\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
         - { field: allow, op: regex_match, value: "podman\\b.*?\\brm\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "podman.rm-force", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "podman.rm-force", keywords: [docker, podman, compose] }
     remediation: "Graceful shutdown first: podman stop <container>, then podman rm <container>."
 
   - id: destructive.containers.podman.rmi-force
@@ -2193,7 +2191,7 @@ rules:
         - { field: command, op: regex_match, value: "podman\\b.*?\\brmi\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
         - { field: content, op: regex_match, value: "podman\\b.*?\\brmi\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
         - { field: allow, op: regex_match, value: "podman\\b.*?\\brmi\\s+.*(?:-[a-zA-Z0-9]*f|--force)" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "podman.rmi-force", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "podman.rmi-force", keywords: [docker, podman, compose] }
     remediation: "Check usage: podman ps -a --filter ancestor=<image>. Safe remove: podman rmi <image>."
 
   - id: destructive.containers.podman.volume-rm
@@ -2205,11 +2203,11 @@ rules:
         - { field: command, op: regex_match, value: "podman\\b.*?\\bvolume\\s+rm" }
         - { field: content, op: regex_match, value: "podman\\b.*?\\bvolume\\s+rm" }
         - { field: allow, op: regex_match, value: "podman\\b.*?\\bvolume\\s+rm" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "podman.volume-rm", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "podman.volume-rm", keywords: [docker, podman, compose] }
     remediation: "Inspect first: podman volume inspect <volume>. Backup before removal."
 
-  # ===== containers.compose(源 containers/compose.rs,4 dest + 7 safe)=====
-  # dcg 源正则含 -v\\b(--volumes 也匹配)。YAML 双引号内 \\\\b→\\\\b。
+  # ===== containers.compose(4 dest + 7 safe)=====
+  # 源正则含 -v\\b(--volumes 也匹配)。YAML 双引号内 \\\\b→\\\\b。
   - id: destructive.containers.compose.down-volumes
     severity: critical
     asset_type: hook
@@ -2219,7 +2217,7 @@ rules:
         - { field: command, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+down\\s+.*(?:-v\\b|--volumes)" }
         - { field: content, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+down\\s+.*(?:-v\\b|--volumes)" }
         - { field: allow, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+down\\s+.*(?:-v\\b|--volumes)" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "compose.down-volumes", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "compose.down-volumes", keywords: [docker, podman, compose] }
     remediation: "Use 'docker-compose down' without -v to preserve volumes. Stop only: docker-compose stop."
 
   - id: destructive.containers.compose.down-rmi-all
@@ -2231,7 +2229,7 @@ rules:
         - { field: command, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+down\\s+.*--rmi\\s+all" }
         - { field: content, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+down\\s+.*--rmi\\s+all" }
         - { field: allow, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+down\\s+.*--rmi\\s+all" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "compose.down-rmi-all", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "compose.down-rmi-all", keywords: [docker, podman, compose] }
     remediation: "Use 'docker-compose down' to preserve images. Or --rmi local for untagged only."
 
   - id: destructive.containers.compose.rm-volumes
@@ -2243,7 +2241,7 @@ rules:
         - { field: command, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+rm\\s+.*(?:-v\\b|--volumes)" }
         - { field: content, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+rm\\s+.*(?:-v\\b|--volumes)" }
         - { field: allow, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+rm\\s+.*(?:-v\\b|--volumes)" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "compose.rm-volumes", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "compose.rm-volumes", keywords: [docker, podman, compose] }
     remediation: "Use 'docker-compose rm' without -v to preserve volumes."
 
   - id: destructive.containers.compose.rm-force
@@ -2255,20 +2253,20 @@ rules:
         - { field: command, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+rm\\s+.*(?:-f\\b|--force)" }
         - { field: content, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+rm\\s+.*(?:-f\\b|--force)" }
         - { field: allow, op: regex_match, value: "(?:docker-compose|docker\\s+compose)\\s+rm\\s+.*(?:-f\\b|--force)" }
-    metadata: { source: dcg, domain: containers, dcg_rule_id: "compose.rm-force", keywords: [docker, podman, compose] }
+    metadata: { source: builtin, domain: containers, rule_id: "compose.rm-force", keywords: [docker, podman, compose] }
     remediation: "Graceful shutdown first: docker-compose stop. Then docker-compose rm (asks confirmation)."
 
   # ============================================================================
-  # package_managers 域(源 dcg package_managers/mod.rs,18 dest + 18 safe)
+  # package_managers 域(18 dest + 18 safe)
   # ============================================================================
-  # dcg 源全部用 3-arg destructive_pattern!(name, re, reason) → 默认 High severity。
-  # 正则忠实 dcg 源:含 --dry-run 负向先行断言(npm/yarn/pnpm/cargo/poetry-publish)、
+  # 全部用 3-arg destructive_pattern!(name, re, reason) → 默认 High severity。
+  # 正则:含 --dry-run 负向先行断言(npm/yarn/pnpm/cargo/poetry-publish)、
   # (?=\\s|\$) 尾锚点(uninstall/unpublish/yank/remove 等防包名误匹配)。
   # safe_pattern 用 (?=\\s|\$) 尾锚点 + 中间 flag-value 限定,dest regex 命中 hitCtx
   # 含破坏子命令(publish/uninstall/...) → safe 的尾锚点要求后接 \\s|\$,而 dest hitCtx
   # 的破坏子命令后通常有参数 → safe 不匹配 → 无需 post_exclude。
   # publish 类规则自带 (?!.*--dry-run(?:=true)?(?:\\s|\$)) 负向先行断言,--dry-run=false
-  # /--no-dry-run 不被排除(忠实 dcg safe_pattern 语义),亦不需 post_exclude。
+  # /--no-dry-run 不被排除,亦不需 post_exclude。
 
   - id: destructive.package_managers.npm-publish
     severity: high
@@ -2279,7 +2277,7 @@ rules:
         - { field: command, op: regex_match, value: "\\bnpm\\b.*?\\bpublish\\b(?!.*--dry-run(?:=true)?(?:\\s|$))" }
         - { field: content, op: regex_match, value: "\\bnpm\\b.*?\\bpublish\\b(?!.*--dry-run(?:=true)?(?:\\s|$))" }
         - { field: allow, op: regex_match, value: "\\bnpm\\b.*?\\bpublish\\b(?!.*--dry-run(?:=true)?(?:\\s|$))" }
-    metadata: { source: dcg, domain: package_managers, dcg_rule_id: "package_managers.npm-publish", keywords: [npm, pip, yarn, pnpm] }
+    metadata: { source: builtin, domain: package_managers, rule_id: "package_managers.npm-publish", keywords: [npm, pip, yarn, pnpm] }
     remediation: "Always preview: npm publish --dry-run. Verify package.json name/version before publish."
 
   - id: destructive.package_managers.yarn-publish
@@ -2291,7 +2289,7 @@ rules:
         - { field: command, op: regex_match, value: "\\byarn\\b.*?\\bpublish\\b(?!.*--dry-run(?:=true)?(?:\\s|$))" }
         - { field: content, op: regex_match, value: "\\byarn\\b.*?\\bpublish\\b(?!.*--dry-run(?:=true)?(?:\\s|$))" }
         - { field: allow, op: regex_match, value: "\\byarn\\b.*?\\bpublish\\b(?!.*--dry-run(?:=true)?(?:\\s|$))" }
-    metadata: { source: dcg, domain: package_managers, dcg_rule_id: "package_managers.yarn-publish", keywords: [npm, pip, yarn, pnpm] }
+    metadata: { source: builtin, domain: package_managers, rule_id: "package_managers.yarn-publish", keywords: [npm, pip, yarn, pnpm] }
     remediation: "Always preview: yarn publish --dry-run. Verify package.json name/version before publish."
 
   - id: destructive.package_managers.pnpm-publish
@@ -2303,7 +2301,7 @@ rules:
         - { field: command, op: regex_match, value: "\\bpnpm\\b.*?\\bpublish\\b(?!.*--dry-run(?:=true)?(?:\\s|$))" }
         - { field: content, op: regex_match, value: "\\bpnpm\\b.*?\\bpublish\\b(?!.*--dry-run(?:=true)?(?:\\s|$))" }
         - { field: allow, op: regex_match, value: "\\bpnpm\\b.*?\\bpublish\\b(?!.*--dry-run(?:=true)?(?:\\s|$))" }
-    metadata: { source: dcg, domain: package_managers, dcg_rule_id: "package_managers.pnpm-publish", keywords: [npm, pip, yarn, pnpm] }
+    metadata: { source: builtin, domain: package_managers, rule_id: "package_managers.pnpm-publish", keywords: [npm, pip, yarn, pnpm] }
     remediation: "Always preview: pnpm publish --dry-run. Verify package.json before publish."
 
   - id: destructive.package_managers.npm-unpublish
@@ -2315,7 +2313,7 @@ rules:
         - { field: command, op: regex_match, value: "\\bnpm\\b.*?\\bunpublish(?=\\s|$)" }
         - { field: content, op: regex_match, value: "\\bnpm\\b.*?\\bunpublish(?=\\s|$)" }
         - { field: allow, op: regex_match, value: "\\bnpm\\b.*?\\bunpublish(?=\\s|$)" }
-    metadata: { source: dcg, domain: package_managers, dcg_rule_id: "package_managers.npm-unpublish", keywords: [npm, pip, yarn, pnpm] }
+    metadata: { source: builtin, domain: package_managers, rule_id: "package_managers.npm-unpublish", keywords: [npm, pip, yarn, pnpm] }
     remediation: "Consider deprecation instead: npm deprecate <pkg>@<ver>."
 
   - id: destructive.package_managers.pip-uninstall
@@ -2327,7 +2325,7 @@ rules:
         - { field: command, op: regex_match, value: "\\bpip(?:3)?\\b.*?\\buninstall(?=\\s|$)" }
         - { field: content, op: regex_match, value: "\\bpip(?:3)?\\b.*?\\buninstall(?=\\s|$)" }
         - { field: allow, op: regex_match, value: "\\bpip(?:3)?\\b.*?\\buninstall(?=\\s|$)" }
-    metadata: { source: dcg, domain: package_managers, dcg_rule_id: "package_managers.pip-uninstall", keywords: [npm, pip, yarn, pnpm] }
+    metadata: { source: builtin, domain: package_managers, rule_id: "package_managers.pip-uninstall", keywords: [npm, pip, yarn, pnpm] }
     remediation: "List first: pip list / pip show <pkg>. Verify dependents before removing."
 
   - id: destructive.package_managers.pip-url
@@ -2339,7 +2337,7 @@ rules:
         - { field: command, op: regex_match, value: "\\bpip\\b.*?\\binstall\\s+.*(?:https?://|git\\+)" }
         - { field: content, op: regex_match, value: "\\bpip\\b.*?\\binstall\\s+.*(?:https?://|git\\+)" }
         - { field: allow, op: regex_match, value: "\\bpip\\b.*?\\binstall\\s+.*(?:https?://|git\\+)" }
-    metadata: { source: dcg, domain: package_managers, dcg_rule_id: "package_managers.pip-url", keywords: [npm, pip, yarn, pnpm] }
+    metadata: { source: builtin, domain: package_managers, rule_id: "package_managers.pip-url", keywords: [npm, pip, yarn, pnpm] }
     remediation: "Prefer installing from PyPI. If URL needed, verify checksum and source reputation."
 
   - id: destructive.package_managers.pip-system
@@ -2351,7 +2349,7 @@ rules:
         - { field: command, op: regex_match, value: "\\bpip\\b.*?\\binstall\\s+.*--(?:system|target\\s*/usr)" }
         - { field: content, op: regex_match, value: "\\bpip\\b.*?\\binstall\\s+.*--(?:system|target\\s*/usr)" }
         - { field: allow, op: regex_match, value: "\\bpip\\b.*?\\binstall\\s+.*--(?:system|target\\s*/usr)" }
-    metadata: { source: dcg, domain: package_managers, dcg_rule_id: "package_managers.pip-system", keywords: [npm, pip, yarn, pnpm] }
+    metadata: { source: builtin, domain: package_managers, rule_id: "package_managers.pip-system", keywords: [npm, pip, yarn, pnpm] }
     remediation: "Use virtualenv or --user. Avoid --system which can break OS package management."
 
   - id: destructive.package_managers.apt-remove
@@ -2363,7 +2361,7 @@ rules:
         - { field: command, op: regex_match, value: "\\bapt(?:-get)?\\b.*?\\b(?:remove|purge|autoremove)(?=\\s|$)" }
         - { field: content, op: regex_match, value: "\\bapt(?:-get)?\\b.*?\\b(?:remove|purge|autoremove)(?=\\s|$)" }
         - { field: allow, op: regex_match, value: "\\bapt(?:-get)?\\b.*?\\b(?:remove|purge|autoremove)(?=\\s|$)" }
-    metadata: { source: dcg, domain: package_managers, dcg_rule_id: "package_managers.apt-remove", keywords: [npm, pip, yarn, pnpm] }
+    metadata: { source: builtin, domain: package_managers, rule_id: "package_managers.apt-remove", keywords: [npm, pip, yarn, pnpm] }
     remediation: "List first: apt list --installed. Use --dry-run / -s to simulate."
 
   - id: destructive.package_managers.yum-remove
@@ -2375,7 +2373,7 @@ rules:
         - { field: command, op: regex_match, value: "\\b(?:yum|dnf)\\b.*?\\b(?:remove|erase|autoremove)(?=\\s|$)" }
         - { field: content, op: regex_match, value: "\\b(?:yum|dnf)\\b.*?\\b(?:remove|erase|autoremove)(?=\\s|$)" }
         - { field: allow, op: regex_match, value: "\\b(?:yum|dnf)\\b.*?\\b(?:remove|erase|autoremove)(?=\\s|$)" }
-    metadata: { source: dcg, domain: package_managers, dcg_rule_id: "package_managers.yum-remove", keywords: [npm, pip, yarn, pnpm] }
+    metadata: { source: builtin, domain: package_managers, rule_id: "package_managers.yum-remove", keywords: [npm, pip, yarn, pnpm] }
     remediation: "List first: dnf list installed. Use --assumeno to require confirmation."
 
   - id: destructive.package_managers.cargo-publish
@@ -2387,7 +2385,7 @@ rules:
         - { field: command, op: regex_match, value: "\\bcargo\\b.*?\\bpublish\\b(?!.*--dry-run(?:=true)?(?:\\s|$))" }
         - { field: content, op: regex_match, value: "\\bcargo\\b.*?\\bpublish\\b(?!.*--dry-run(?:=true)?(?:\\s|$))" }
         - { field: allow, op: regex_match, value: "\\bcargo\\b.*?\\bpublish\\b(?!.*--dry-run(?:=true)?(?:\\s|$))" }
-    metadata: { source: dcg, domain: package_managers, dcg_rule_id: "package_managers.cargo-publish", keywords: [npm, pip, yarn, pnpm] }
+    metadata: { source: builtin, domain: package_managers, rule_id: "package_managers.cargo-publish", keywords: [npm, pip, yarn, pnpm] }
     remediation: "Always preview: cargo publish --dry-run. Verify Cargo.toml before publish."
 
   - id: destructive.package_managers.cargo-yank
@@ -2399,7 +2397,7 @@ rules:
         - { field: command, op: regex_match, value: "\\bcargo\\b.*?\\byank(?=\\s|$)" }
         - { field: content, op: regex_match, value: "\\bcargo\\b.*?\\byank(?=\\s|$)" }
         - { field: allow, op: regex_match, value: "\\bcargo\\b.*?\\byank(?=\\s|$)" }
-    metadata: { source: dcg, domain: package_managers, dcg_rule_id: "package_managers.cargo-yank", keywords: [npm, pip, yarn, pnpm] }
+    metadata: { source: builtin, domain: package_managers, rule_id: "package_managers.cargo-yank", keywords: [npm, pip, yarn, pnpm] }
     remediation: "Consider yanking only versions with known critical issues. Document migration."
 
   - id: destructive.package_managers.gem-push
@@ -2411,7 +2409,7 @@ rules:
         - { field: command, op: regex_match, value: "\\bgem\\b.*?\\bpush\\b" }
         - { field: content, op: regex_match, value: "\\bgem\\b.*?\\bpush\\b" }
         - { field: allow, op: regex_match, value: "\\bgem\\b.*?\\bpush\\b" }
-    metadata: { source: dcg, domain: package_managers, dcg_rule_id: "package_managers.gem-push", keywords: [npm, pip, yarn, pnpm] }
+    metadata: { source: builtin, domain: package_managers, rule_id: "package_managers.gem-push", keywords: [npm, pip, yarn, pnpm] }
     remediation: "Verify gemspec and version before push. Consider gem push --dry-run if supported."
 
   - id: destructive.package_managers.brew-uninstall
@@ -2423,7 +2421,7 @@ rules:
         - { field: command, op: regex_match, value: "\\bbrew\\b.*?\\b(?:uninstall|remove)(?=\\s|$)" }
         - { field: content, op: regex_match, value: "\\bbrew\\b.*?\\b(?:uninstall|remove)(?=\\s|$)" }
         - { field: allow, op: regex_match, value: "\\bbrew\\b.*?\\b(?:uninstall|remove)(?=\\s|$)" }
-    metadata: { source: dcg, domain: package_managers, dcg_rule_id: "package_managers.brew-uninstall", keywords: [npm, pip, yarn, pnpm] }
+    metadata: { source: builtin, domain: package_managers, rule_id: "package_managers.brew-uninstall", keywords: [npm, pip, yarn, pnpm] }
     remediation: "Check dependents first: brew uses <pkg>. Or brew deps --reverse <pkg>."
 
   - id: destructive.package_managers.poetry-publish
@@ -2435,7 +2433,7 @@ rules:
         - { field: command, op: regex_match, value: "\\bpoetry\\b.*?\\bpublish\\b(?!.*--dry-run(?:=true)?(?:\\s|$))" }
         - { field: content, op: regex_match, value: "\\bpoetry\\b.*?\\bpublish\\b(?!.*--dry-run(?:=true)?(?:\\s|$))" }
         - { field: allow, op: regex_match, value: "\\bpoetry\\b.*?\\bpublish\\b(?!.*--dry-run(?:=true)?(?:\\s|$))" }
-    metadata: { source: dcg, domain: package_managers, dcg_rule_id: "package_managers.poetry-publish", keywords: [npm, pip, yarn, pnpm] }
+    metadata: { source: builtin, domain: package_managers, rule_id: "package_managers.poetry-publish", keywords: [npm, pip, yarn, pnpm] }
     remediation: "Always preview: poetry publish --dry-run. Verify pyproject.toml before publish."
 
   - id: destructive.package_managers.poetry-remove
@@ -2447,7 +2445,7 @@ rules:
         - { field: command, op: regex_match, value: "\\bpoetry\\b.*?\\bremove(?=\\s|$)" }
         - { field: content, op: regex_match, value: "\\bpoetry\\b.*?\\bremove(?=\\s|$)" }
         - { field: allow, op: regex_match, value: "\\bpoetry\\b.*?\\bremove(?=\\s|$)" }
-    metadata: { source: dcg, domain: package_managers, dcg_rule_id: "package_managers.poetry-remove", keywords: [npm, pip, yarn, pnpm] }
+    metadata: { source: builtin, domain: package_managers, rule_id: "package_managers.poetry-remove", keywords: [npm, pip, yarn, pnpm] }
     remediation: "Check dependents first: poetry show --tree. Verify before removing."
 
   - id: destructive.package_managers.maven-deploy
@@ -2459,7 +2457,7 @@ rules:
         - { field: command, op: regex_match, value: "\\b(?:mvn|mvnw)\\b.*?\\bdeploy\\b" }
         - { field: content, op: regex_match, value: "\\b(?:mvn|mvnw)\\b.*?\\bdeploy\\b" }
         - { field: allow, op: regex_match, value: "\\b(?:mvn|mvnw)\\b.*?\\bdeploy\\b" }
-    metadata: { source: dcg, domain: package_managers, dcg_rule_id: "package_managers.maven-deploy", keywords: [npm, pip, yarn, pnpm] }
+    metadata: { source: builtin, domain: package_managers, rule_id: "package_managers.maven-deploy", keywords: [npm, pip, yarn, pnpm] }
     remediation: "Verify distributionManagement in pom.xml. Consider deploy:dry-run if supported."
 
   - id: destructive.package_managers.maven-release-perform
@@ -2471,7 +2469,7 @@ rules:
         - { field: command, op: regex_match, value: "\\b(?:mvn|mvnw)\\s+.*release:perform\\b" }
         - { field: content, op: regex_match, value: "\\b(?:mvn|mvnw)\\s+.*release:perform\\b" }
         - { field: allow, op: regex_match, value: "\\b(?:mvn|mvnw)\\s+.*release:perform\\b" }
-    metadata: { source: dcg, domain: package_managers, dcg_rule_id: "package_managers.maven-release-perform", keywords: [npm, pip, yarn, pnpm] }
+    metadata: { source: builtin, domain: package_managers, rule_id: "package_managers.maven-release-perform", keywords: [npm, pip, yarn, pnpm] }
     remediation: "Verify release.properties and pom version. Run release:prepare first."
 
   - id: destructive.package_managers.gradle-publish
@@ -2483,8 +2481,27 @@ rules:
         - { field: command, op: regex_match, value: "\\b(?:gradle|gradlew)\\s+.*\\bpublish\\b" }
         - { field: content, op: regex_match, value: "\\b(?:gradle|gradlew)\\s+.*\\bpublish\\b" }
         - { field: allow, op: regex_match, value: "\\b(?:gradle|gradlew)\\s+.*\\bpublish\\b" }
-    metadata: { source: dcg, domain: package_managers, dcg_rule_id: "package_managers.gradle-publish", keywords: [npm, pip, yarn, pnpm] }
+    metadata: { source: builtin, domain: package_managers, rule_id: "package_managers.gradle-publish", keywords: [npm, pip, yarn, pnpm] }
     remediation: "Always preview: gradle publish --dry-run. Verify build.gradle publishing config."
+
+  # ===== 测试探针(Stage R2,长期保留)=====
+  # 用途:验证 sentinel guard 运行时拦截是否真实生效。echo SENTINEL_INTERCEPT_TEST 是绝对
+  # 无害命令(仅打印一个标记字符串),即使拦截失效也无副作用,适合反复验证拦截链路。
+  # 命中 → deny(rule_id=destructive.test.intercept-probe),证明 guard hook → 规则评估 →
+  # deny JSON → 拦截记录落盘 → 前端 /intercept 页 全链路通。
+  # 验证方法:echo '{"tool_input":{"command":"echo SENTINEL_INTERCEPT_TEST"}}' | ./bin/sentinel guard
+  #   或在装了 hook 的 Claude 会话里让 Claude 跑该命令 → 应被 deny。
+  - id: destructive.test.intercept-probe
+    severity: medium
+    asset_type: hook
+    description: "sentinel guard 拦截探针:echo SENTINEL_INTERCEPT_TEST 是安全测试命令,命中即证明运行时拦截生效。"
+    match:
+      or:
+        - { field: command, op: regex_match, value: "\\becho\\s+SENTINEL_INTERCEPT_TEST\\b" }
+        - { field: content, op: regex_match, value: "\\becho\\s+SENTINEL_INTERCEPT_TEST\\b" }
+        - { field: allow, op: regex_match, value: "\\becho\\s+SENTINEL_INTERCEPT_TEST\\b" }
+    metadata: { source: sentinel, domain: test, rule_id: "test.intercept-probe", keywords: [echo, SENTINEL_INTERCEPT_TEST] }
+    remediation: "这是 sentinel 拦截探针命令(非真实破坏操作)。若非测试场景误触发,检查是否误发了该标记字符串。"
 
 # ============================================================================
 # 规则统计(Stage R1,Task 12 实测 grep -c):
@@ -2500,14 +2517,14 @@ rules:
 #   合计:189 dest + 26 post_exclude = 215 条规则(含 safe→post_exclude 映射)
 #
 # safe_pattern 说明:
-#   - dcg safe_pattern 中有对应 dest 规则的,映射为该 dest 规则的 post_exclude(26 条)。
+#   - safe_pattern 中有对应 dest 规则的,映射为该 dest 规则的 post_exclude(26 条)。
 #   - 无对应 dest 规则的 safe_pattern(如 pg-dump-no-clean / sqlite-explain)不转 post_exclude:
 #     destructive 正则本身只匹配破坏性 SQL 关键字,安全形态不会命中,无需排除。
 #   - containers / package_managers 的 safe_pattern 多为 --dry-run,dest 正则自带
 #     (?!.*--dry-run(?!\\s*=\\s*(?:false|0|no))) 负向先行断言,不需 post_exclude。
 #
 # 语义解析器(Go 重写,Task 8-10):git / filesystem(rm) / snowflake(SQL lexer)。
-#   - 关卡 1(正则前):Deny → 跳过该域正则,语义 finding 用 semantic.<dcg_rule_id>;
+#   - 关卡 1(正则前):Deny → 跳过该域正则,语义 finding 用 semantic.<rule_id>;
 #     Safe → 跳过该规则(防误报,如 git commit -m "rm -rf /" 数据区字面量)。
 #   - 关卡 2(正则后):Safe 复核丢弃正则误报。
 #   - 其余 2 域(containers / package_managers / database.mongodb 等)纯正则 fallback。

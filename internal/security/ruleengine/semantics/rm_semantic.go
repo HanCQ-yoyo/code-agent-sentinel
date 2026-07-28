@@ -12,7 +12,7 @@ import (
 var rmCmdRe = regexp.MustCompile(`(?:^|[^\w-])(?:sudo\s+(?:\S+\s+)*|env\s+(?:[A-Za-z_]\w*=\S+\s+)+)?rm\b\s*(.*)`)
 
 // RmSemanticDecision 对 rm 命令做 argv 语义解析。
-// 对照 dcg core/filesystem.rs:529 parse_rm_command(精简:flag 扫描 + interactive + 管道 stdin)。
+// 精简实现:flag 扫描 + interactive + 管道 stdin。
 //
 // 解决正则无法区分的场景:
 //   - rm -i file → Safe(interactive,用户逐个确认)
@@ -108,7 +108,7 @@ func RmSemanticDecision(command string) SemanticResult {
 	}
 
 	// interactive + 管道 stdin 自动确认 → 危险(绕过 interactive 屏障)。
-	// RuleID 用 filesystem.rm-rf-general:dcg 规则集无专门的 pipe-interactive 规则,
+	// RuleID 用 filesystem.rm-rf-general:规则集无专门的 pipe-interactive 规则,
 	// 复用通用 rm 破坏性规则(Task 11 接入时语义 Deny 会抑制正则重复报)。
 	if interactive && hasPipeStdin {
 		return SemanticResult{Decision: Deny, RuleID: "filesystem.rm-rf-general", Reason: "rm -i 管道 stdin 自动确认(绕过 interactive 屏障)"}
