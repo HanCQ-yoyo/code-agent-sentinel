@@ -51,6 +51,29 @@ test.beforeAll(async () => {
       tool_name: 'Bash',
     }),
   )
+  // Stage R3(Task 13):预写一条带 confidence/matched_span 的 deny 记录,
+  // 供「拦截日志」页 confidence 列 e2e 断言。R3 evaluate 按片段级 span 分类给置信度
+  // (high=命中落 executed 区 / low=命中落 span 边界 → 降级)。此处预写 high + matched_span,
+  // 验证前端 Intercept 页 confidence 列(Tag 渲染)与详情抽屉 matched_span 区可见。
+  // 命令选 "git commit -m \"x\" && rm -rf /"(R3 I1 闭合经典样例:链式拆分后 rm -rf / 命中)。
+  writeFileSync(
+    '/tmp/sentinel-e2e-home/.claude-sentinel/intercept/e2e-deny-chain-rmrfroot.json',
+    JSON.stringify({
+      id: 'e2e-deny-chain-rmrfroot',
+      timestamp: '2026-07-29T09:12:15.123456789+08:00',
+      agent_protocol: 'claude',
+      working_dir: '/tmp/sentinel-e2e-home',
+      command: 'git commit -m "x" && rm -rf /',
+      outcome: 'deny',
+      rule_id: 'filesystem.rm-rf-root-home',
+      severity: 'critical',
+      reason: 'rm -rf /(递归强制删根/home)— 链式片段命中',
+      eval_duration_us: 91203,
+      tool_name: 'Bash',
+      confidence: 'high',
+      matched_span: 'rm -rf /',
+    }),
+  )
   // Task 9:加 memory 资产(CLAUDE.md → memory 类型),供 md 资产预览断言;
   // 含 fenced bash 代码块,同时间接覆盖 MonacoBlock 在预览中的渲染。
   // Task 21:追加注入触发内容(匹配 injection.hidden-instruction.memory 规则),
@@ -647,5 +670,57 @@ test('拦截日志页展示 deny 记录并打开详情抽屉', async ({ page }) 
   await expect(page.locator('.ant-drawer-content').getByText(/递归强制删根/)).toBeVisible({ timeout: 10000 })
   // 抽屉内 rule_id 区(预写 filesystem.rm-rf-root-home)应渲染为 code 文本。
   await expect(page.locator('.ant-drawer-content').getByText('filesystem.rm-rf-root-home')).toBeVisible({ timeout: 10000 })
+})
+
+// Stage R3(Task 13):拦截日志页 confidence 列 + matched_span 详情展示。
+// beforeAll 已预写 e2e-deny-chain-rmrfroot.json(command="git commit -m \"x\" && rm -rf /",
+// confidence="high",matched_span="rm -rf /")。本用例断言:
+//   1. confidence 列渲染(Tag 文本 "high" 可见);
+//   2. 点行开抽屉后 matched_span 区可见(命中片段文本 "rm -rf /" 出现在抽屉 pre 块)。
+// 纯文本断言(不截图)。中文 fixture(beforeEach 注入 zh)。
+test('拦截日志页 confidence 列与 matched_span 详情(Stage R3)', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  await page.getByRole('menuitem', { name: /拦截/ }).click()
+  await expect(page).toHaveURL(/\/intercept/)
+  // 链式命令记录(command="git commit -m \"x\" && rm -rf /")应在列表中可见。
+  // 用 includes 匹配(Typography.Text code 渲染整条命令,含引号/&&);.first() 防多行匹配歧义。
+  await expect(page.getByText(/git commit.*&&.*rm -rf \//).first()).toBeVisible({ timeout: 10000 })
+  // confidence 列:Intercept.tsx L103-109 渲染 <Tag color={confidenceColor[v]}>{v}</Tag>。
+  // 预写记录 confidence="high" → 绿色 Tag,文本 "high" 应可见(列表中)。
+  await expect(page.locator('.ant-tag').filter({ hasText: 'high' }).first()).toBeVisible({ timeout: 10000 })
+  // 点该行 → openDetail 拉详情 → 抽屉打开。用行内命令文本作为点击锚点。
+  await page.getByText(/git commit.*&&.*rm -rf \//).first().click()
+  await expect(page.locator('.ant-drawer-title', { hasText: '拦截详情' })).toBeVisible({ timeout: 10000 })
+  // 抽屉 matched_span 区:Intercept.tsx L188-195 渲染 <pre>{detail.matched_span}</pre>,
+  // 前置 label = t('intercept.matchedSpan') = 「命中片段」(zh.json L130)。
+  await expect(page.locator('.ant-drawer-content').getByText('命中片段', { exact: true })).toBeVisible({ timeout: 10000 })
+  // 抽屉内 matched_span 文本("rm -rf /")应在 <pre> 块中渲染。用 .ant-drawer-content 限定范围,
+  // 避免误匹配列表行中的命令文本(.first() 取抽屉内首个)。
+  await expect(page.locator('.ant-drawer-content pre').getByText('rm -rf /', { exact: true }).first()).toBeVisible({ timeout: 10000 })
+  // 抽屉 confidence 区:label 「置信度」+ Tag "high" 应可见。
+  await expect(page.locator('.ant-drawer-content').getByText('置信度', { exact: true })).toBeVisible({ timeout: 10000 })
+  await expect(page.locator('.ant-drawer-content').locator('.ant-tag').filter({ hasText: 'high' }).first()).toBeVisible({ timeout: 10000 })
+})
+
+// Stage R3(Task 13):Settings → 拦截配置 tab → GuardConfig 编辑面板。
+// 断言 Mode 单选(严格/宽松)可见,验证前端 SettingsGuard 组件(Task 12)已挂载到 Settings 页。
+// 不实际切换保存(避免污染 guard config 影响其他测试),仅断言 UI 渲染。
+test('Settings 拦截配置面板展示 Mode 单选(Stage R3)', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  await page.getByRole('menuitem', { name: /设置/i }).click()
+  // Settings Tabs 顺序:agents → schedules → detectors-rules → guard → allowlist。
+  // 默认激活首个 agents tab,需显式点「拦截配置」切过去(SettingsGuard 只在该 tab 渲染)。
+  await page.getByRole('tab', { name: /拦截配置/ }).click()
+  // SettingsGuard Card:title = t('guard.title') = 「拦截配置」(zh.json L171)。
+  // Card 内 Form.Item label = t('guard.mode') = 「安全模式」(zh.json L174)。
+  await expect(page.getByText('安全模式', { exact: true })).toBeVisible({ timeout: 10000 })
+  // Mode Radio.Group:两个 Radio(strict/lenient),label 分别为
+  // t('guard.modeStrict') = 「严格(不确定时拦截)」/ t('guard.modeLenient') = 「宽松(不确定时询问)」。
+  // antd Radio 渲染 <label class="ant-radio-wrapper">+ <input type=radio> + <span>文本</span>。
+  await expect(page.getByRole('radio', { name: /严格/ })).toBeVisible({ timeout: 10000 })
+  await expect(page.getByRole('radio', { name: /宽松/ })).toBeVisible({ timeout: 10000 })
+  // 总开关 + 放行清单启用开关也应可见(验证完整面板渲染,非仅 Mode)。
+  await expect(page.getByText('总开关', { exact: true })).toBeVisible({ timeout: 5000 })
+  await expect(page.getByText('放行清单启用', { exact: true })).toBeVisible({ timeout: 5000 })
 })
 

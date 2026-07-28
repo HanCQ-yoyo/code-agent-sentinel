@@ -12,6 +12,26 @@
 
 ---
 
+## 运行时拦截增强(Stage R3:span 感知 + I1 闭合 + Mode + allowlist + Codex 适配)
+
+- **合入日期**:2026-07-29(Stage R3 运行时拦截增强分支 `feat/dcg-stage-r3-runtime-enhance`,待合并后回填 main SHA)
+
+### 升级
+
+- **span 分类器(引号/注释/命令替换状态机)**:`ruleengine/spans.go` 把命令文本切成 `executed`(实际执行区)/`data`(引号/heredoc 内容)/`comment` 三类 span,破坏性正则只在 executed 区匹配,抑制数据区字面量误报(`echo "rm -rf /"` 不再误 deny)。手写状态机(不引 shell parser),覆盖单/双引号、`$(...)` 命令替换、`${var}` 引用(已知限制:双引号 `$(...)` 嵌套不闭合按数据区处理,安全侧)。
+- **链式命令拆分(I1 闭合)**:`ruleengine/split.go` 按 `&&`/`;`/`||`/`|` 链式操作符拆命令为独立片段,每片段独立评估。闭合 Stage R2 遗留的链式绕过缺口(`git commit -m "x" && rm -rf /` 现被 deny,R2 只看整条命令首段导致漏判)。替换 R2 粗版 `splitCommandSegments`,链式拆分器带引号/转义感知(不在引号内拆)。
+- **置信度降级 + 用户可见安全模式(strict/lenient)**:`ruleengine/confidence.go` 按命中落 span 位置打分——`high`(命中落 executed 区)/ `low`(命中落 span 边界 → 降级)/ `unknown`。`GuardConfig.Mode`(`strict` 默认 / `lenient`)驱动降级:strict 模式不确定时 deny,lenient 模式不确定时 ask(询问用户)。高置信度命中两模式都 deny(安全不变量 #1)。
+- **放行清单 allowlist(独立文件 + 精确双匹配)**:`allowlist.yaml` 独立文件存储(与 guard config 解耦),`AllowlistStore` 原子读写。`Matches` 精确命令匹配,normalize 前后双比对(原始命令 + 反混淆后命令),不支持通配(防 `rm -rf *` 通配放行漏洞)。命中的命令即便命中规则也放行;`allowlist_enabled` 开关控制管线是否做放行匹配。
+- **静态层同治**:`RulesDetector` 静态检测器复用 span 分类 + 片段拆分(`split.go` + `spans.go`),静态扫描命令类资产时同样按片段独立评估,与运行时 guard 走同一拆分/分类路径(I1 静态闭合)。
+- **前端管控面前移**:`SettingsGuard` 编辑面板(Mode strict/lenient 单选 + 总开关 + 放行清单启用 + 评估预算 + 命令长度上限,`PUT /api/guard/config` 热生效)+ `SettingsAllowlist` 放行清单编辑面板(增删条目,`GET/POST/DELETE /api/guard/allowlist`)+ Intercept 页 confidence 列(Tag 着色 high=绿/low=橙/unknown=灰)+ matched_span 详情区(命中片段文本)。
+- **Codex CLI 协议适配**:`sentinel guard` 按 `turn_id` 字段自动消歧 Claude/Codex 协议(Codex payload 带 `turn_id`,Claude 不带)。Codex 发最小 deny payload(仅 `hookEventName`/`permissionDecision`/`permissionDecisionReason` 三字段,防 strict parser 拒扩展字段);低置信度 ask 退化为 deny(Codex 不发 ask,安全不变量 #5)。`sentinel setup` 自动安装 `~/.codex/hooks.json` PreToolUse Bash hook(`InstallCodexHook`/`UninstallCodexHook`),与 Claude `~/.claude/settings.json` 并行。
+
+### 修复
+
+- 无(新功能分支,基于 Stage R2 增量;Stage R2 既有问题已在 R2 版本条目记录)。
+
+---
+
 ## 运行时风险指令拦截(Stage R2:Claude-only 最小版)
 
 - **合入日期**:2026-07-28(Stage R2 运行时拦截分支,merge `824ef55` 到 main)
