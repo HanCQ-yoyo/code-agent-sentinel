@@ -14,7 +14,7 @@
 
 ## 运行时风险指令拦截(Stage R2:Claude-only 最小版)
 
-- **合入日期**:2026-07-28(分支 `feat/dcg-stage-r2-runtime-intercept`,待合并后回填 main SHA)
+- **合入日期**:2026-07-28(分支 `feat/dcg-stage-r2-runtime-intercept`,merge `824ef55` 到 main)
 
 ### 升级
 
