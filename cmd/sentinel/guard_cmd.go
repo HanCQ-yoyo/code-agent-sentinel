@@ -75,12 +75,18 @@ func guardMain(stdin io.Reader, stdout, stderr io.Writer, cfgPath, deadlineFlag 
 		}
 	}
 	home, _ := os.UserHomeDir()
-	return runGuard(stdin, stdout, stderr, cfg, home, debug)
+	allowlistPath := filepath.Join(home, ".claude-sentinel", "allowlist.yaml")
+	allowlist := config.NewAllowlistStore(allowlistPath)
+	return runGuard(stdin, stdout, stderr, cfg, home, allowlist, debug)
 }
 
-// runGuard 是 7 步管线核心(纯函数,可测:注入 stdin/stdout/stderr/cfg/home)。
-// 步骤:① 解析 → ② 递归短路 → ③ quick-reject → ④ normalize → ⑤ heredoc → ⑥ pack 评估 → ⑦ 决策输出+记录。
-func runGuard(stdin io.Reader, stdout, stderr io.Writer, cfg *config.Config, home string, debug bool) error {
+// runGuard 是 7 步管线核心(纯函数,可测:注入 stdin/stdout/stderr/cfg/home/allowlist)。
+// 步骤:① 解析 → ② 递归短路 → ③ quick-reject → ④ normalize → ⑤ 链式拆分 + 片段评估
+//
+//	→ ⑤' heredoc 兜底 → ⑦ allowlist 双匹配 → ⑧ 决策聚合 → ⑨ 超时兜底 → ⑩ 输出+记录。
+//
+// R3 重构:evaluate 从「单命令 wholeSafe」改为「片段级 span+语义+正则+confidence」(I1 闭合)。
+func runGuard(stdin io.Reader, stdout, stderr io.Writer, cfg *config.Config, home string, allowlist *config.AllowlistStore, debug bool) error {
 	guard := cfg.Guard
 	if !guard.EnabledEffective() {
 		// 拦截关闭 → allow 全部(空 stdout)
@@ -94,7 +100,7 @@ func runGuard(stdin io.Reader, stdout, stderr io.Writer, cfg *config.Config, hom
 	maxBytes := guard.MaxBytesOrDefault()
 	input, err := intercept.ParseHookInput(stdin, maxBytes)
 	if err != nil {
-		// fail-open:解析失败 → allow(空 stdout)。仅写 warn 记录。
+		// fail-open:解析失败 → allow(空 stdout)。仅写 stderr 日志(不写记录:无合法 input)。
 		fmt.Fprintf(stderr, "guard parse fail-open: %v\n", err)
 		return nil
 	}
@@ -114,9 +120,13 @@ func runGuard(stdin io.Reader, stdout, stderr io.Writer, cfg *config.Config, hom
 	start := time.Now()
 	store := intercept.NewStore(filepath.Join(home, ".claude-sentinel", "intercept"))
 
+	// 协议探测(① 的延伸):按 stdin 的 tool_name + turn_id 消歧 Claude/Codex。
+	// 评估管线对两协议完全相同,仅 ⑩ 输出形态不同(见 WriteDecision 的 proto 参数)。
+	proto := intercept.DetectProtocol(input.ToolName, input.TurnID)
+
 	// 加载规则(单一来源:LoadBuiltin + Validate)
-	// LoadBuiltin 返回 (rules, combos, errs) 三元(见 brief discrepancy 1):
-	// combos 是跨资产组合规则,guard 单命令不需要,丢弃;errs 仅记录不阻断。
+	// LoadBuiltin 返回 (rules, combos, errs) 三元:combos 是跨资产组合规则,guard 单命令
+	// 不需要,丢弃;errs 仅记录不阻断。
 	rules, _, loadErrs := ruleengine.LoadBuiltin()
 	rules, _ = ruleengine.Validate(rules)
 	if debug {
@@ -129,95 +139,309 @@ func runGuard(stdin io.Reader, stdout, stderr io.Writer, cfg *config.Config, hom
 		if debug {
 			fmt.Fprintf(stderr, "quick-reject: allow %q\n", cmd)
 		}
-		writeRecord(store, makeRecord(input, "allow", "", "", "", start))
+		writeRecord(store, makeRecord(input, proto, "allow", "", "", "", start))
 		return nil
 	}
 
-	// ⑥ pack 评估(对 normalize 后命令 + heredoc 提取的内层命令)
-	denied, ruleID, severity, reason, remediation := evaluate(ctx, cmd, rules)
+	mode := guard.ModeOrDefault()
 
-	// ⑤ heredoc:若有内联脚本,递归评估提取出的内层命令
-	if !denied && ruleengine.HasInlineScript(cmd) {
+	// ⑤ 链式拆分(I1):按 &&/;/||/| 拆片段,每片段独立评估
+	var results []segmentResult
+	for _, seg := range ruleengine.SplitCommand(cmd) {
+		results = append(results, evaluateSegment(ctx, seg, rules, mode))
+	}
+
+	// ⑤' heredoc 兜底:若 ⑥ 未 deny 且有内联脚本,对提取的内层命令回灌评估
+	// (每条内层再 SplitCommand,闭合 `bash -c "safe && rm -rf /"` 这类 heredoc 内链式)
+	anyDenied := false
+	for _, r := range results {
+		if r.denied {
+			anyDenied = true
+			break
+		}
+	}
+	if !anyDenied && ruleengine.HasInlineScript(cmd) {
 		for _, inner := range ruleengine.ExtractInlineScripts(cmd, 0) {
-			if d, rid, sev, rsn, rem := evaluate(ctx, inner, rules); d {
-				denied, ruleID, severity, reason, remediation = true, rid, sev, rsn, rem
+			for _, seg := range ruleengine.SplitCommand(inner) {
+				r := evaluateSegment(ctx, seg, rules, mode)
+				if r.denied {
+					results = append(results, r)
+					anyDenied = true
+					break
+				}
+			}
+			if anyDenied {
 				break
 			}
 		}
 	}
 
-	// 超时兜底检查:evaluate 内部不查 ctx.Err()(单命令 256 规则 200ms 预算下足够快,实测无超时);
-	// 此处仅在 evaluate 返回后兜底——若 ctx 已超时且未 deny,发 ask + 写 warn 记录。
-	if ctx.Err() != nil && !denied {
-		intercept.WriteDecision(stdout, intercept.DecisionAsk,
+	// ⑦ allowlist 双匹配(原始命令 + normalize 后命令,整条命令各 Matches 一次)
+	// 任一命中 → allow + 写 allow 记录。安全不变量:只精确整条匹配,不做通配/正则。
+	if guard.AllowlistEnabledOrDefault() && allowlist != nil {
+		normCmd := ruleengine.NormalizeCommand(cmd)
+		if allowlist.Matches(cmd) || allowlist.Matches(normCmd) {
+			writeRecord(store, makeRecord(input, proto, "allow", "", "", "", start))
+			return nil // allowlist 命中 → allow
+		}
+	}
+
+	// ⑧ 决策聚合:High deny → deny;Low deny → ask;无 deny → allow
+	decision, ruleID, severity, reason, remediation, confidence, matchedSpan := aggregate(results, mode)
+
+	// ⑨ 超时兜底:evaluateSegment 内部不查 ctx.Err();此处兜底——若 ctx 已超时且未 deny,
+	// 发 ask + 写 warn 记录(Codex 下 ask 在 WriteDecision 内退化为 deny,见 protocol.go)。
+	if ctx.Err() != nil && decision != intercept.DecisionDeny {
+		intercept.WriteDecision(stdout, proto, intercept.DecisionAsk,
 			fmt.Sprintf("评估超时(%dms)", deadline), "", "", "")
-		writeRecord(store, makeRecord(input, "warn", "", "", "", start))
+		writeRecord(store, makeRecordWithConfidence(input, proto, "warn", "", "", "", "", "", start))
 		return nil
 	}
 
-	// ⑦ 决策输出 + 记录
-	if denied {
-		intercept.WriteDecision(stdout, intercept.DecisionDeny, reason, ruleID, severity, remediation)
-		writeRecord(store, makeRecordWithRule(input, "deny", ruleID, severity, reason, start))
+	// ⑩ 输出(按协议分支)+ 记录
+	if decision == intercept.DecisionDeny {
+		intercept.WriteDecision(stdout, proto, intercept.DecisionDeny, reason, ruleID, severity, remediation)
+		writeRecord(store, makeRecordWithConfidence(input, proto, "deny", ruleID, severity, reason, confidence, matchedSpan, start))
+	} else if decision == intercept.DecisionAsk {
+		// Codex 下 WriteDecision 内部把 ask 退化为 deny(protocol.go);Claude 发 ask。
+		// 记录 outcome=warn:保持 ask 的「低置信度,交用户确认」语义(前端按 outcome 区分展示)。
+		intercept.WriteDecision(stdout, proto, intercept.DecisionAsk, reason, ruleID, severity, remediation)
+		writeRecord(store, makeRecordWithConfidence(input, proto, "warn", ruleID, severity, reason, confidence, matchedSpan, start))
 	} else {
-		writeRecord(store, makeRecord(input, "allow", "", "", "", start))
+		writeRecord(store, makeRecord(input, proto, "allow", "", "", "", start))
 	}
 	return nil
 }
 
-// evaluate 对单条命令跑语义关卡 + 正则 Eval(方案 A:合成 AssetCommand,与静态层同构)。
-// 返回 (denied, ruleID, severity, reason, remediation)。
-func evaluate(ctx context.Context, cmd string, rules []ruleengine.Rule) (bool, string, string, string, string) {
-	// ④ normalize(剥 sudo/env/wrapper + ANSI-C + 路径展开)
-	normalized := ruleengine.NormalizeCommand(cmd)
-	if normalized == "" {
-		return false, "", "", "", ""
+// segmentResult 是单个片段的评估结果(R3 重构)。
+type segmentResult struct {
+	denied      bool
+	confidence  ruleengine.Confidence
+	ruleID      string
+	severity    string
+	reason      string
+	remediation string
+	matchedSpan string // 命中片段文本(链式拆分后定位用)
+}
+
+// evaluateSegment 对单个片段跑 ⑥a-⑥d(span 分类 + 语义关卡 + 正则 Eval + confidence)。
+// 返回 segmentResult;denied=false 表示该片段无破坏性命中。
+//
+// panic 兜底:本函数不 defer recover——ClassifySpans/Eval/ScoreConfidence 自带 panic 兜底
+// (各自返回安全默认值,见 span.go/split.go/confidence.go)。若仍有未捕获 panic,
+// guardMain 的顶层 recover 兜底 fail-open(宁可放行也不让 hook 崩;不变量#4 的「误拦」
+// 由各子函数的内部兜底保证,本函数不再叠加)。
+//
+// Location/Span 坐标系对齐(关键设计决策):
+//   - ruleengine.Location 是 {Line, StartCol, EndCol} 行列模型(schema.go:110);
+//     ruleengine.Span 是 {Start, End} 字节偏移模型(span.go:15)。两者坐标系不同,不能直接比较。
+//   - command 字段的 Eval 不产 Location(eval.go:7:仅 content 字段叶子产 Location),
+//     故 EvalResult.Locations 对 command 资产恒为空。
+//   - 解决方案(spec §3.3 intent + 方案 #3):用 res.Evidence(命中文本)在 normalized
+//     命令中 strings.Index 重新定位字节偏移,再查 spans 判定命中落在 Executed/Data/Comment 区。
+//     Data/Comment 区命中 → 丢弃(引号内字面量,如 echo "rm -rf /" 的 rm -rf /);
+//     Executed 区命中 → 交 ScoreConfidence 打分(中心 High / 紧贴边界 Low)。
+//     这绕开了 Location 行列与 Span 字节偏移的坐标系冲突。
+func evaluateSegment(ctx context.Context, seg string, rules []ruleengine.Rule, mode string) segmentResult {
+	if seg == "" {
+		return segmentResult{}
 	}
-	// 语义关卡 1:DispatchCommand 单命令分发(比静态层逐行简单)
+	// ④ normalize(剥 sudo/env/wrapper + ANSI-C + 路径展开)
+	normalized := ruleengine.NormalizeCommand(seg)
+	if normalized == "" {
+		return segmentResult{}
+	}
+	// ⑥a span 分类(基于 normalized 命令,字节偏移坐标系,供 confidence 定位 + Data 区误报剔除)
+	// 注意:必须在 normalize 之后分类——normalize 会改写字节内容(如 $'\x72\x6d' → rm),
+	// span 的字节偏移与 normalized 的 evidence/offset 才能对齐。若对原始 seg 分类,
+	// ANSI-C/反混淆场景的 evidence(在 normalized 中)无法映射回原始 seg 的 span 偏移。
+	spans := ruleengine.ClassifySpans(normalized)
+	// ⑥b 语义关卡 1:DispatchCommand 单命令分发
+	//   - Deny → 直接命中(High,跳过正则,防漏报)
+	//   - Safe → 整条命令语义安全(如 git commit -m 数据区字面量、rm -i 交互式),正则命中全部丢弃
+	//   - Unknown → 交回正则层
 	sem := semantics.DispatchCommand(normalized)
 	if sem.Decision == semantics.Deny {
-		return true, sem.RuleID, severityForRule(rules, sem.RuleID), sem.Reason, remediationForRule(rules, sem.RuleID)
+		// span 复核(语义 Deny 也需):语义解析器的正则(gitCmdRe/rmCmdRe)不识别引号边界,
+		// 会把 echo "rm -rf /" 引号内的 rm 误判 Deny。用「危险关键字是否在 Executed span 文本中」复核:
+		// 拼接所有 SpanExecuted 文本,若关键字不在其中 → 命中纯数据区字面量 → 丢弃(交回正则层/默认 allow)。
+		// 关键字按 RuleID 域提取(git.reset-hard → "reset --hard";filesystem.* → "rm")。
+		if semanticDenyInDataSpan(normalized, sem, spans) {
+			// 数据区字面量:降级为 Unknown 走正则层(正则层会再做 span 复核,Data span 命中丢弃 → allow)
+			sem = semantics.SemanticResult{Decision: semantics.Unknown}
+		} else {
+			return segmentResult{
+				denied:      true,
+				confidence:  ruleengine.ConfHigh, // 语义 Deny 恒 High(明确命中,不变量#1 两模式都 deny)
+				ruleID:      sem.RuleID,
+				severity:    severityForRule(rules, sem.RuleID),
+				reason:      sem.Reason,
+				remediation: remediationForRule(rules, sem.RuleID),
+				matchedSpan: seg,
+			}
+		}
 	}
-	// 合成 AssetCommand,跑正则 Eval(与静态 RulesDetector 同构)
-	asset := configengine.Asset{Type: configengine.AssetCommand, Fields: map[string]any{"command": normalized}}
-	// 语义 Safe(wholeSafe,单命令):整条命令语义判安全(如 git commit -m "..." 数据区字面量、
-	// rm -i 交互式、git checkout -b 新建分支)。Safe 表示命令整体不执行破坏性操作,数据区内
-	// 的 rm -rf 等是字面量。故 Safe 下抑制所有 command 字段正则命中(对照静态层 wholeSafe 行为,
-	// rules_detector.go 关卡 2:Locations 为空 + wholeSafe → 丢弃)。
-	//
-	// 注意:仅当 DispatchCommand 返回 Safe(非 Unknown)才抑制。Unknown(无语义解析器能判)
-	// 不抑制,正则照常跑(baseline.dangerous-hook 等无 domain 规则在 Unknown 下正常检测)。
 	wholeSafe := sem.Decision == semantics.Safe
-	// KNOWN LIMITATION(链式命令绕过,与静态层 rules_detector.go computeLineSemantic 同行为):
-	// `git commit -m "x" && rm -rf /` 这类链式命令,DispatchCommand 取首个非 Unknown 语义(git commit -m → Safe),
-	// wholeSafe=true 会抑制整条命令所有 command 字段正则命中,包括 `&& rm -rf /` 片段 → 误 allow。
-	// ; 与 | 分隔同理。根因:本函数(及静态层)对单命令/单行整体判语义,不按 &&/;/| 拆分独立评估各片段。
-	// v1 接受此限制(guard 是补充防线,非完整 shell parser);R3 计划加 splitAndEvaluate 按分隔符拆分独立评估闭合。
+	asset := configengine.Asset{Type: configengine.AssetCommand, Fields: map[string]any{"command": normalized}}
+	// ⑥c 正则 Eval + span 复核(关卡 2,R3 新:Data/Comment span 命中丢弃)
 	for _, r := range rules {
 		if r.AssetType != string(configengine.AssetCommand) && r.AssetType != string(configengine.AssetHook) {
 			// destructive 域规则 asset_type=hook 但 or-tree 覆盖 command 字段;
-			// guard 单命令都走 command 字段,放宽到 hook 域规则(or-tree 内部按 command 字段匹配)
+			// guard 单命令都走 command 字段,放宽到 hook 域规则
 			continue
 		}
 		domain, _ := r.Metadata["domain"].(string)
-		// 语义 Safe 关卡 1(正则前):wholeSafe 时跳过该域已实现规则(防数据区字面量误报,
-		// 如 git commit -m "rm -rf" 不被 filesystem.rm-rf-root-home 误判)。
+		// 语义 Safe 关卡 1(正则前):wholeSafe 时跳过该域已实现规则(防数据区字面量误报)
 		if wholeSafe && domainMatch(domain, sem) {
 			continue
 		}
 		res := ruleengine.Eval(r, asset)
-		if res.Matched {
-			// 语义 Safe 关卡 2(正则后复核):wholeSafe 时丢弃命中(单命令 wholeSafe,
-			// 对照静态层 findingInSafeLines 对 command 字段命中用 wholeSafe 判定)。
-			// 对无 domain 规则(baseline.dangerous-hook 等):wholeSafe 时也丢弃——
-			// 语义已判整条命令安全,正则在数据区字面量上的命中是误报。
-			if wholeSafe {
-				continue
-			}
-			return true, r.ID, r.Severity, r.Description, r.Remediation
+		if !res.Matched {
+			continue
+		}
+		// span 复核(关卡 2):命中落在 Data/Comment span → 丢弃(引号内字面量,如 echo "rm -rf /")
+		// 用 res.Evidence 在 normalized 中重新定位字节偏移(command 字段 Eval 无 Location)。
+		if hitInDataSpan(res.Evidence, normalized, spans) {
+			continue
+		}
+		// 语义 Safe 复核:wholeSafe 且命中未落 Data span(如 git commit -m "x" 的 git commit 部分)
+		// → 丢弃(整条命令语义安全)
+		if wholeSafe {
+			continue
+		}
+		// ⑥d confidence 打分:命中在 Executed span 内,按距边界距离判 High/Low
+		offset := matchOffset(res.Evidence, normalized)
+		conf := ruleengine.ScoreConfidence(res.Evidence, offset, spans)
+		// ScoreConfidence panic 时返回 ConfUnknown(命名返回值 + deferred recover,见 confidence.go);
+		// 不存在 PanicConfidence() 访问器(Task 3 DROPPED),直接读返回的 Confidence。
+		// ConfUnknown 按 Mode 解释:strict→High(deny,误拦)/lenient→Low(ask)。
+		if conf == ruleengine.ConfUnknown {
+			conf = conf.ForMode(mode)
+		}
+		return segmentResult{
+			denied:      true,
+			confidence:  conf,
+			ruleID:      r.ID,
+			severity:    r.Severity,
+			reason:      r.Description,
+			remediation: r.Remediation,
+			matchedSpan: seg,
 		}
 	}
-	return false, "", "", "", ""
+	return segmentResult{}
+}
+
+// hitInDataSpan 判断正则命中是否落在 Data/Comment span(丢弃误报)。
+// 用 evidence(命中文本)在 normalized 命令中 strings.Index 重新定位字节偏移——
+// command 字段 Eval 不产 Location(eval.go:7),EvalResult.Locations 恒空,无法直接取偏移。
+// 这绕开了 Location(行列)与 Span(字节偏移)的坐标系冲突。
+func hitInDataSpan(evidence, normalized string, spans []ruleengine.Span) bool {
+	if len(spans) == 0 || evidence == "" {
+		return false
+	}
+	offset := matchOffset(evidence, normalized)
+	if offset < 0 {
+		return false
+	}
+	matchEnd := offset + len(evidence)
+	for _, s := range spans {
+		// 命中起点落在 span 内,且命中不跨越 span 边界
+		if offset >= s.Start && offset < s.End {
+			if s.Kind != ruleengine.SpanExecuted {
+				return true // Data/Comment 区:引号内字面量 / 注释
+			}
+			// Executed 区但命中跨出 span(如跨引号)→ 视为 Data(保守丢弃)
+			if matchEnd > s.End {
+				return true
+			}
+			return false
+		}
+	}
+	return false
+}
+
+// matchOffset 返回 evidence 在 normalized 命令中的首个字节偏移(无则 -1)。
+// command 字段 EvalResult.Locations 恒空(eval.go:7),用 Evidence 重新定位。
+func matchOffset(evidence, normalized string) int {
+	if evidence == "" || normalized == "" {
+		return -1
+	}
+	return strings.Index(normalized, evidence)
+}
+
+// semanticDenyInDataSpan 判断语义 Deny 的危险关键字是否落在 Data/Comment span(丢弃误报)。
+// 语义解析器(gitCmdRe/rmCmdRe)的正则不识别引号边界,会把 echo "rm -rf /" 引号内的 rm 误判 Deny。
+// 复核策略(方案 #3 的语义层延伸):按 RuleID 域提取危险关键字,检查它是否出现在任意
+// SpanExecuted 文本中。若关键字仅出现在 Data/Comment span(引号内字面量)→ true(丢弃)。
+//
+// 关键字提取(按已实现的语义解析器):
+//   - git.* → 子命令关键字(reset/branch/clean/push/stash/checkout 等,从 RuleID 取)
+//   - filesystem.* → "rm"(rm 语义解析器只对 rm 关键字判 Deny)
+//   - 其余 → 保守 false(未知域不剔除,走 Deny,安全不变量:宁可误拦)
+func semanticDenyInDataSpan(normalized string, sem semantics.SemanticResult, spans []ruleengine.Span) bool {
+	if len(spans) == 0 || sem.RuleID == "" {
+		return false
+	}
+	keyword := semanticDenyKeyword(sem.RuleID)
+	if keyword == "" {
+		return false
+	}
+	// 关键字必须出现在至少一个 SpanExecuted 文本中,否则视为纯数据区字面量
+	for _, s := range spans {
+		if s.Kind == ruleengine.SpanExecuted && strings.Contains(s.Text, keyword) {
+			return false // 关键字在 executed 区,是真命中
+		}
+	}
+	// 关键字不在任何 executed span → 纯 Data/Comment 区字面量 → 丢弃
+	return true
+}
+
+// semanticDenyKeyword 按 RuleID 返回用于 span 复核的危险关键字(小写)。
+// git.reset-hard → "reset";git.branch-force-delete → "branch";filesystem.* → "rm"。
+// RuleID 用连字符分隔子修饰(如 git.push-force-short),关键字取 git. 后到首个 - 的部分。
+func semanticDenyKeyword(ruleID string) string {
+	if strings.HasPrefix(ruleID, "git.") {
+		// git.<sub>-... 取点后到首个 - 的部分(git.reset-hard → reset;git.push-force-short → push)
+		rest := strings.TrimPrefix(ruleID, "git.")
+		if i := strings.Index(rest, "-"); i > 0 {
+			return rest[:i]
+		}
+		return rest
+	}
+	if strings.HasPrefix(ruleID, "filesystem.") {
+		return "rm" // rm 语义解析器只对 rm 关键字判 Deny
+	}
+	if strings.HasPrefix(ruleID, "snowflake.") {
+		return "snow sql" // snowflake 语义解析器只对 snow sql 判 Deny
+	}
+	return ""
+}
+
+// aggregate 聚合片段结果:High deny → deny;Low deny → ask;无 deny → allow。
+// 安全不变量:High 命中两模式都 deny(Mode 只影响不确定降级);Low 命中两模式都 ask(交用户确认)。
+func aggregate(results []segmentResult, mode string) (decision intercept.Decision, ruleID, severity, reason, remediation, confidence, matchedSpan string) {
+	var highDeny, lowDeny *segmentResult
+	for i := range results {
+		r := &results[i]
+		if !r.denied {
+			continue
+		}
+		if r.confidence == ruleengine.ConfHigh {
+			highDeny = r
+			break // High 优先,直接定 deny
+		}
+		if lowDeny == nil {
+			lowDeny = r // 记首个 Low deny(Low 之间不区分,聚合取首条)
+		}
+	}
+	if highDeny != nil {
+		return intercept.DecisionDeny, highDeny.ruleID, highDeny.severity, highDeny.reason, highDeny.remediation, highDeny.confidence.String(), highDeny.matchedSpan
+	}
+	if lowDeny != nil {
+		// Low deny → ask(两模式都 ask,不变量:低置信度交用户确认)
+		return intercept.DecisionAsk, lowDeny.ruleID, lowDeny.severity, lowDeny.reason, lowDeny.remediation, lowDeny.confidence.String(), lowDeny.matchedSpan
+	}
+	return intercept.DecisionAllow, "", "", "", "", "", ""
 }
 
 // domainMatch 判断规则的 domain 是否与语义结果域一致(git/snowflake 等语义返回的隐含域)。
@@ -261,18 +485,25 @@ func remediationForRule(rules []ruleengine.Rule, ruleID string) string {
 	return ""
 }
 
-// makeRecord 构造拦截记录(allow/warn)。WorkingDir = 进程 cwd(spec §4.1)。
-func makeRecord(input intercept.HookInput, outcome, ruleID, severity, reason string, start time.Time) intercept.InterceptRecord {
+// makeRecord 构造拦截记录(allow/warn/通用)。WorkingDir = 进程 cwd(spec §4.1)。
+// proto 决定 AgentProtocol 字段(claude/codex),从 ① 协议探测传入——R2 写死 "claude",
+// R3 改为动态,使 allow 路径的记录也带正确协议。
+func makeRecord(input intercept.HookInput, proto intercept.AgentProtocol, outcome, ruleID, severity, reason string, start time.Time) intercept.InterceptRecord {
 	cwd, _ := os.Getwd()
 	return intercept.InterceptRecord{
-		Timestamp: start, AgentProtocol: "claude", WorkingDir: cwd,
+		Timestamp: start, AgentProtocol: proto.String(), WorkingDir: cwd,
 		Command: input.Command, Outcome: outcome, RuleID: ruleID,
 		Severity: severity, Reason: reason, SessionID: input.SessionID, ToolName: input.ToolName,
 		EvalDurationUS: time.Since(start).Microseconds(),
 	}
 }
-func makeRecordWithRule(input intercept.HookInput, outcome, ruleID, severity, reason string, start time.Time) intercept.InterceptRecord {
-	rec := makeRecord(input, outcome, ruleID, severity, reason, start)
+
+// makeRecordWithConfidence 构造带 confidence/matched_span 的记录(deny/ask 用)。
+// 透传 proto 给 makeRecord;补 Confidence/MatchedSpan/ID(R3 新增字段)。
+func makeRecordWithConfidence(input intercept.HookInput, proto intercept.AgentProtocol, outcome, ruleID, severity, reason, confidence, matchedSpan string, start time.Time) intercept.InterceptRecord {
+	rec := makeRecord(input, proto, outcome, ruleID, severity, reason, start)
+	rec.Confidence = confidence
+	rec.MatchedSpan = matchedSpan
 	rec.ID = recordID(start, input.Command)
 	return rec
 }
