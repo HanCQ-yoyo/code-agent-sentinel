@@ -81,10 +81,10 @@ func TestDeleteRuleCascadesOverride(t *testing.T) {
 	if ok {
 		t.Fatal("rule should be deleted")
 	}
-	// override 应被外键 CASCADE 清掉
+	// override 应被 DeleteRule 的事务清理清掉(overrides 表无 FK,引用完整性由此维护)
 	enabled, exists, _ := GetOverride(db, DomainDetect, "r1")
 	if exists {
-		t.Fatalf("override should be cascaded, got enabled=%v", enabled)
+		t.Fatalf("override should be cleaned by DeleteRule tx, got enabled=%v", enabled)
 	}
 }
 
