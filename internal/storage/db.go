@@ -72,6 +72,11 @@ func SchemaInitialized(db *DB) (bool, error) {
 // rules 表:rule_id 主键,source 区分 builtin/custom,builtin_version 用于升级刷新判定,
 //   match_json/paths_json/metadata_json 存 JSON 文本(反序列化在 ruleengine 侧)。
 // overrides 表:rule_id 主键,enabled 启停覆盖(缺省=启用,运行时 LEFT JOIN COALESCE)。
+//   注意:overrides 不建 FK 到 rules——ListOrphanOverrides 的职责正是检测 rule 被删后
+//   留下的孤儿 override(builtin 规则下版本被删,SyncBuiltin 需报告而非静默丢)。
+//   若加 FK+CASCADE 则孤儿永远不可能存在;若加 FK 无 CASCADE 则删 rule 行会被 FK 阻止。
+//   故 overrides.rule_id 不引用 rules.rule_id;引用完整性由 DeleteRule 在事务内显式
+//   清 override 维护,绕过 DeleteRule 的直接 DELETE 才会留孤儿(供审计检测)。
 // combos 表:仅 builtin(本次 custom combo 不支持)。
 // schema_meta:迁移标记表,存在即表示已迁移。
 func RunMigrations(db *DB) error {
@@ -99,7 +104,7 @@ CREATE TABLE IF NOT EXISTS detect_rules (
   updated_at      TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS detect_overrides (
-  rule_id    TEXT PRIMARY KEY REFERENCES detect_rules(rule_id) ON DELETE CASCADE,
+  rule_id    TEXT PRIMARY KEY,
   enabled    INTEGER NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -132,7 +137,7 @@ CREATE TABLE IF NOT EXISTS intercept_rules (
   updated_at      TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS intercept_overrides (
-  rule_id    TEXT PRIMARY KEY REFERENCES intercept_rules(rule_id) ON DELETE CASCADE,
+  rule_id    TEXT PRIMARY KEY,
   enabled    INTEGER NOT NULL,
   updated_at TEXT NOT NULL
 );
