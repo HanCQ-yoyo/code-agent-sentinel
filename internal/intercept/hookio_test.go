@@ -40,7 +40,7 @@ func TestParseHookInputTooLarge(t *testing.T) {
 
 func TestWriteDecisionDeny(t *testing.T) {
 	var buf bytes.Buffer
-	WriteDecision(&buf, DecisionDeny, "rm -rf / 危险", "destructive.filesystem.rm-rf-root", "critical", "先 git stash")
+	WriteDecision(&buf, ProtoClaude, DecisionDeny, "rm -rf / 危险", "destructive.filesystem.rm-rf-root", "critical", "先 git stash")
 	var got map[string]map[string]any
 	if err := json.Unmarshal(buf.Bytes(), &got); err != nil {
 		t.Fatalf("deny 输出应是合法 JSON: %v\n%s", err, buf.String())
@@ -56,7 +56,7 @@ func TestWriteDecisionDeny(t *testing.T) {
 
 func TestWriteDecisionAllowEmpty(t *testing.T) {
 	var buf bytes.Buffer
-	WriteDecision(&buf, DecisionAllow, "", "", "", "")
+	WriteDecision(&buf, ProtoClaude, DecisionAllow, "", "", "", "")
 	if buf.Len() != 0 {
 		t.Fatalf("allow 应输出空 stdout, got %q", buf.String())
 	}

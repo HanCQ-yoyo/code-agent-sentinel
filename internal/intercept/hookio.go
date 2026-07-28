@@ -4,7 +4,6 @@ package intercept
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
 	"strings"
 )
@@ -12,14 +11,16 @@ import (
 // ErrInputTooLarge 表示 stdin 超过 maxBytes 上限。
 var ErrInputTooLarge = errors.New("intercept: input too large")
 
-// HookInput 是 hook stdin 的宽松解析结果(Claude-only,全字段可选)。
-// 所有字段 Option,Claude 走 tool_input.command。
+// HookInput 是 hook stdin 的宽松解析结果(Claude/Codex 通用,全字段可选)。
+// 所有字段 Option;Claude 走 tool_input.command,Codex 同(Codex schema 复用 tool_input.command)。
+// TurnID 非空是 Codex 协议的强信号(Claude 不发 turn_id),供 DetectProtocol 消歧。
 type HookInput struct {
 	HookEventName string
 	ToolName      string
 	Command       string // tool_input.command
 	Cwd           string
 	SessionID     string
+	TurnID        string // codex-rs 扩展字段(Claude 不发),用于协议探测
 }
 
 // Decision 是 hook 决策:allow(空 stdout)/ deny(JSON)/ ask(JSON,超时)。
@@ -32,6 +33,7 @@ const (
 )
 
 // rawHookInput 是 stdin JSON 的原始结构(tool_input.command 是嵌套 string)。
+// turn_id 是 codex-rs 扩展字段(Claude 不发),用于协议探测。
 type rawHookInput struct {
 	HookEventName string `json:"hook_event_name"`
 	ToolName      string `json:"tool_name"`
@@ -40,6 +42,7 @@ type rawHookInput struct {
 	} `json:"tool_input"`
 	Cwd       string `json:"cwd"`
 	SessionID string `json:"session_id"`
+	TurnID    string `json:"turn_id"`
 }
 
 // ParseHookInput 读 stdin(剥 UTF-8 BOM,带字节上限)解析为 HookInput。
@@ -70,10 +73,12 @@ func ParseHookInput(r io.Reader, maxBytes int) (HookInput, error) {
 	return HookInput{
 		HookEventName: raw.HookEventName, ToolName: raw.ToolName,
 		Command: raw.ToolInput.Command, Cwd: raw.Cwd, SessionID: raw.SessionID,
+		TurnID: raw.TurnID,
 	}, nil
 }
 
-// hookOutput 是 deny/ask 的 stdout JSON 结构。
+// hookOutput 是 Claude deny/ask 的 stdout JSON 结构(完整 payload,含扩展字段)。
+// Codex 路径不使用此结构(见 protocol.go 的 codexOutput,仅三字段)。
 type hookOutput struct {
 	HookSpecificOutput hookSpecificOutput `json:"hookSpecificOutput"`
 }
@@ -86,20 +91,5 @@ type hookSpecificOutput struct {
 	Remediation              string `json:"remediation,omitempty"`
 }
 
-// WriteDecision 写 stdout 决策。allow → 空 stdout(fail-open);deny/ask → 一行 JSON。
-// 调用方负责 flush。
-func WriteDecision(w io.Writer, dec Decision, reason, ruleID, severity, remediation string) {
-	if dec == DecisionAllow {
-		return // 空 stdout = allow
-	}
-	permission := "ask"
-	if dec == DecisionDeny {
-		permission = "deny"
-	}
-	out := hookOutput{HookSpecificOutput: hookSpecificOutput{
-		HookEventName: "PreToolUse", PermissionDecision: permission,
-		PermissionDecisionReason: reason, RuleID: ruleID, Severity: severity, Remediation: remediation,
-	}}
-	data, _ := json.Marshal(out)
-	fmt.Fprintln(w, string(data)) // 一行 JSON + 换行
-}
+// WriteDecision 已迁至 protocol.go(签名加 proto AgentProtocol 首参,支持 Claude/Codex 分支)。
+// hookOutput/hookSpecificOutput 留在此文件供 protocol.go 的 Claude 路径复用(同包可见)。
