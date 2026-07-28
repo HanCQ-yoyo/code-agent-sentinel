@@ -56,3 +56,31 @@ combo_rules:
 		t.Fatalf("require[0] asset_type = %q", c.Requires[0].AssetType)
 	}
 }
+
+func TestMatchNodeRawRoundTrip(t *testing.T) {
+	// 叶子节点 map{field,op,value}
+	leaf := map[string]any{"field": "command", "op": "contains", "value": "rm -rf"}
+	mn := NewMatchNode(leaf)
+	got := mn.Raw()
+	if got["field"] != "command" || got["op"] != "contains" || got["value"] != "rm -rf" {
+		t.Fatalf("Raw() = %#v, want leaf map preserved", got)
+	}
+
+	// 布尔节点 map{and: [...]}
+	and := map[string]any{"and": []any{
+		map[string]any{"field": "command", "op": "contains", "value": "rm"},
+		map[string]any{"field": "command", "op": "contains", "value": "rf"},
+	}}
+	mn2 := NewMatchNode(and)
+	got2 := mn2.Raw()
+	if _, ok := got2["and"]; !ok {
+		t.Fatalf("Raw() = %#v, want 'and' key preserved", got2)
+	}
+}
+
+func TestNewMatchNodeFromNilIsEmpty(t *testing.T) {
+	mn := NewMatchNode(nil)
+	if mn.Raw() != nil {
+		t.Fatalf("Raw() = %#v, want nil for nil input", mn.Raw())
+	}
+}

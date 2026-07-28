@@ -66,6 +66,15 @@ type MatchNode struct {
 	raw map[string]any
 }
 
+// Raw 返回 MatchNode 的原始 map(叶子是 {field,op,value},布尔节点是 {and/or/not:...})。
+// 供 persist 层(ruleRow)序列化 match_json 往返:Rule → ruleRow.Match = m.Raw()。
+// 返回的是内部 map 的直接引用(调用方不应修改);若需修改请深拷贝。
+func (m MatchNode) Raw() map[string]any { return m.raw }
+
+// NewMatchNode 从 map 构造 MatchNode(与 UnmarshalYAML 解码出的结构一致)。
+// 供 persist 层 ruleRow → Rule 时构造 MatchNode。nil 输入 → 空 MatchNode(等价无 match)。
+func NewMatchNode(m map[string]any) MatchNode { return MatchNode{raw: m} }
+
 // ComboRule 是跨资产组合规则:所有 Requires 同时命中(AND)时产一条 Finding。
 // 在 RulesDetector.Scan 的单资产循环后跑第二遍,输入是同 agent 的整个 []Asset。
 // Requires[i].Match 复用 MatchNode + 现有 11 个 op;组合语义在 Requires 层面。
