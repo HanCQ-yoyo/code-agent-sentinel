@@ -124,6 +124,8 @@
     "command": "命令",
     "rule": "规则",
     "severity": "严重度",
+    "confidence": "置信度",
+    "matchedSpan": "命中片段",
     "duration": "耗时",
     "filterOutcome": "按决策筛选",
     "refresh": "刷新",

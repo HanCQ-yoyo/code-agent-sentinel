@@ -225,6 +225,8 @@ export interface AgentScanResult {
 // outcome: allow=放行 / deny=拒绝 / warn=警告 / ask=询问用户。
 // rule_id/pack_id/severity/reason 仅在命中规则时填充;ask 模式可能无 rule_id。
 // eval_duration_us:规则评估耗时(微秒),用于性能排查。
+// confidence/matched_span:Stage R3 新增,规则命中置信度(high/low/unknown)与命中片段文本。
+//   allow 记录或无规则命中时缺省;仅 deny/warn 且规则引擎填充时才有值。
 export interface InterceptRecord {
   id: string
   timestamp: string
@@ -239,4 +241,6 @@ export interface InterceptRecord {
   eval_duration_us: number
   session_id?: string
   tool_name?: string
+  confidence?: string      // high/low/unknown(Stage R3)
+  matched_span?: string    // 命中片段文本(Stage R3)
 }

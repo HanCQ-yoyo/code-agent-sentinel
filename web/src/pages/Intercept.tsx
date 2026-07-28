@@ -16,6 +16,14 @@ const outcomeColor: Record<string, string> = {
   allow: 'default',
 }
 
+// confidence → Tag color(Stage R3)。high=绿(明确命中)/ low=橙(降级)/ unknown=默认灰。
+// 仅 deny/warn 且规则引擎填充时才有值;allow 记录缺省。
+const confidenceColor: Record<string, string> = {
+  high: 'green',
+  low: 'orange',
+  unknown: 'default',
+}
+
 export default function Intercept() {
   const { t } = useTranslation()
   const { intercept, fetchIntercepts, fetchInterceptDetail, deleteIntercept } = useStore()
@@ -92,6 +100,14 @@ export default function Intercept() {
       render: (v?: string) => v ? <Tag>{v}</Tag> : <Typography.Text type="secondary">—</Typography.Text>,
     },
     {
+      title: t('intercept.confidence'),
+      dataIndex: 'confidence',
+      width: 110,
+      render: (v?: string) => v ? (
+        <Tag color={confidenceColor[v] ?? 'default'}>{v}</Tag>
+      ) : <Typography.Text type="secondary">—</Typography.Text>,
+    },
+    {
       title: t('intercept.duration'),
       dataIndex: 'eval_duration_us',
       width: 100,
@@ -159,6 +175,22 @@ export default function Intercept() {
               <div>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('intercept.severity')}</Typography.Text>
                 <div style={{ marginTop: 4 }}><Tag>{detail.severity}</Tag></div>
+              </div>
+            )}
+            {detail.confidence && (
+              <div>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('intercept.confidence')}</Typography.Text>
+                <div style={{ marginTop: 4 }}>
+                  <Tag color={confidenceColor[detail.confidence] ?? 'default'}>{detail.confidence}</Tag>
+                </div>
+              </div>
+            )}
+            {detail.matched_span && (
+              <div>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('intercept.matchedSpan')}</Typography.Text>
+                <pre style={{ background: 'var(--surface-2)', padding: 8, borderRadius: 4, fontSize: 12, fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: '4px 0 0' }}>
+                  {detail.matched_span}
+                </pre>
               </div>
             )}
             {detail.working_dir && (

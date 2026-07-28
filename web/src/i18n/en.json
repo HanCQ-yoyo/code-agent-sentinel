@@ -124,6 +124,8 @@
     "command": "Command",
     "rule": "Rule",
     "severity": "Severity",
+    "confidence": "Confidence",
+    "matchedSpan": "Matched Span",
     "duration": "Duration",
     "filterOutcome": "Filter by outcome",
     "refresh": "Refresh",
