@@ -227,10 +227,12 @@ type segmentResult struct {
 // evaluateSegment 对单个片段跑 ⑥a-⑥d(span 分类 + 语义关卡 + 正则 Eval + confidence)。
 // 返回 segmentResult;denied=false 表示该片段无破坏性命中。
 //
-// panic 兜底:本函数不 defer recover——ClassifySpans/Eval/ScoreConfidence 自带 panic 兜底
-// (各自返回安全默认值,见 span.go/split.go/confidence.go)。若仍有未捕获 panic,
-// guardMain 的顶层 recover 兜底 fail-open(宁可放行也不让 hook 崩;不变量#4 的「误拦」
-// 由各子函数的内部兜底保证,本函数不再叠加)。
+// panic 兜底:本函数 defer recover——ClassifySpans/SplitCommand/ScoreConfidence 自带 panic
+// 兜底(各自返回安全默认值,见 span.go/split.go/confidence.go),但 Eval 不自带 recover
+// (eval.go 迭代编译好的正则,理论上不易 panic,但无兜底)。为闭合不变量#4(「异常宁可误拦
+// 不漏报」),本函数在入口 defer recover:panic 时返回 denied=true + ConfUnknown 的保守
+// 拦截结果,交 aggregate() 按 Mode 解释(strict→High→deny,lenient→Low→ask),避免
+// panic 冒泡到 guardMain 顶层 recover 导致 fail-open allow(违反不变量#4)。
 //
 // Location/Span 坐标系对齐(关键设计决策):
 //   - ruleengine.Location 是 {Line, StartCol, EndCol} 行列模型(schema.go:110);
@@ -242,7 +244,22 @@ type segmentResult struct {
 //     Data/Comment 区命中 → 丢弃(引号内字面量,如 echo "rm -rf /" 的 rm -rf /);
 //     Executed 区命中 → 交 ScoreConfidence 打分(中心 High / 紧贴边界 Low)。
 //     这绕开了 Location 行列与 Span 字节偏移的坐标系冲突。
-func evaluateSegment(ctx context.Context, seg string, rules []ruleengine.Rule, mode string) segmentResult {
+func evaluateSegment(ctx context.Context, seg string, rules []ruleengine.Rule, mode string) (result segmentResult) {
+	// panic 兜底(不变量#4 闭合):Eval 不自带 recover,若其内部(或本函数任意路径)panic,
+	// 不让 panic 冒泡到 guardMain 顶层 recover(fail-open allow),而是返回保守拦截结果:
+	// denied=true + ConfUnknown → aggregate() 按 Mode 解释(strict→High→deny / lenient→Low→ask)。
+	// 用命名返回值 result,defer 可真正改写返回值(Go defer recover 无法修改非命名返回值)。
+	defer func() {
+		if r := recover(); r != nil {
+			result = segmentResult{
+				denied:      true,
+				confidence:  ruleengine.ConfUnknown, // 交 aggregate/ForMode 按 Mode 解释
+				matchedSpan: seg,                    // seg 是入参,闭包可捕获
+				reason:      "评估异常(panic),保守拦截",
+				// ruleID/severity/remediation 留空:panic 时无法确定命中哪条规则
+			}
+		}
+	}()
 	if seg == "" {
 		return segmentResult{}
 	}
