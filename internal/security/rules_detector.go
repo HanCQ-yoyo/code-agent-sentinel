@@ -163,13 +163,9 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 		// script/skill/command/agent/memory 用 content 字段,permissions 无命令文本(跳过语义)。
 		cmdText, _ := commandTextFromAsset(a)
 
-		// 按行语义状态(修复最终 review C1:Safe span-scoping)。
-		// 修前:对整个命令文本跑一次 DispatchCommand 缓存单个 SemanticResult,任意 Safe 决策
-		// 会经关卡 1 `case Safe: continue` + 关卡 2 抑制该 asset 全部规则 —— 包括同一 content
-		// 另一行的真实 rm -rf /(漏报:git commit -m 'rm -rf /'\nrm -rf / → health 60 而非 20)。
-		// 修后:按行跑 DispatchCommand,Deny 仍 asset-wide-correct(任意行 Deny 即触发语义
-		// finding + 该域规则 continue),Safe 只抑制落在 safeLines 内的正则命中(同一行才抑制)。
-		// 无命令文本/permissions 资产 → anySem=false,语义关卡整体跳过(纯正则)。
+		// 按行 + 行内片段语义状态(R3 升级:SplitCommand 拆片段闭合 I1 + span 复核丢 Data 区误报)。
+		// 详见 computeLineSemantic / findingInSafeSpans 注释。无命令文本/permissions 资产 →
+		// anySem=false,语义关卡整体跳过(纯正则)。
 		semState := computeLineSemantic(cmdText)
 
 		// 预选每域语义 finding 载体规则(关卡 1 Deny 用):
@@ -210,11 +206,12 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 
 			if semActive {
 				// 关卡 1(正则前语义判定):Deny 按域触发。
-				//   若该域有任意行 Deny(denyByDomain[domain] 存在)→ 构造一次语义 finding
-				//     (去重:emittedDomains[domain]),并 continue 跳过该域所有正则
-				//     (语义已判破坏,正则不必再跑;Deny asset-wide-correct,任意行 Deny 即触发)。
-				//   Safe 不再在此无条件 continue(C1 修复):Safe 改由关卡 2 按行 span-scoping 复核,
-				//     避免一行 Safe 抑制另一行的真实破坏性命令。
+				//   若该域有任意片段 Executed Deny(denyByDomain[domain] 存在 —— computeLineSemantic
+				//     已在聚合时跳过 Data span 的误报 Deny)→ 构造一次语义 finding(去重:
+				//     emittedDomains[domain]),并 continue 跳过该域所有正则(语义已判破坏,
+				//     正则不必再跑;Deny asset-wide-correct,任意片段 Deny 即触发)。
+				//   Safe 不再在此无条件 continue(C1 修复):Safe 改由关卡 2 按 span 复核,
+				//     避免一行/一片段 Safe 抑制另一片段的真实破坏性命令。
 				//   Unknown → 走正则。
 				if denyRes, ok := semState.denyByDomain[domain]; ok {
 					if !emittedDomains[domain] {
@@ -237,15 +234,22 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 				continue
 			}
 
-			// 关卡 2:正则后语义 Safe 按行复核(防误报,C1 span-scoping)。
-			// 正则命中,若该命中落在 Safe 行(同一行语义判 Safe)则丢弃 —— 抑制数据区内
-			// 字面量误报(如 git commit -m "rm -rf /" 单行 Safe,该行 rm 字面量不报)。
-			// 但落在非 Safe 行(另一行的真实 rm -rf /)→ 不丢弃(修 C1 跨行漏报)。
-			// Locations 为空(command 字段命中无行位置)→ 整条命令 wholeSafe 才丢弃
-			// (hook/mcp_server 单行命令 Safe 场景)。
-			if semActive {
-				if semState.findingInSafeLines(res.Locations) {
-					continue // 丢弃正则误报(命中在 Safe 行内)
+			// 关卡 2:正则后 span 复核(R3 升级,防误报 + span data 区丢弃)。
+			// 正则命中,若该命中落在 Data/Comment span(引号内字面量/注释)则丢弃 ——
+			// 抑制数据区内字面量误报(如 echo "rm -rf /" 的 rm -rf / 在引号内是字面量)。
+			// 落在 Executed span(真实破坏命令)→ 保留。
+			// content 字段命中:用 Location.Line/StartCol 转字节偏移查 span。
+			// command 字段命中(Locations 空):用 evidence+strings.Index 重新定位字节偏移。
+			// evidence 也为空 → 回退 wholeSafe(保留 R2 行为)。
+			//
+			// R3 扩大范围:R2 仅对有语义解析器的域(semActive)做关卡 2;R3 改为对任意有
+			// 命令文本的资产(anySem)做 span 复核 —— 即便规则域无语义解析器(如 injection),
+			// 其正则命中若落在 Data span(引号内字面量)也应丢弃(spec §6.5 行为变更)。
+			// 无命令文本/permissions 资产 anySem=false,关卡 2 整体跳过(纯正则,permissions
+			// 字段无引号边界概念)。
+			if semState.anySem {
+				if semState.findingInSafeSpans(res.Locations, cmdText, res.Evidence) {
+					continue // 丢弃正则误报(命中在 Data/Comment span)
 				}
 			}
 
@@ -440,38 +444,59 @@ func commandTextFromAsset(a configengine.Asset) (text string, field string) {
 	return "", ""
 }
 
-// lineSemanticState 是按行跑语义解析后的聚合状态(修复最终 review C1)。
+// lineSemanticState 是按行 + 行内片段跑语义解析后的聚合状态(Task 9 R3 升级)。
 //
-// 修前:对整个命令文本跑一次 DispatchCommand,缓存单个 SemanticResult,所有规则复用。
-// 问题:任何 Safe 决策(git commit -m / rm -i / git restore --staged / git checkout -b)
-// 都会经关卡 1 `case Safe: continue` + 关卡 2 抑制该 asset 的所有规则 —— 包括同一
-// content 里另一行的真实 rm -rf /(漏报:health 60 而非 20)。
+// R1/R2:对整个命令文本跑一次 DispatchCommand,缓存单个 SemanticResult。
+// 问题 1(C1 跨行漏报):任何 Safe 决策(git commit -m / rm -i / git restore --staged /
+// git checkout -b)会经关卡 1 `case Safe: continue` + 关卡 2 抑制该 asset 全部规则 ——
+// 包括同一 content 另一行的真实 rm -rf /(漏报:health 60 而非 20)。修(C1):按行切分。
+// 问题 2(I1 链式绕过):按行整体跑 DispatchCommand,`git commit -m "x" && rm -rf /` 整体
+// 判 Safe(git commit -m 优先),行内 `&& rm -rf /` 漏报。修(R3):行内 SplitCommand 拆片段,
+// 每片段独立判语义。
+// 问题 3(span data 区误报):filesystem 语义解析器的 rmCmdRe 正则不识别引号边界,把
+// `echo "rm -rf /"` 引号内的 rm -rf / 误判 Deny;destructive.filesystem.* 正则也误命中
+// 引号内字面量。修(R3):语义 Deny + 正则命中都做 span 复核,Data/Comment span 命中丢弃。
 //
-// 修后(C1 span-scoping):对 content 资产按行切分,逐行跑 DispatchCommand,聚合:
-//   - denyByDomain:每域首条 Deny 结果(用于关卡 1 语义 finding + 该域规则 continue)。
-//     Deny 仍 asset-wide-correct(任意行 Deny 即触发),保持破坏性兜底不漏。
-//   - safeLines:被判 Safe 的行号集合(1-based);关卡 2 只丢弃 Location.Line 落在
-//     safeLines 内的正则命中(同一行 Safe 才抑制,不跨行)。
-//   - wholeSafe:所有行都 Safe(单行命令或全部行 Safe);用于无 Location 的 command
+// R3 升级:按行切分,行内 SplitCommand 拆片段,逐片段跑 DispatchCommand,聚合:
+//   - denyByDomain:每域首条 Executed-span Deny 结果(用于关卡 1 语义 finding + 该域规则 continue)。
+//     Data span 内的 Deny(引号内字面量误报)在聚合时跳过,不进 denyByDomain。
+//     Deny 仍 asset-wide-correct(任意片段 Executed Deny 即触发),保持破坏性兜底不漏。
+//   - wholeSafe:所有片段都 Safe(单行命令或全部片段 Safe);用于无 Location 的 command
 //     字段匹配(hook/mcp_server command 无行位置,按整条命令 Safe 判定丢弃)。
+//   - spans/lineStarts:cmdText 的 ClassifySpans 结果 + 每行起始字节偏移,在聚合时一次算好
+//     缓存,关卡 2 的 findingInSafeSpans 按 Location 转字节偏移查 span 成员时复用(避免
+//     每正则命中 × 每 Location 重算 ClassifySpans,hot path 优化)。
 //
-// 简化:按 \n 切行;跨行命令(如 rm -rf \\\n/)可能被拆散。这类情况任意行若 Unknown
-// → 不进 safeLines → 不抑制,正则照常命中(不漏报);仅当跨行命令恰好被判 Safe 时可能
-// 误抑制,属 R1 可接受简化(review C1 明确允许 line-split 简化)。
+// 简化:按 \n 切行,行内按 SplitCommand 拆片段;跨行命令(如 rm -rf \\\n/)可能被拆散。
+// 这类情况任意片段若 Unknown → wholeSafe=false → 不抑制,正则照常命中(不漏报);仅当跨行
+// 命令恰好被判 Safe 时可能误抑制,属 R1 可接受简化(review C1 明确允许 line-split 简化)。
 type lineSemanticState struct {
-	denyByDomain map[string]semantics.SemanticResult // 域 → 首条 Deny(关卡 1 用)
+	denyByDomain map[string]semantics.SemanticResult // 域 → 首条 Executed Deny(关卡 1 用)
 	denyOrder    []string                            // Deny 域出现顺序(稳定 emit 顺序)
-	safeLines    map[int]bool                        // Safe 行号(1-based,关卡 2 用)
-	wholeSafe    bool                                // 所有行均 Safe(无 Location 命中丢弃用)
+	wholeSafe    bool                                // 所有片段均 Safe(无 Location 命中丢弃用)
 	anySem       bool                                // 是否跑了语义(有命令文本 + 非 permissions)
+	spans        []ruleengine.Span                   // cmdText 的 ClassifySpans 缓存(关卡 2 复用)
+	lineStarts   []int                               // cmdText 每行起始字节偏移(关卡 2 复用)
 }
 
-// computeLineSemantic 按行跑 DispatchCommand,聚合 lineSemanticState。
+// computeLineSemantic 按行 + 行内片段(SplitCommand)跑 DispatchCommand,聚合 lineSemanticState。
 // 无命令文本 / permissions 资产 → 返回 anySem=false(语义关卡整体跳过)。
+//
+// R3 升级:原按行整体判 wholeSafe 会漏行内 `&& rm -rf /`(I1);现按 SplitCommand 拆片段
+// 独立判语义。`git commit -m "x" && rm -rf /` 拆成 [git commit -m "x", rm -rf /],后者
+// 独立 Deny → 闭合 I1。
+//
+// Deny 聚合策略(关键):若首条 Deny 落在 Data span(引号内字面量,如 echo "rm -rf /" 的
+// rm -rf /),跳过它继续找下一个落在 Executed span 的 Deny。原因:同一资产可能含多个片段,
+// `echo "rm -rf /" ; rm -rf /` 的第 1 片段 Deny 是误报(Data span),第 2 片段 Deny 是真报
+// (Executed span)。若误存第 1 片段,关卡 1 会丢弃 Deny,漏报第 2 片段的真实破坏命令。
+//
+// 缓存:spans = ClassifySpans(cmdText)、lineStarts = 每行起始字节偏移,在此一次算好,
+// 关卡 2 的 findingInSafeSpans 按 Location 转字节偏移查 span 成员时复用(避免每正则命中
+// × 每 Location 重算 ClassifySpans,hot path 优化)。
 func computeLineSemantic(cmdText string) lineSemanticState {
 	st := lineSemanticState{
 		denyByDomain: map[string]semantics.SemanticResult{},
-		safeLines:    map[int]bool{},
 	}
 	if cmdText == "" {
 		return st
@@ -479,25 +504,37 @@ func computeLineSemantic(cmdText string) lineSemanticState {
 	st.anySem = true
 	lines := strings.Split(cmdText, "\n")
 	allSafe := true
-	for i, line := range lines {
-		res := semantics.DispatchCommand(line)
-		switch res.Decision {
-		case semantics.Deny:
-			dom := mapSemDomain(res.RuleID)
-			if dom != "" {
-				if _, ok := st.denyByDomain[dom]; !ok {
-					st.denyByDomain[dom] = res
-					st.denyOrder = append(st.denyOrder, dom)
+	for _, line := range lines {
+		// 行内拆片段(I1 闭合):SplitCommand 按 &&/;/||/| 拆分(引号/$() 感知),
+		// 每片段独立跑 DispatchCommand。单片段(无分隔符)返回 []string{line}。
+		segs := ruleengine.SplitCommand(line)
+		for _, seg := range segs {
+			res := semantics.DispatchCommand(seg)
+			switch res.Decision {
+			case semantics.Deny:
+				dom := mapSemDomain(res.RuleID)
+				if dom != "" {
+					// 跳过 Data span 内的 Deny(引号内字面量误报):echo "rm -rf /" 的 rm
+					// 在 SpanData 区,语义解析器误判 Deny。不存入 denyByDomain,继续找
+					// 真 Deny(Executed span)。若整资产全是 Data span Deny,该域无 Deny 记录,
+					// 关卡 1 不 emit 语义 finding,正则层兜底(关卡 2 span 复核会丢弃)。
+					if _, ok := st.denyByDomain[dom]; !ok && !semanticDenyInDataSpan(seg, res) {
+						st.denyByDomain[dom] = res
+						st.denyOrder = append(st.denyOrder, dom)
+					}
 				}
+				allSafe = false
+			case semantics.Safe:
+				// Safe 片段:wholeSafe 聚合用(R2 safeLines 行级 map 已删,R3 关卡 2 用 span 复核)
+			case semantics.Unknown:
+				allSafe = false
 			}
-			allSafe = false
-		case semantics.Safe:
-			st.safeLines[i+1] = true
-		case semantics.Unknown:
-			allSafe = false
 		}
 	}
 	st.wholeSafe = allSafe
+	// 缓存 cmdText 的 spans + lineStarts(关卡 2 hot path 复用,避免每正则命中重算)
+	st.spans = ruleengine.ClassifySpans(cmdText)
+	st.lineStarts = lineStartOffsetsLocal(cmdText)
 	return st
 }
 
@@ -519,20 +556,143 @@ func mapSemDomain(ruleID string) string {
 	return ""
 }
 
-// findingInSafeLines 判断正则命中是否落在 Safe 行(关卡 2 用)。
-// Locations 为空(command 字段命中,无行位置)时,若整条命令 wholeSafe 才丢弃;
-// 否则按 Location.Line 是否在 safeLines 判定。命中多行只要有一行非 Safe 就不丢弃
-// (保守:避免漏报跨行命中)。
-func (st lineSemanticState) findingInSafeLines(locs []ruleengine.Location) bool {
+// findingInSafeSpans 判断正则命中是否落在 Data/Comment span(关卡 2 用,R3 升级)。
+//
+// R2 findingInSafeLines 按 Location.Line 是否在 safeLines 判定(行级 Safe 抑制)。
+// R3 升级为 span 级:用 ClassifySpans 判定命中字节偏移落在 Executed/Data/Comment span。
+//   - Data/Comment span 命中 → 丢弃(引号内字面量 / 注释,如 echo "rm -rf /" 的 rm -rf /)
+//   - Executed span 命中 → 保留(真实破坏命令,交 wholeSafe 复核)
+//
+// 坐标系对齐(关键设计,与 Task 7 运行时层一致):
+//   - ruleengine.Location 是 {Line, StartCol, EndCol} 行列模型(schema.go:110);
+//     ruleengine.Span 是 {Start, End} 字节偏移模型(span.go:15)。坐标系不同,不能直接比较。
+//   - content 字段命中:Locations 非空,用 st.lineStarts 把 (Line, StartCol) 转回字节偏移,
+//     再查 st.spans 的 span 成员。
+//   - command 字段命中:Locations 为空(eval.go:7:仅 content 字段叶子产 Location),
+//     用 evidence 在 cmdText 中 strings.Index 重新定位字节偏移(方案 #3 的静态层延伸)。
+//
+// 无 Location + 无 Evidence → 回退 wholeSafe(保留 R2 行为:整条命令 Safe 才丢弃)。
+// 命中字节偏移落在 Data/Comment span → 丢弃(true);否则保留(false)。
+//
+// 性能:st.spans / st.lineStarts 在 computeLineSemantic 一次算好缓存,本函数每正则命中
+// 只做 O(S) span 查找(S=span 数,通常小),不重算 ClassifySpans(hot path 优化)。
+func (st lineSemanticState) findingInSafeSpans(locs []ruleengine.Location, cmdText string, evidence string) bool {
 	if len(locs) == 0 {
-		return st.wholeSafe // command 字段命中无行位置:整条命令 Safe 才丢弃
+		// command 字段命中无 Location:用 evidence 重新定位字节偏移。
+		// evidence 为空 → 回退 wholeSafe(保留 R2 行为)。
+		if evidence == "" {
+			return st.wholeSafe
+		}
+		offset := strings.Index(cmdText, evidence)
+		if offset < 0 {
+			return st.wholeSafe // evidence 在 cmdText 中找不到,回退 wholeSafe(保守)
+		}
+		return st.offsetInDataOrCommentSpan(offset, offset+len(evidence))
 	}
+	// content 字段命中:逐 Location 转 byte offset 查 span。
+	// 命中多行只要有一行非 Data/Comment span 就不丢弃(保守:避免漏报跨行命中)。
 	for _, loc := range locs {
-		if !st.safeLines[loc.Line] {
-			return false // 有命中行非 Safe → 不丢弃
+		if loc.Line < 1 || loc.Line > len(st.lineStarts) {
+			continue // 越界,跳过(保守:不据此判定丢弃)
+		}
+		lineStart := st.lineStarts[loc.Line-1]
+		offset := lineStart + (loc.StartCol - 1) // 1-based col → 0-based byte offset
+		end := lineStart + (loc.EndCol - 1)      // EndCol 半开,转字节偏移
+		if !st.offsetInDataOrCommentSpan(offset, end) {
+			return false // 此 Location 不在 Data/Comment span → 不丢弃
 		}
 	}
+	return true // 所有 Location 都在 Data/Comment span → 丢弃
+}
+
+// offsetInDataOrCommentSpan 判断 [offset, end) 区间是否完全落在 Data/Comment span 内。
+// 用 st.spans(computeLineSemantic 缓存的 ClassifySpans 结果)判定。命中起点不在任何 span
+// (理论上不会发生,ClassifySpans 覆盖全文本)→ 返回 false(保守不丢弃)。
+// 命中起点在 Executed span → false(真实破坏命令,保留)。
+// 命中起点在 Data/Comment span → true(字面量误报,丢弃;跨边界也丢弃,与运行时 hitInDataSpan
+// 保守一致:引号内字面量误报优先丢弃)。
+func (st lineSemanticState) offsetInDataOrCommentSpan(offset, end int) bool {
+	for _, s := range st.spans {
+		if offset >= s.Start && offset < s.End {
+			if s.Kind == ruleengine.SpanExecuted {
+				return false // Executed 区:真实命中,不丢弃
+			}
+			// Data/Comment 区:命中起点在数据/注释 span → 丢弃
+			return true
+		}
+	}
+	return false // 不在任何 span(理论不发生),保守不丢弃
+}
+
+// lineStartOffsetsLocal 返回每行起始字节偏移(starts[i] = 第 i+1 行起点)。第 1 行起点 0。
+// 与 ruleengine.lineStartOffsets 同实现(包级私有,不能跨包调用,在此重声明)。
+// TODO(altitude): ruleengine.lineStartOffsets 导出后改为复用,消除重复(受 Task 9 范围
+// 约束「不改 ruleengine 包」暂保留)。
+func lineStartOffsetsLocal(text string) []int {
+	starts := []int{0}
+	for i := 0; i < len(text); i++ {
+		if text[i] == '\n' {
+			starts = append(starts, i+1)
+		}
+	}
+	return starts
+}
+
+// semanticDenyInDataSpan 判断语义 Deny 的危险关键字是否落在 Data/Comment span(关卡 1 用,R3)。
+// 语义解析器(gitCmdRe/rmCmdRe)的正则不识别引号边界,会把 echo "rm -rf /" 引号内的 rm 误判 Deny。
+// 复核策略(方案 #3 的语义层延伸,与运行时 guard semanticDenyInDataSpan 一致):
+// 按域提取危险关键字,检查它是否出现在任意 SpanExecuted 文本中。若关键字仅出现在
+// Data/Comment span(引号内字面量)→ true(丢弃 Deny,降级 Unknown 走正则层)。
+//
+// 关键字提取(按已实现的语义解析器):
+//   - git.*       → 子命令关键字(reset/branch/clean/push/stash/checkout 等,从 RuleID 取)
+//   - filesystem.* → "rm"(rm 语义解析器只对 rm 关键字判 Deny)
+//   - snowflake.* → "snow sql"(snowflake 语义解析器只对 snow sql 判 Deny)
+//   - 其余 → 保守 false(未知域不剔除,走 Deny,安全不变量:宁可误拦)
+//
+// TODO(altitude): 与 cmd/sentinel/guard_cmd.go 的 semanticDenyInDataSpan 近似重复,
+// 提取到 ruleengine 共享包可消除分歧(受 Task 9 范围约束「不改 ruleengine 包」暂保留)。
+func semanticDenyInDataSpan(segText string, sem semantics.SemanticResult) bool {
+	if sem.RuleID == "" || segText == "" {
+		return false
+	}
+	keyword := semanticDenyKeyword(sem.RuleID)
+	if keyword == "" {
+		return false
+	}
+	spans := ruleengine.ClassifySpans(segText)
+	// 关键字必须出现在至少一个 SpanExecuted 文本中,否则视为纯数据区字面量
+	for _, s := range spans {
+		if s.Kind == ruleengine.SpanExecuted && strings.Contains(s.Text, keyword) {
+			return false // 关键字在 executed 区,是真命中
+		}
+	}
+	// 关键字不在任何 executed span → 纯 Data/Comment 区字面量 → 丢弃
 	return true
+}
+
+// semanticDenyKeyword 按 RuleID 返回用于 span 复核的危险关键字(小写)。
+// git.reset-hard → "reset";git.branch-force-delete → "branch";filesystem.* → "rm";
+// snowflake.* → "snow sql"。
+// RuleID 用连字符分隔子修饰(如 git.push-force-short),关键字取 git. 后到首个 - 的部分。
+//
+// TODO(altitude): 与 cmd/sentinel/guard_cmd.go 的 semanticDenyKeyword 字符相同,
+// 提取到 ruleengine 共享包可消除分歧(受 Task 9 范围约束「不改 ruleengine 包」暂保留)。
+func semanticDenyKeyword(ruleID string) string {
+	if strings.HasPrefix(ruleID, "git.") {
+		rest := strings.TrimPrefix(ruleID, "git.")
+		if i := strings.Index(rest, "-"); i > 0 {
+			return rest[:i]
+		}
+		return rest
+	}
+	if strings.HasPrefix(ruleID, "filesystem.") {
+		return "rm"
+	}
+	if strings.HasPrefix(ruleID, "snowflake.") {
+		return "snow sql"
+	}
+	return ""
 }
 
 // pickSemanticCarrier 为语义 Deny finding 预选载体规则(修复 review Important #1)。
