@@ -204,6 +204,18 @@ func runSetup(homeFlag, cfgPath string, allowMissing bool, in io.Reader, out io.
 		return err
 	}
 	fmt.Fprintf(out, "已写入 %s,重启 sentinel 生效\n", cfgPath)
+
+	// Stage R2:安装运行时拦截 hook 到 ~/.claude/settings.json
+	// best-effort:失败不阻塞 setup(os.Executable 理论上极少失败,但避免在此引入新失败路径)。
+	if sentinelPath, err := os.Executable(); err == nil {
+		claudeDir := cfg.ResolveClaudeDir(home)
+		settingsPath := filepath.Join(claudeDir, "settings.json")
+		if changed, err := InstallGuardHook(settingsPath, sentinelPath); err != nil {
+			fmt.Fprintf(os.Stderr, "安装拦截 hook 失败(不阻塞): %v\n", err)
+		} else if changed {
+			fmt.Println("已安装运行时拦截 hook(~/.claude/settings.json PreToolUse Bash → sentinel guard)")
+		}
+	}
 	return nil
 }
 
