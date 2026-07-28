@@ -22,7 +22,7 @@ func sampleRow(id string) StoredRule {
 	return StoredRule{
 		ID: id, Severity: "critical", AssetType: "command",
 		MatchJSON: `{"field":"command","op":"contains","value":"rm -rf"}`,
-		Dotall: false, Source: "custom",
+		Dotall:    false, Source: "custom",
 	}
 }
 
@@ -116,6 +116,79 @@ func TestListOrphanOverrides(t *testing.T) {
 	}
 	if len(orphans) != 1 || orphans[0] != "b1" {
 		t.Fatalf("orphans = %+v", orphans)
+	}
+}
+
+func TestListRulesEnabledFiltersDisabled(t *testing.T) {
+	db := newTestDB(t)
+	_ = UpsertRule(db, DomainDetect, "builtin", sampleRow("b1"), "v1")
+	_ = UpsertRule(db, DomainDetect, "builtin", sampleRow("b2"), "v1")
+	_ = UpsertRule(db, DomainDetect, "builtin", sampleRow("b3"), "v1")
+	// 禁用 b2
+	if err := SetOverride(db, DomainDetect, "b2", false); err != nil {
+		t.Fatal(err)
+	}
+	got, err := ListRulesEnabled(db, DomainDetect)
+	if err != nil {
+		t.Fatalf("ListRulesEnabled: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 enabled rules (b1,b3), got %d: %+v", len(got), got)
+	}
+	for _, r := range got {
+		if r.ID == "b2" {
+			t.Fatalf("disabled rule b2 should not appear: %+v", got)
+		}
+	}
+	// 无 override 的规则默认启用(已在上面体现);翻回 true 后应重新出现
+	if err := SetOverride(db, DomainDetect, "b2", true); err != nil {
+		t.Fatal(err)
+	}
+	got, _ = ListRulesEnabled(db, DomainDetect)
+	if len(got) != 3 {
+		t.Fatalf("after re-enabling b2: want 3, got %d", len(got))
+	}
+}
+
+func TestListCombosReturnsBuiltinCombos(t *testing.T) {
+	db := newTestDB(t)
+	c1 := StoredCombo{
+		ID: "combo.1", Source: "builtin", Severity: "high",
+		Description: "d1", Remediation: "r1",
+		MetadataJSON: `{"k":"v"}`, RequiresJSON: `[{"asset_type":"command","match":{"field":"command","op":"contains","value":"x"}}]`,
+		BuiltinVersion: "v1",
+	}
+	c2 := StoredCombo{
+		ID: "combo.2", Source: "builtin", Severity: "medium",
+		Description: "d2", Remediation: "r2",
+		MetadataJSON: "", RequiresJSON: `[]`,
+		BuiltinVersion: "v1",
+	}
+	if _, err := SyncBuiltin(db, DomainDetect, nil, []StoredCombo{c1, c2}, "v1"); err != nil {
+		t.Fatalf("SyncBuiltin combos: %v", err)
+	}
+	got, err := ListCombos(db, DomainDetect)
+	if err != nil {
+		t.Fatalf("ListCombos: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("want 2 combos, got %d: %+v", len(got), got)
+	}
+	// 验证字段往返(尤其 RequiresJSON / MetadataJSON / BuiltinVersion)
+	first := got[0]
+	if first.ID != "combo.1" || first.Severity != "high" || first.Source != "builtin" {
+		t.Fatalf("combo.1 fields wrong: %+v", first)
+	}
+	if first.RequiresJSON != c1.RequiresJSON || first.MetadataJSON != c1.MetadataJSON {
+		t.Fatalf("combo.1 JSON columns not roundtripped: requires=%q meta=%q", first.RequiresJSON, first.MetadataJSON)
+	}
+	if first.BuiltinVersion != "v1" {
+		t.Fatalf("combo.1 builtin_version = %q, want v1", first.BuiltinVersion)
+	}
+	// intercept 域应隔离为空
+	iCombos, _ := ListCombos(db, DomainIntercept)
+	if len(iCombos) != 0 {
+		t.Fatalf("intercept combos should be empty, got %d", len(iCombos))
 	}
 }
 

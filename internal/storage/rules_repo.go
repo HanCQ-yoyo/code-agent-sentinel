@@ -100,7 +100,7 @@ func ListRules(db *DB, domain Domain) ([]StoredRule, error) {
 		`SELECT rule_id, source, severity, asset_type, match_json, paths_json,
 		        deobfuscation, dotall, post_exclude, remediation, description, metadata_json,
 		        builtin_version, updated_at
-		 FROM `+domain.rulesTable()+` ORDER BY rule_id`)
+		 FROM ` + domain.rulesTable() + ` ORDER BY rule_id`)
 	if err != nil {
 		return nil, fmt.Errorf("list rules: %w", err)
 	}
@@ -184,12 +184,66 @@ func GetOverride(db *DB, domain Domain, ruleID string) (enabled bool, exists boo
 	return en != 0, true, nil
 }
 
+// ListRulesEnabled 列出所有启用的规则(LEFT JOIN overrides,COALESCE(enabled,1)=1)。
+// 无 override = 启用(builtin 默认启用)。enabled=false 的规则不返回。
+// 返回 StoredRule(含 source/builtin_version),供 ruleengine.LoadDetectRules/
+// LoadInterceptRules 经 StoredRuleToRule 还原。复用 scanRule(列序与 ListRules 一致)。
+func ListRulesEnabled(db *DB, domain Domain) ([]StoredRule, error) {
+	rows, err := db.sqlDB.Query(
+		`SELECT r.rule_id, r.source, r.severity, r.asset_type, r.match_json, r.paths_json,
+		        r.deobfuscation, r.dotall, r.post_exclude, r.remediation, r.description,
+		        r.metadata_json, r.builtin_version, r.updated_at
+		 FROM ` + domain.rulesTable() + ` r
+		 LEFT JOIN ` + domain.overridesTable() + ` o ON r.rule_id = o.rule_id
+		 WHERE COALESCE(o.enabled, 1) = 1
+		 ORDER BY r.rule_id`)
+	if err != nil {
+		return nil, fmt.Errorf("list rules enabled: %w", err)
+	}
+	defer rows.Close()
+	var out []StoredRule
+	for rows.Next() {
+		r, err := scanRule(rows, false)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// ListCombos 列出某域的全部 combo(仅 builtin,custom combo 当前不支持)。
+// StoredCombo 不持有 updated_at(运行时不需要),故该列扫描进局部变量丢弃。
+func ListCombos(db *DB, domain Domain) ([]StoredCombo, error) {
+	rows, err := db.sqlDB.Query(
+		`SELECT rule_id, source, severity, description, remediation, metadata_json,
+		        requires_json, builtin_version, updated_at
+		 FROM ` + domain.combosTable() + ` ORDER BY rule_id`)
+	if err != nil {
+		return nil, fmt.Errorf("list combos: %w", err)
+	}
+	defer rows.Close()
+	var out []StoredCombo
+	for rows.Next() {
+		var c StoredCombo
+		var bv sql.NullString
+		var updatedAt string // updated_at 列 StoredCombo 不持有,扫描后丢弃
+		if err := rows.Scan(&c.ID, &c.Source, &c.Severity, &c.Description, &c.Remediation,
+			&c.MetadataJSON, &c.RequiresJSON, &bv, &updatedAt); err != nil {
+			return nil, err
+		}
+		c.BuiltinVersion = bv.String
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
 // ListOrphanOverrides 列出 overrides 表中 rule_id 在 rules 表已不存在的孤儿
 // (builtin 规则下版本被删后 SyncBuiltin 检测用,报告不自动删)。
 func ListOrphanOverrides(db *DB, domain Domain) ([]string, error) {
 	rows, err := db.sqlDB.Query(
-		`SELECT o.rule_id FROM `+domain.overridesTable()+` o
-		 LEFT JOIN `+domain.rulesTable()+` r ON o.rule_id = r.rule_id
+		`SELECT o.rule_id FROM ` + domain.overridesTable() + ` o
+		 LEFT JOIN ` + domain.rulesTable() + ` r ON o.rule_id = r.rule_id
 		 WHERE r.rule_id IS NULL`)
 	if err != nil {
 		return nil, fmt.Errorf("list orphan overrides: %w", err)
