@@ -215,6 +215,18 @@ func runSetup(homeFlag, cfgPath string, allowMissing bool, in io.Reader, out io.
 		} else if changed {
 			fmt.Println("已安装运行时拦截 hook(~/.claude/settings.json PreToolUse Bash → sentinel guard)")
 		}
+
+		// Stage R3:Codex hook 安装(仅当 ~/.codex 存在时,不强制创建空目录,避免给不用 codex 的用户留垃圾)。
+		// 复用 R2 的 sentinelPath;结构与 Claude settings.json hooks 段同形(matcher="Bash")。
+		codexDir := filepath.Join(home, ".codex")
+		if _, err := os.Stat(codexDir); err == nil {
+			codexHooksPath := filepath.Join(codexDir, "hooks.json")
+			if changed, err := InstallCodexHook(codexHooksPath, sentinelPath); err != nil {
+				fmt.Fprintf(os.Stderr, "安装 Codex 拦截 hook 失败(不阻塞): %v\n", err)
+			} else if changed {
+				fmt.Println("已安装 Codex 运行时拦截 hook(~/.codex/hooks.json PreToolUse Bash → sentinel guard)")
+			}
+		}
 	}
 	return nil
 }

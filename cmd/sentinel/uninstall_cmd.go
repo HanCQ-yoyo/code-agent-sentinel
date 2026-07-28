@@ -73,6 +73,9 @@ func runUninstall(home string, yes, keepConfig bool, out io.Writer) error {
 		// Stage R2:移除运行时拦截 hook(~/.claude/settings.json,与数据目录分离,需单独清理)。
 		// best-effort:settings 不存在视为已卸载,其他错误忽略(与 runServiceUninstall 一致的不阻塞策略)。
 		UninstallGuardHook(filepath.Join(home, ".claude", "settings.json"))
+		// Stage R3:移除 Codex 拦截 hook(~/.codex/hooks.json,与数据目录分离)。
+		// best-effort:忽略错误,文件不存在视为已卸载(非 codex 用户根本没有此文件)。
+		UninstallCodexHook(filepath.Join(home, ".codex", "hooks.json"))
 	}
 
 	if keepConfig {
