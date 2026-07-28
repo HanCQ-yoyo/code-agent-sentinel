@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { apiGet, apiPost, apiPut, apiDelete, AuthError } from '../api/client'
-import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, ScheduleStatus, TreeNode, Project, PinnedProject, DirTagsResponse, RawFile, PreviewResult, EditResult, DetectorsConfig, DashboardData, AgentScanResult, Agent, Finding, FindingState } from '../types'
+import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, ScheduleStatus, TreeNode, Project, PinnedProject, DirTagsResponse, RawFile, PreviewResult, EditResult, DetectorsConfig, DashboardData, AgentScanResult, Agent, Finding, FindingState, InterceptRecord } from '../types'
 import { type DirTag, type DirTagsMap } from '../lib/dirTags'
 import i18n from '../i18n'
 
@@ -13,6 +13,10 @@ interface State {
   detectors: DetectorMeta[]
   detectorConfig: DetectorsConfig | null
   history: ScanSummary[]
+  // Stage R2:Intercept 拦截日志(/api/intercept)。list=列表,detail=详情抽屉数据。
+  // fetchIntercepts 可带 ?outcome= 过滤;fetchInterceptDetail 拉单条;deleteIntercept 删单条。
+  intercept: InterceptRecord[]
+  interceptDetail: InterceptRecord | null
   loading: boolean
   error: string | null
   authError: boolean
@@ -69,6 +73,13 @@ interface State {
   bulkAccept: (fingerprints: string[]) => Promise<void>
   resetFindingState: (fingerprint: string) => Promise<void>
   deleteHistory: (id: string) => Promise<void>
+  // Stage R2:Intercept 拦截日志只读闭环(列表+详情+删除)。
+  // fetchIntercepts:GET /api/intercept?outcome=<value>(outcome 空则不带),成功后 set intercept。
+  // fetchInterceptDetail:GET /api/intercept/:id,返回单条(用于详情抽屉展示)。
+  // deleteIntercept:DELETE /api/intercept/:id,成功后重拉列表(与 deleteHistory 模式一致)。
+  fetchIntercepts: (outcome?: string) => Promise<void>
+  fetchInterceptDetail: (id: string) => Promise<InterceptRecord | undefined>
+  deleteIntercept: (id: string) => Promise<void>
   fetchAgents: () => Promise<void>
   // Task 9:替换 setSelectedAgent。空数组=全选聚合;[id]=单选;[id1,id2]=多选。
   setSelectedAgents: (ids: string[]) => void
@@ -144,6 +155,7 @@ const wrap = async <T>(fn: () => Promise<T>, set: (p: Partial<State>) => void): 
 
 export const useStore = create<State>((set, get) => ({
   assets: null, scan: null, dashboard: null, detectors: [], detectorConfig: null, history: [], loading: false, error: null, authError: false,
+  intercept: [], interceptDetail: null,
   agents: null, selectedAgents: [], scanEnabledAgents: [], schedules: [], tree: null, projects: [], activeProjectTab: { kind: 'global' },
   dirTagsDefaults: {}, dirTagsOverrides: {}, selectedTagFilter: null,
   findings: [],
@@ -289,6 +301,20 @@ export const useStore = create<State>((set, get) => ({
   deleteHistory: async (id) => {
     await wrap(() => apiDelete(`/api/history/${id}`), set)
     await get().fetchHistory()
+  },
+  // Stage R2:Intercept 拦截日志。用 store-inline API 模式(与 history 一致),
+  // 不建独立 interceptApi.ts(项目约定:API 调用内联在 store action,复用 wrap+apiGet/apiDelete)。
+  fetchIntercepts: async (outcome?: string) => {
+    const qs = outcome ? `?outcome=${encodeURIComponent(outcome)}` : ''
+    const list = await wrap(() => apiGet<InterceptRecord[]>(`/api/intercept${qs}`), set)
+    if (list) set({ intercept: list })
+  },
+  fetchInterceptDetail: async (id) => {
+    return wrap(() => apiGet<InterceptRecord>(`/api/intercept/${encodeURIComponent(id)}`), set)
+  },
+  deleteIntercept: async (id) => {
+    await wrap(() => apiDelete(`/api/intercept/${encodeURIComponent(id)}`), set)
+    await get().fetchIntercepts()
   },
   fetchAgents: async () => {
     const res = await wrap(() => apiGet<AgentsResponse>('/api/agents'), set)

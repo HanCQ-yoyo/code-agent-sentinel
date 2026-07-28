@@ -1,5 +1,5 @@
 {
-  "nav": { "dashboard": "仪表盘", "assets": "资产发现", "findings": "风险管理", "history": "检测任务", "settings": "系统设置" },
+  "nav": { "dashboard": "仪表盘", "assets": "资产发现", "findings": "风险管理", "history": "检测任务", "intercept": "拦截", "settings": "系统设置" },
   "topbar": { "rescan": "安全检测", "scanning": "检测中…", "language": "语言", "theme": "主题", "leafAsset": "资产详情", "leafScan": "扫描详情", "dark": "深", "light": "浅" },
   "rescan": {
     "title": "安全检测配置",
@@ -116,6 +116,25 @@
     "batchAgentsCount": "本批次共 {{count}} 个 Agent",
     "singleAgentHint": "单 Agent 扫描",
     "batchSiblings": "批次内其他 Agent"
+  },
+  "intercept": {
+    "title": "拦截日志",
+    "time": "时间",
+    "outcome": "决策",
+    "command": "命令",
+    "rule": "规则",
+    "severity": "严重度",
+    "duration": "耗时",
+    "filterOutcome": "按决策筛选",
+    "refresh": "刷新",
+    "detail": "拦截详情",
+    "reason": "原因",
+    "cwd": "工作目录",
+    "session": "会话",
+    "tool": "工具",
+    "delete": "删除",
+    "confirmDelete": "确认删除此拦截记录?",
+    "empty": "暂无拦截记录"
   },
   "settings": {
     "binaryPath": "二进制路径",

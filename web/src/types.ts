@@ -219,3 +219,24 @@ export interface AgentScanResult {
   finding_count?: number
   error?: string
 }
+
+// /api/intercept 响应:Guard 守卫拦截日志的一条记录(Stage R2)。
+// 后端 intercept.Record 的 JSON 序列化(snake_case 字段名)。
+// outcome: allow=放行 / deny=拒绝 / warn=警告 / ask=询问用户。
+// rule_id/pack_id/severity/reason 仅在命中规则时填充;ask 模式可能无 rule_id。
+// eval_duration_us:规则评估耗时(微秒),用于性能排查。
+export interface InterceptRecord {
+  id: string
+  timestamp: string
+  agent_protocol: string
+  working_dir: string
+  command: string
+  outcome: 'allow' | 'deny' | 'warn' | 'ask'
+  rule_id?: string
+  pack_id?: string
+  severity?: string
+  reason?: string
+  eval_duration_us: number
+  session_id?: string
+  tool_name?: string
+}
