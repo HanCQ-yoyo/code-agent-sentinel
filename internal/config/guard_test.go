@@ -68,3 +68,37 @@ func LoadFromBytes(data []byte) (*Config, error) {
 	}
 	return c, nil
 }
+
+func TestGuardConfigModeNilSafe(t *testing.T) {
+	var c *GuardConfig // nil
+	if got := c.ModeOrDefault(); got != "strict" {
+		t.Fatalf("nil ModeOrDefault=%q, want strict", got)
+	}
+	if !c.AllowlistEnabledOrDefault() {
+		t.Fatal("nil AllowlistEnabledOrDefault 应 true")
+	}
+}
+
+func TestGuardConfigModeLenient(t *testing.T) {
+	c := &GuardConfig{Mode: "lenient"}
+	if c.ModeOrDefault() != "lenient" {
+		t.Fatalf("want lenient, got %q", c.ModeOrDefault())
+	}
+}
+
+func TestEnsureGuardDefaultsMode(t *testing.T) {
+	cfg := &Config{}
+	cfg.EnsureGuard()
+	if cfg.Guard.Mode != "strict" || !cfg.Guard.AllowlistEnabled {
+		t.Fatalf("EnsureGuard 默认应 Mode=strict/AllowlistEnabled=true: %+v", cfg.Guard)
+	}
+}
+
+func TestGuardConfigApplyFromMode(t *testing.T) {
+	dst := &GuardConfig{}
+	src := &GuardConfig{Mode: "lenient", AllowlistEnabled: false}
+	dst.ApplyFrom(src)
+	if dst.Mode != "lenient" || dst.AllowlistEnabled != false {
+		t.Fatalf("ApplyFrom 未复制新字段: %+v", dst)
+	}
+}

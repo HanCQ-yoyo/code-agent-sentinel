@@ -321,6 +321,6 @@ func (c *Config) EnsureDetectors() {
 // 仿 EnsureDetectors:guard 子进程 / API 持指针,须在构造前稳定指向非 nil 对象。
 func (c *Config) EnsureGuard() {
 	if c.Guard == nil {
-		c.Guard = &GuardConfig{Enabled: true, Policy: "deny", DeadlineMS: 200}
+		c.Guard = &GuardConfig{Enabled: true, Policy: "deny", DeadlineMS: 200, Mode: "strict", AllowlistEnabled: true}
 	}
 }
