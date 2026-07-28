@@ -12,6 +12,29 @@
 
 ---
 
+## 运行时风险指令拦截(Stage R2:Claude-only 最小版)
+
+- **合入日期**:2026-07-28(分支 `feat/dcg-stage-r2-runtime-intercept`,待合并后回填 main SHA)
+
+### 升级
+
+- **`sentinel guard` 运行时拦截 hook**:作为 Claude Code `PreToolUse` Bash hook 运行,对单条 shell 命令跑 7 步管线(解析 → 递归短路 → quick-reject → normalize 反混淆 → heredoc 内联脚本提取 → pack 评估 → 决策输出+记录),实时 deny 破坏性命令(`rm -rf /`、`git reset --hard`、`sudo rm`、`$'\x72\x6d'` ANSI-C 编码、`bash -c "rm -rf /"` 内联脚本等)。fail-open 铁律:hook 永远 `exit 0`,deny 仅靠 stdout JSON 表达;解析失败 / 超时 / panic → allow 或 ask(超时)。
+- **反混淆状态机**(手写,参考 dcg `normalize.rs`,不引 shell parser):剥 sudo/env/command/exec/nohup/time/反斜杠 wrapper(迭代 ≤32)+ ANSI-C `$'\xNN'` 解码(仅 executable position,不动数据区)+ 去引号 + 路径展开(`/usr/bin/git`→`git`)。`command -v`/`-V` 查询模式不剥。
+- **quick-reject 关键词快速放行**:每域手工声明在规则 `metadata.keywords`(`destructive_commands.yaml` 5 域 189 条规则),命中关键词进入精检,未命中且无混淆字符放行;空关键词列表保守不 reject(防漏放行);混淆字符(`\ ' "`)回退 normalize 重判。
+- **heredoc Tier1/2 提取 + 手写分段递归**:17 个 trigger 正则 + `<<` 引号感知扫描(零假阴性);提取 interpreter `-c`/here-string/`$()` 内层命令,手写分段(`$()`/`;`/`&&`/`||`/`|`)递归(深度上限 8,砍 AST)。
+- **规则库单一来源**:guard 合成 `configengine.Asset{Type:AssetCommand}` 走与静态 `RulesDetector` 同构的 `DispatchCommand → Eval` 路径,复用 `ruleengine.LoadBuiltin()`(`//go:embed`),绝不复制规则。
+- **`sentinel setup` / `uninstall` 装/卸 hook**:`setup` 自动把 `sentinel guard` 注册到 `~/.claude/settings.json` 的 `hooks.PreToolUse`(matcher=`Bash`,sentinel 置首,幂等 basename 精确匹配);`uninstall` 反向移除(幂等)。
+- **GuardConfig 配置段**(`internal/config/guard.go`,与 Detectors 平级):`enabled`/`policy`/`deadline_ms`/`max_command_bytes`,持 `sync.RWMutex`,`PUT /api/guard/config` 原地 `ApplyFrom` + 写盘热生效;hook 子进程每次 `config.Load` 读盘。
+- **拦截记录存储**(`internal/intercept` 包,镜像 history):`InterceptRecord` JSON 文件(`~/.claude-sentinel/intercept/<id>.json`,原子写),`AgentProtocol="claude"` 命名空间(不复用 history/scheduler 的 AgentID)。
+- **API**:`GET/PUT /api/guard/config`(全键校验防部分体静默禁用)、`GET /api/intercept`、`GET /api/intercept/:id`、`DELETE /api/intercept/:id`。
+- **前端 Intercept 只读页**(`/intercept`):列表(时间 / 决策 / 命令 / 规则 / 严重度 / 耗时)+ 详情抽屉 + 按决策筛选 + 删除;复用 zustand store slice + i18n 中英字典。
+
+### 修复
+
+- 无(新功能分支,无既有缺陷修复)。
+
+---
+
 ## 治理基础(资产能力看板 + FP 减负 + 统一处置生命周期 + 细粒度筛选 + 检测任务完善)
 
 - **合入日期**:2026-07-27(分支 `feat/governance-foundation`,待合并后回填 main SHA)

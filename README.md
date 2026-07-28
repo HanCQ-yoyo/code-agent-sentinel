@@ -19,6 +19,7 @@ English | [中文](README.zh-CN.md)
 - **Capability panel**: structured view of allowed-tools / hook events / mcp commands / memory outline per asset, replacing the old one-line description.
 - **FP reduction**: negation-context suppression (findings prefixed with "forbidden/not allowed" no longer fire); per-asset dedup (same-location multi-rule hits collapse into one finding with `ContributingRuleIDs`); dual-view FindingTable (by finding / by asset).
 - **Scan-task view**: per-agent history page with detection scope/target columns (`ScanSummary.ScopePath`: `global` / `project:<path>` / `asset:<id>`).
+- **Runtime command interception (Claude-only)**: `sentinel guard` runs as a Claude Code `PreToolUse` Bash hook, evaluating each shell command through a 7-step pipeline (parse → recursive short-circuit → quick-reject → deobfuscating normalize → heredoc inline-script extraction → rule-engine eval → decision+record) and denying destructive ones (`rm -rf /`, `git reset --hard`, `sudo rm`, ANSI-C obfuscation, `bash -c "..."` inline scripts). Hand-written state machine (no shell parser), single rule source shared with the static detector. fail-open iron law: the hook always exits 0; deny is expressed only via stdout JSON. `sentinel setup` auto-registers the hook in `~/.claude/settings.json`; decisions are logged to `~/.claude-sentinel/intercept/` and shown read-only on the `/intercept` page. Configurable via the `guard` config section (`enabled` / `policy` / `deadline_ms` / `max_command_bytes`, hot-reloaded via `PUT /api/guard/config`).
 - **Project pinning**: pin frequently-used projects to the top of the Assets page with a color tag (`pinned_projects`).
 - **Dashboard**: health-score card, risk summary, detector status, asset inventory, history trends.
 
@@ -96,6 +97,7 @@ All subcommands accept `--config` to override the config path. `--home` override
 | --- | --- |
 | `sentinel` | Start the local SOC dashboard server (default). Flags: `--config`, `--bind`, `--port`, `--no-browser`, `--i-know-its-risky`, `--home`, `--token`, `--claude-dir`. |
 | `sentinel scan` | One-shot scan (discover → scan → write history), no server. `--detectors=rules,secret` restricts which detectors run. |
+| `sentinel guard` | Runtime interception hook (invoked by Claude Code `PreToolUse`). Reads stdin JSON, evaluates the Bash command, writes a deny/allow decision to stdout. Always exits 0 (fail-open). Flags: `--config`, `--deadline`, `--debug`. Normally auto-registered by `sentinel setup`. |
 | `sentinel uninstall` | Delete `~/.claude-sentinel/` (history, backups, finding_states, rules). Does **not** touch `~/.claude` or the binary. `--yes` skips confirmation; `--keep-config` retains `config.yaml`. |
 | `sentinel baseline` | `--create` bulk-accepts all currently-undisposed findings into `finding_states.yaml`; `--prune` prints a prune report for non-reproducing fingerprints. |
 | `sentinel rules` | `list` prints id/severity/source/valid; `validate [file]` checks rule files (no arg = builtin + global). |
