@@ -24,22 +24,31 @@ type Span struct {
 //   - 单引号 '...' 内整体 Data(无转义无插值)。
 //   - 双引号 "..." 内:字面量 Data;$()/反引号段 Executed(递归);${var}/$var 段 Data(已知限制)。
 //   - # 到行尾 Comment(仅当 # 前是空白或行首)。
-//   - <<EOF...EOF heredoc 体 Data(简化:识别 <<DELIM 后到 DELIM 行)。
 //   - $()/反引号内容 Executed(递归,深度上限 MaxEmbeddedShellDepth)。
 //   - 其余 Executed。
 //
-// panic 兜底:返回单 SpanExecuted 覆盖全文本(安全不变量:宁可误拦不漏报)。
-func ClassifySpans(cmd string) []Span {
+// 已知简化(v1):<<EOF...EOF heredoc 体**未**单独分类——整体按 Executed 处理
+// (heredoc 体重定向到命令 stdin,不直接执行,但 v1 不识别 << 定界符)。如需 Data
+// 分类,后续 Task 可在此基础扩展。
+//
+// panic 兜底:实现 panic 时返回单 SpanExecuted 覆盖全文本(安全不变量:宁可误拦不漏报)。
+func ClassifySpans(cmd string) (spans []Span) {
 	defer func() {
-		_ = recover() // panic 兜底:下面 return 单 Executed 覆盖全文本
+		if r := recover(); r != nil {
+			// panic 兜底:返回单 Executed 覆盖全文本(宁可误拦不漏报)
+			spans = []Span{{Kind: SpanExecuted, Text: cmd, Start: 0, End: len(cmd)}}
+		}
 	}()
-	spans := classifySpansImpl(cmd, 0, 0)
+	spans = classifySpansImplFn(cmd, 0, 0)
 	if spans == nil {
-		// panic 路径或空输入:返回单 Executed 覆盖全文本
-		return []Span{{Kind: SpanExecuted, Text: cmd, Start: 0, End: len(cmd)}}
+		// 空输入或实现返回 nil:同样兜底单 Executed 覆盖全文本
+		spans = []Span{{Kind: SpanExecuted, Text: cmd, Start: 0, End: len(cmd)}}
 	}
 	return spans
 }
+
+// classifySpansImplFn 是实现钩子(包级变量,测试可注入 panic)。
+var classifySpansImplFn = classifySpansImpl
 
 // classifySpansImpl 是递归实现。baseOff 是当前子串在原命令中的偏移(递归 $() 内层时累加)。
 // depth 是命令替换递归深度(防无限,上限 MaxEmbeddedShellDepth)。
@@ -80,11 +89,15 @@ func classifySpansImpl(cmd string, baseOff, depth int) []Span {
 			for i < n && cmd[i] != '\'' {
 				i++
 			}
-			inner := cmd[start+1 : i] // 引号内(不含引号)
+			inner := cmd[start+1 : i] // 引号内(不含引号);i 指向闭引号或 n(未闭合)
+			// 半开区间 [Start, End):Text=inner=cmd[start+1:i],
+			// 故 End = baseOff + i(i 仍在闭引号位置或 n,半开区间正好覆盖 inner)。
+			// 必须在 i++ 之前计算 end,否则闭合时会多包一个引号字符。
+			end := i
 			if i < n {
 				i++ // 跳过闭引号
 			}
-			spans = append(spans, Span{Kind: SpanData, Text: inner, Start: baseOff + start + 1, End: baseOff + i - 1})
+			spans = append(spans, Span{Kind: SpanData, Text: inner, Start: baseOff + start + 1, End: baseOff + end})
 			execStart = i
 			continue
 		}
@@ -104,19 +117,23 @@ func classifySpansImpl(cmd string, baseOff, depth int) []Span {
 					i += 2
 				case cmd[i] == '$' && i+1 < n && cmd[i+1] == '(':
 					// 双引号内 $(...) → Executed(闭合)
+					inner, ok := extractSubstBody(cmd, i+1) // 从 ( 开始
+					if !ok {
+						// 不闭合 $( :把 $ 当字面量 Data(bash 语义),避免吞掉 ( 后字符
+						dataBuf.WriteByte('$')
+						i++
+						continue
+					}
 					if dataBuf.Len() > 0 {
 						spans = append(spans, Span{Kind: SpanData, Text: dataBuf.String(), Start: baseOff + dataStart, End: baseOff + i})
 						dataBuf.Reset()
 					}
-					inner, _ := extractSubstBody(cmd, i+1) // 从 ( 开始
 					if inner != "" && depth < MaxEmbeddedShellDepth {
 						spans = append(spans, classifySpansImpl(inner, baseOff+i+2, depth+1)...)
 					}
 					// 推进 i 越过 $(...);$ 在 i,( 在 i+1,inner 长度 len(inner),) 在 i+2+len(inner)
 					i = i + 2 + len(inner) + 1
-					if i > n {
-						i = n
-					}
+					i = min(i, n)
 					dataStart = i
 				case cmd[i] == '`':
 					// 双引号内反引号 → Executed(闭合)
@@ -189,20 +206,27 @@ func classifySpansImpl(cmd string, baseOff, depth int) []Span {
 			if execBuf.Len() == 0 {
 				execStart = i
 			}
-			inner, _ := extractSubstBody(cmd, i+1)
+			inner, ok := extractSubstBody(cmd, i+1)
+			if !ok {
+				// 不闭合 $( :$ 视字面量 Executed(bash 语义),避免吞 ( 后字符
+				execBuf.WriteByte('$')
+				i++
+				continue
+			}
 			if inner != "" && depth < MaxEmbeddedShellDepth {
 				flushExec(i)
 				spans = append(spans, classifySpansImpl(inner, baseOff+i+2, depth+1)...)
 				execStart = i + 2 + len(inner) + 1
 				i = execStart
-				if i > n {
-					i = n
-				}
+				i = min(i, n)
 				continue
 			}
+			// inner == "" 或深度耗尽:不递归,落到普通 Executed 字符把 $ 当字面量
+			// (bash 语义:不闭合/空 $() 不构成命令替换,后续字符逐字处理)
 		}
 		// 顶层反引号(非双引号内)→ 内层 Executed(递归)
 		if c == '`' {
+			flushExec(i) // 先冲掉已有 execBuf,避免下面 execStart 覆盖后 Start 错位
 			if execBuf.Len() == 0 {
 				execStart = i
 			}
@@ -213,7 +237,6 @@ func classifySpansImpl(cmd string, baseOff, depth int) []Span {
 			}
 			inner := cmd[bs:i]
 			if inner != "" && depth < MaxEmbeddedShellDepth {
-				flushExec(bs - 1)
 				spans = append(spans, classifySpansImpl(inner, baseOff+bs, depth+1)...)
 			}
 			if i < n {

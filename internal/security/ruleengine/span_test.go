@@ -100,10 +100,39 @@ func TestClassifySpansVarReferenceData(t *testing.T) {
 	}
 }
 
-func TestClassifySpansPanicFallback(t *testing.T) {
-	// 任意输入不应 panic;panic 兜底返回单 Executed span
+func TestClassifySpansNormalNonEmpty(t *testing.T) {
+	// 任意输入不应 panic;应返回非空 span 列表
 	spans := ClassifySpans("any command here")
 	if len(spans) == 0 {
 		t.Fatal("不应返回空 span 列表")
+	}
+}
+
+func TestClassifySpansPanicFallback(t *testing.T) {
+	// 注入 panic,验证兜底返回单 Executed span 覆盖全文本(fail-open 铁律:宁可误拦不漏报)
+	orig := classifySpansImplFn
+	classifySpansImplFn = func(cmd string, baseOff, depth int) []Span { panic("injected") }
+	defer func() { classifySpansImplFn = orig }()
+	cmd := "rm -rf /"
+	spans := ClassifySpans(cmd)
+	if len(spans) != 1 {
+		t.Fatalf("panic 兜底应返回单 span: got %+v", spans)
+	}
+	if spans[0].Kind != SpanExecuted || spans[0].Text != cmd || spans[0].Start != 0 || spans[0].End != len(cmd) {
+		t.Fatalf("panic 兜底 span 应为单 Executed 覆盖全文本: got %+v", spans[0])
+	}
+}
+
+func TestClassifySpansDoubleQuoteBacktickExecuted(t *testing.T) {
+	// 双引号内反引号命令替换 → Executed(brief 设计:双引号反引号段 Executed)
+	spans := ClassifySpans(`echo "` + "`rm -rf /`" + `"`)
+	hasExec := false
+	for _, s := range spans {
+		if s.Kind == SpanExecuted && s.Text == "rm -rf /" {
+			hasExec = true
+		}
+	}
+	if !hasExec {
+		t.Fatalf("双引号内反引号应标 Executed: %+v", spans)
 	}
 }
