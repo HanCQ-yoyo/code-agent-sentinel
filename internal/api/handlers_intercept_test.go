@@ -100,6 +100,3 @@ func TestGuardConfigGetPut(t *testing.T) {
 		t.Fatalf("PUT 未生效: %+v", s.Config.Guard)
 	}
 }
-
-// strReader 构造 *strings.Reader 请求体(handler 测试辅助)。
-func strReader(s string) *strings.Reader { return strings.NewReader(s) }

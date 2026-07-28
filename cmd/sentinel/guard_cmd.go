@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
@@ -64,6 +65,15 @@ func guardMain(stdin io.Reader, stdout, stderr io.Writer, cfgPath, deadlineFlag 
 		cfg = config.DefaultConfig()
 	}
 	cfg.EnsureGuard()
+	// --deadline 覆盖评估预算(调试):非空时解析为 ms,原地改写 cfg.Guard.DeadlineMS,
+	// 使后续 DeadlineOrDefault() 取到 flag 值(而非 config 盘上值)。
+	if deadlineFlag != "" {
+		if ms, err := strconv.Atoi(deadlineFlag); err == nil {
+			cfg.Guard.DeadlineMS = ms
+		} else {
+			fmt.Fprintf(stderr, "guard --deadline %q 解析失败(用配置默认): %v\n", deadlineFlag, err)
+		}
+	}
 	home, _ := os.UserHomeDir()
 	return runGuard(stdin, stdout, stderr, cfg, home, debug)
 }
@@ -136,7 +146,8 @@ func runGuard(stdin io.Reader, stdout, stderr io.Writer, cfg *config.Config, hom
 		}
 	}
 
-	// 超时检查(ctx Done 在 evaluate 内部周期检查;此处兜底)
+	// 超时兜底检查:evaluate 内部不查 ctx.Err()(单命令 256 规则 200ms 预算下足够快,实测无超时);
+	// 此处仅在 evaluate 返回后兜底——若 ctx 已超时且未 deny,发 ask + 写 warn 记录。
 	if ctx.Err() != nil && !denied {
 		intercept.WriteDecision(stdout, intercept.DecisionAsk,
 			fmt.Sprintf("评估超时(%dms)", deadline), "", "", "")
@@ -177,6 +188,11 @@ func evaluate(ctx context.Context, cmd string, rules []ruleengine.Rule) (bool, s
 	// 注意:仅当 DispatchCommand 返回 Safe(非 Unknown)才抑制。Unknown(无语义解析器能判)
 	// 不抑制,正则照常跑(baseline.dangerous-hook 等无 domain 规则在 Unknown 下正常检测)。
 	wholeSafe := sem.Decision == semantics.Safe
+	// KNOWN LIMITATION(链式命令绕过,与静态层 rules_detector.go computeLineSemantic 同行为):
+	// `git commit -m "x" && rm -rf /` 这类链式命令,DispatchCommand 取首个非 Unknown 语义(git commit -m → Safe),
+	// wholeSafe=true 会抑制整条命令所有 command 字段正则命中,包括 `&& rm -rf /` 片段 → 误 allow。
+	// ; 与 | 分隔同理。根因:本函数(及静态层)对单命令/单行整体判语义,不按 &&/;/| 拆分独立评估各片段。
+	// v1 接受此限制(guard 是补充防线,非完整 shell parser);R3 计划加 splitAndEvaluate 按分隔符拆分独立评估闭合。
 	for _, r := range rules {
 		if r.AssetType != string(configengine.AssetCommand) && r.AssetType != string(configengine.AssetHook) {
 			// destructive 域规则 asset_type=hook 但 or-tree 覆盖 command 字段;

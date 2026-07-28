@@ -13,10 +13,9 @@ interface State {
   detectors: DetectorMeta[]
   detectorConfig: DetectorsConfig | null
   history: ScanSummary[]
-  // Stage R2:Intercept 拦截日志(/api/intercept)。list=列表,detail=详情抽屉数据。
-  // fetchIntercepts 可带 ?outcome= 过滤;fetchInterceptDetail 拉单条;deleteIntercept 删单条。
+  // Stage R2:Intercept 拦截日志(/api/intercept)。list=列表;fetchIntercepts 可带 ?outcome= 过滤;
+  // fetchInterceptDetail 拉单条(返回值交组件本地 state 渲染抽屉,不入 store);deleteIntercept 删单条。
   intercept: InterceptRecord[]
-  interceptDetail: InterceptRecord | null
   loading: boolean
   error: string | null
   authError: boolean
@@ -155,7 +154,7 @@ const wrap = async <T>(fn: () => Promise<T>, set: (p: Partial<State>) => void): 
 
 export const useStore = create<State>((set, get) => ({
   assets: null, scan: null, dashboard: null, detectors: [], detectorConfig: null, history: [], loading: false, error: null, authError: false,
-  intercept: [], interceptDetail: null,
+  intercept: [],
   agents: null, selectedAgents: [], scanEnabledAgents: [], schedules: [], tree: null, projects: [], activeProjectTab: { kind: 'global' },
   dirTagsDefaults: {}, dirTagsOverrides: {}, selectedTagFilter: null,
   findings: [],

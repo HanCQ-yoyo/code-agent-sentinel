@@ -168,6 +168,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	}
 
 	cfg.EnsureDetectors() // 确保 Detectors 非 nil,检测器持其指针,API 写原地生效
+	cfg.EnsureGuard()     // Stage R2:确保 Guard 非 nil,API PUT /api/guard/config 原地改写生效
 
 	// 多 agent:从 config 解析 enabled agents,桥接为 configengine.Agent。
 	agentCfgs := cfg.ResolveAgents(home)
