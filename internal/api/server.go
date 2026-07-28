@@ -27,7 +27,8 @@ type Server struct {
 	ConfigPath      string // 配置文件路径(/api/dir-tags 回写用)
 	Token           string
 	History         *history.Store
-	Intercept       *intercept.Store // Stage R2:运行时拦截记录(~/.claude-sentinel/intercept)
+	Intercept       *intercept.Store       // Stage R2:运行时拦截记录(~/.claude-sentinel/intercept)
+	Allowlist       *config.AllowlistStore // Stage R3:运行时拦截放行清单(~/.claude-sentinel/allowlist.yaml)
 	Agents          []configengine.Agent
 	SelectedAgentID string
 	Editor          *editor.Editor
@@ -157,6 +158,8 @@ func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	// Stage R2:guard 配置 + 运行时拦截记录 CRUD。
 	api.GET("/guard/config", s.getGuardConfig)
 	api.PUT("/guard/config", s.putGuardConfig)
+	api.GET("/guard/allowlist", s.getAllowlist)
+	api.PUT("/guard/allowlist", s.putAllowlist)
 	api.GET("/intercept", s.getInterceptList)
 	api.GET("/intercept/:id", s.getInterceptDetail)
 	api.DELETE("/intercept/:id", s.deleteIntercept)

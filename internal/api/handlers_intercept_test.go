@@ -89,8 +89,8 @@ func TestGuardConfigGetPut(t *testing.T) {
 	if wGet.Code != http.StatusOK {
 		t.Fatalf("GET status=%d", wGet.Code)
 	}
-	// PUT
-	body := `{"enabled":false,"policy":"warn","deadline_ms":500,"max_command_bytes":1024}`
+	// PUT(Stage R3:须含全部 6 键 enabled/policy/deadline_ms/max_command_bytes/mode/allowlist_enabled)
+	body := `{"enabled":false,"policy":"warn","deadline_ms":500,"max_command_bytes":1024,"mode":"strict","allowlist_enabled":true}`
 	cPut, wPut := newTestContext(httptest.NewRequest("PUT", "/api/guard/config", strings.NewReader(body)))
 	s.putGuardConfig(cPut)
 	if wPut.Code != http.StatusOK {
