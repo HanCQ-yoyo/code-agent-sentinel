@@ -131,10 +131,7 @@ func TestFileVsDBRuleEquivalence(t *testing.T) {
 			}
 			// 命中时 evidence 起始应一致(允许截断差异)
 			if fRes.Matched && len(fRes.Evidence) > 0 && len(dRes.Evidence) > 0 {
-				minLen := len(fRes.Evidence)
-				if len(dRes.Evidence) < minLen {
-					minLen = len(dRes.Evidence)
-				}
+				minLen := min(len(fRes.Evidence), len(dRes.Evidence))
 				if fRes.Evidence[:minLen] != dRes.Evidence[:minLen] {
 					t.Errorf("rule %s asset %s evidence differs: file=%q db=%q", id, a.ID, fRes.Evidence, dRes.Evidence)
 				}
