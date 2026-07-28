@@ -2,7 +2,6 @@ package ruleengine
 
 import (
 	"regexp"
-	"strings"
 )
 
 // MaxEmbeddedShellDepth 是 Tier2.5 递归深度上限。
@@ -104,8 +103,9 @@ func ExtractInlineScripts(cmd string, depth int) []string {
 		out = append(out, inner)
 		// 递归:内层可能再含 bash -c
 		out = append(out, ExtractInlineScripts(inner, depth+1)...)
-		// 内层可能含 $() 命令替换,分段递归
-		for _, seg := range splitCommandSegments(inner) {
+		// 内层可能含 $() 命令替换,分段递归(用 split.go 的 SplitCommand,
+		// 替换 R2 粗版 splitCommandSegments,修复 && 边界 bug,spec §3.2)
+		for _, seg := range SplitCommand(inner) {
 			if seg != inner && seg != "" {
 				out = append(out, seg)
 				out = append(out, ExtractInlineScripts(seg, depth+1)...)
@@ -124,63 +124,6 @@ func ExtractInlineScripts(cmd string, depth int) []string {
 		out = append(out, ExtractInlineScripts(seg, depth+1)...)
 	}
 	return out
-}
-
-// splitCommandSegments 手写分段:按 ; && || | 切分命令(非 AST)。
-func splitCommandSegments(cmd string) []string {
-	var segs []string
-	var cur strings.Builder
-	inSingle, inDouble, paren := false, false, 0
-	flush := func() {
-		s := strings.TrimSpace(cur.String())
-		if s != "" {
-			segs = append(segs, s)
-		}
-		cur.Reset()
-	}
-	for i := 0; i < len(cmd); i++ {
-		c := cmd[i]
-		if c == '\\' && i+1 < len(cmd) {
-			cur.WriteByte(c)
-			if i+1 < len(cmd) {
-				cur.WriteByte(cmd[i+1])
-				i++
-			}
-			continue
-		}
-		if c == '\'' && !inDouble {
-			inSingle = !inSingle
-		} else if c == '"' && !inSingle {
-			inDouble = !inDouble
-		} else if !inSingle && !inDouble && c == '(' {
-			paren++
-		} else if !inSingle && !inDouble && c == ')' {
-			if paren > 0 {
-				paren--
-			}
-		} else if !inSingle && !inDouble && paren == 0 && (c == ';' || c == '|') {
-			// && / || 视为一个分隔
-			if c == '|' && i+1 < len(cmd) && cmd[i+1] == '|' {
-				flush()
-				i++ // 跳过第二个 |
-				continue
-			}
-			if c == '|' && i > 0 && cmd[i-1] == '&' {
-				// 已被 & 处理,跳过
-			}
-			flush()
-			continue
-		} else if !inSingle && !inDouble && paren == 0 && c == '&' {
-			if i+1 < len(cmd) && cmd[i+1] == '&' {
-				flush()
-				i++
-				continue
-			}
-		}
-		cur.WriteByte(c)
-	}
-	flush()
-	return segs
 }
 
 // extractCommandSubstitutions 提取 $() 内层命令(v1 手写,砍 AST)。
