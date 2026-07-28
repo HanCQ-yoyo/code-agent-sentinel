@@ -4,6 +4,7 @@ import {
   AppstoreOutlined,
   WarningOutlined,
   ClockCircleOutlined,
+  BlockOutlined,
   SettingOutlined,
 } from '@ant-design/icons'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -17,6 +18,7 @@ const iconByPath: Record<string, React.ReactNode> = {
   '/assets': <AppstoreOutlined />,
   '/findings': <WarningOutlined />,
   '/history': <ClockCircleOutlined />,
+  '/intercept': <BlockOutlined />,
   '/settings': <SettingOutlined />,
 }
 

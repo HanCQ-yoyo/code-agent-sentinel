@@ -1,5 +1,5 @@
 {
-  "nav": { "dashboard": "Dashboard", "assets": "Assets", "findings": "Findings", "history": "Scan Tasks", "settings": "Settings" },
+  "nav": { "dashboard": "Dashboard", "assets": "Assets", "findings": "Findings", "history": "Scan Tasks", "intercept": "Intercept", "settings": "Settings" },
   "topbar": { "rescan": "Security Scan", "scanning": "Scanning…", "language": "Language", "theme": "Theme", "leafAsset": "Asset Details", "leafScan": "Scan Details", "dark": "Dark", "light": "Light" },
   "rescan": {
     "title": "Security Scan Config",
@@ -116,6 +116,25 @@
     "batchAgentsCount": "{{count}} agents in this batch",
     "singleAgentHint": "Single agent scan",
     "batchSiblings": "Other agents in this batch"
+  },
+  "intercept": {
+    "title": "Intercept Log",
+    "time": "Time",
+    "outcome": "Outcome",
+    "command": "Command",
+    "rule": "Rule",
+    "severity": "Severity",
+    "duration": "Duration",
+    "filterOutcome": "Filter by outcome",
+    "refresh": "Refresh",
+    "detail": "Intercept Detail",
+    "reason": "Reason",
+    "cwd": "Working Dir",
+    "session": "Session",
+    "tool": "Tool",
+    "delete": "Delete",
+    "confirmDelete": "Delete this intercept record?",
+    "empty": "No intercept records"
   },
   "settings": {
     "binaryPath": "Binary path",

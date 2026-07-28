@@ -11,6 +11,7 @@ export const navItems: NavItem[] = [
   { path: '/assets', label: 'nav.assets' },
   { path: '/findings', label: 'nav.findings' },
   { path: '/history', label: 'nav.history' },
+  { path: '/intercept', label: 'nav.intercept' },
   { path: '/settings', label: 'nav.settings' },
 ]
 

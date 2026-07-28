@@ -39,6 +39,10 @@ type Config struct {
 	// main.go 启动时 EnsureDetectors 确保非 nil,使 API 写能原地被检测器读到。
 	Detectors *DetectorsConfig `yaml:"detectors"`
 
+	// 运行时拦截(guard)配置。nil=全启用默认(向后兼容,无 guard 段)。
+	// main.go 启动时 EnsureGuard 确保非 nil,使 PUT /api/guard/config 原地改写生效。
+	Guard *GuardConfig `yaml:"guard" json:"guard"`
+
 	// #2:.claude 目录绝对路径;空 = home/.claude
 	ClaudeDir string `yaml:"claude_dir"`
 	// #2:发现范围开关;nil = 全发现
@@ -310,5 +314,13 @@ func (c *Config) EnsureDetectors() {
 			Secret: BinaryDetectorConfig{Enabled: true},
 			Dep:    DepDetectorConfig{Enabled: true},
 		}
+	}
+}
+
+// EnsureGuard 确保 c.Guard 非 nil(分配全启用默认)。已存在则不覆盖。
+// 仿 EnsureDetectors:guard 子进程 / API 持指针,须在构造前稳定指向非 nil 对象。
+func (c *Config) EnsureGuard() {
+	if c.Guard == nil {
+		c.Guard = &GuardConfig{Enabled: true, Policy: "deny", DeadlineMS: 200}
 	}
 }

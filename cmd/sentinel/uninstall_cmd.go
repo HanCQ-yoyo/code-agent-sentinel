@@ -70,6 +70,9 @@ func runUninstall(home string, yes, keepConfig bool, out io.Writer) error {
 	// 放在 --yes 预览(“将删除...添加 --yes”)之后:未确认的卸载只打印提示,不动服务。
 	if keepConfig || yes {
 		_ = runServiceUninstall(true) // best-effort:无服务时 systemctl 失败被忽略、os.Remove 不存在单元文件也忽略
+		// Stage R2:移除运行时拦截 hook(~/.claude/settings.json,与数据目录分离,需单独清理)。
+		// best-effort:settings 不存在视为已卸载,其他错误忽略(与 runServiceUninstall 一致的不阻塞策略)。
+		UninstallGuardHook(filepath.Join(home, ".claude", "settings.json"))
 	}
 
 	if keepConfig {

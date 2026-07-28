@@ -26,6 +26,31 @@ test.beforeAll(async () => {
   try { unlinkSync('/tmp/sentinel-e2e-home/.claude-sentinel/config.yaml') } catch { /* 首次运行无文件 */ }
   mkdirSync('/tmp/sentinel-e2e-home/.claude', { recursive: true })
   writeFileSync('/tmp/sentinel-e2e-home/.claude/settings.json', JSON.stringify({ permissions: { allow: ['Bash(*)'] } }))
+
+  // Stage R2(Task 10):预写一条 deny 拦截记录到 ~/.claude-sentinel/intercept/<id>.json,
+  // 供「拦截日志」页 e2e 断言。intercept API 只读(GET/DELETE,无 POST),不能经 API 造数据,
+  // 故直接落盘 JSON 文件(main.go L220:istore = NewStore(<home>/.claude-sentinel/intercept),
+  // --home /tmp/sentinel-e2e-home → 服务读此目录)。schema 对齐 intercept.InterceptRecord
+  // (record.go):id/timestamp/agent_protocol/working_dir/command/outcome/rule_id/severity/
+  // reason/eval_duration_us/session_id/tool_name。每次 beforeAll 覆盖同一 id,避免跨运行堆积。
+  // 命令选 "rm -rf /"(filesystem.rm-rf-root-home,severity=critical)——手动验证同款 deny。
+  mkdirSync('/tmp/sentinel-e2e-home/.claude-sentinel/intercept', { recursive: true })
+  writeFileSync(
+    '/tmp/sentinel-e2e-home/.claude-sentinel/intercept/e2e-deny-rmrfroot.json',
+    JSON.stringify({
+      id: 'e2e-deny-rmrfroot',
+      timestamp: '2026-07-28T10:03:49.870595878+08:00',
+      agent_protocol: 'claude',
+      working_dir: '/tmp/sentinel-e2e-home',
+      command: 'rm -rf /',
+      outcome: 'deny',
+      rule_id: 'filesystem.rm-rf-root-home',
+      severity: 'critical',
+      reason: 'rm -rf /(递归强制删根/home)',
+      eval_duration_us: 85027,
+      tool_name: 'Bash',
+    }),
+  )
   // Task 9:加 memory 资产(CLAUDE.md → memory 类型),供 md 资产预览断言;
   // 含 fenced bash 代码块,同时间接覆盖 MonacoBlock 在预览中的渲染。
   // Task 21:追加注入触发内容(匹配 injection.hidden-instruction.memory 规则),
@@ -596,5 +621,31 @@ test('RescanModal 打开并切换 project scope 显示项目选择', async ({ pa
   // 文案在按钮内插空格 → 实际渲染为「取 消」。用正则 /取\s*消/ 匹配(兼容带/不带空格)。
   await modal.getByRole('button', { name: /取\s*消/ }).click()
   await expect(modal).not.toBeVisible({ timeout: 5000 })
+})
+
+// Stage R2(Task 10):运行时拦截日志页(/intercept)只读展示 deny 记录。
+// beforeAll 已预写一条 deny 记录(e2e-deny-rmrfroot.json,command="rm -rf /",
+// rule_id=filesystem.rm-rf-root-home,severity=critical)到 sentinel 拦截目录。
+// 本用例导航到拦截页,断言该 deny 行可见 + 点开抽屉展示详情(command/reason/rule)。
+// 纯文本断言(不截图——多模态不支持,见 CLAUDE.md)。中文 fixture(beforeEach 注入 zh)。
+test('拦截日志页展示 deny 记录并打开详情抽屉', async ({ page }) => {
+  await page.goto('/#token=e2e-test-token-123')
+  // 侧栏 nav.intercept = 「拦截」(zh.json L2),antd Menu item role="menuitem"。
+  // 用部分匹配 /拦截/(同既有 /资产/i 模式);「拦截」唯一出现在侧栏,不会误匹配。
+  await page.getByRole('menuitem', { name: /拦截/ }).click()
+  await expect(page).toHaveURL(/\/intercept/)
+  // 列表渲染:InterceptRecord 的 command 列(Typography.Text code 渲染原始命令)。
+  // beforeAll 预写的 deny 记录 command="rm -rf /",文本应出现在表格中。
+  await expect(page.getByText('rm -rf /', { exact: true }).first()).toBeVisible({ timeout: 10000 })
+  // outcome 列渲染为红色 Tag(deny → outcomeColor.deny='red')。断言 deny Tag 可见。
+  await expect(page.locator('.ant-tag').filter({ hasText: 'deny' }).first()).toBeVisible({ timeout: 10000 })
+  // 点行(任意含 rm -rf / 的单元格所在行)→ openDetail 拉详情 → 抽屉打开。
+  await page.getByText('rm -rf /', { exact: true }).first().click()
+  // 抽屉标题 intercept.detail = 「拦截详情」(zh.json L130)。
+  await expect(page.locator('.ant-drawer-title', { hasText: '拦截详情' })).toBeVisible({ timeout: 10000 })
+  // 抽屉内 reason 区(预写记录 reason="rm -rf /(递归强制删根/home)")应渲染。
+  await expect(page.locator('.ant-drawer-content').getByText(/递归强制删根/)).toBeVisible({ timeout: 10000 })
+  // 抽屉内 rule_id 区(预写 filesystem.rm-rf-root-home)应渲染为 code 文本。
+  await expect(page.locator('.ant-drawer-content').getByText('filesystem.rm-rf-root-home')).toBeVisible({ timeout: 10000 })
 })
 

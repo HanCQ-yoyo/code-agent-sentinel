@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard'
 import Assets from './pages/Assets'
 import Findings from './pages/Findings'
 import History from './pages/History'
+import Intercept from './pages/Intercept'
 import Settings from './pages/Settings'
 import AssetDetail from './components/AssetDetail'
 import { AuthGate } from './components/AuthGate'
@@ -49,6 +50,7 @@ export default function App() {
                 <Route path="/findings" element={<Findings />} />
                 <Route path="/history" element={<History />} />
                 <Route path="/history/:id" element={<History />} />
+                <Route path="/intercept" element={<Intercept />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="*" element={<div className="text-text-muted">页面不存在</div>} />
               </Routes>

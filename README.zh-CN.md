@@ -19,6 +19,7 @@
 - **资产能力看板**:结构化展示 allowed-tools / hook 事件 / mcp 命令 / memory 大纲,替代旧的单行 description。
 - **FP 减负**:否定上下文抑制("禁止/不允许"前缀命中不再触发)+ 资产内去重(同位置多规则命中塌缩为单条 finding,`ContributingRuleIDs` 记录全部触发规则)+ 双视图 FindingTable(按 finding / 按资产聚合)。
 - **检测任务视图**:History 页 per-agent 视图 + 检测范围/目标列(`ScanSummary.ScopePath`:`global` / `project:<path>` / `asset:<id>`)。
+- **运行时风险指令拦截(Claude-only)**:`sentinel guard` 作为 Claude Code `PreToolUse` Bash hook 运行,对每条 shell 命令跑 7 步管线(解析 → 递归短路 → quick-reject → normalize 反混淆 → heredoc 内联脚本提取 → 规则引擎评估 → 决策+记录),实时 deny 破坏性命令(`rm -rf /`、`git reset --hard`、`sudo rm`、ANSI-C 混淆、`bash -c "..."` 内联脚本等)。手写状态机(不引 shell parser),规则库与静态检测器单一来源。fail-open 铁律:hook 永远 `exit 0`,deny 仅靠 stdout JSON 表达。`sentinel setup` 自动把 hook 注册进 `~/.claude/settings.json`;决策记录落盘 `~/.claude-sentinel/intercept/` 并在 `/intercept` 页只读展示。经 `guard` 配置段(`enabled`/`policy`/`deadline_ms`/`max_command_bytes`,`PUT /api/guard/config` 热生效)调控。
 - **项目置顶**:`pinned_projects` 把常用项目置顶 Assets 页并配色。
 - **Dashboard**:健康分卡、风险摘要、检测器状态、资产盘点、历史趋势。
 
@@ -96,6 +97,7 @@ discovery:
 | --- | --- |
 | `sentinel` | 启动本地 SOC 看板 server(默认)。Flags:`--config`、`--bind`、`--port`、`--no-browser`、`--i-know-its-risky`、`--home`、`--token`、`--claude-dir`。 |
 | `sentinel scan` | 一次性扫描(发现 → 扫描 → 写历史),不启 server;`--detectors=rules,secret` 限定运行的检测器。 |
+| `sentinel guard` | 运行时拦截 hook(由 Claude Code `PreToolUse` 调用)。读 stdin JSON,评估 Bash 命令,向 stdout 写 deny/allow 决策。永远 `exit 0`(fail-open)。Flags:`--config`、`--deadline`、`--debug`。通常由 `sentinel setup` 自动注册。 |
 | `sentinel uninstall` | 清理 `~/.claude-sentinel/`(历史、备份、finding_states、规则)。**不**碰 `~/.claude` 与二进制。`--yes` 跳过确认;`--keep-config` 保留 `config.yaml`。 |
 | `sentinel baseline` | `--create` 批量接受当前全部未处置 finding 写入 `finding_states.yaml`;`--prune` 打印不复现指纹的清理报告。 |
 | `sentinel rules` | `list` 打印 id/severity/source/valid;`validate [file]` 校验规则文件(无参 = 内置 + 全局)。 |

@@ -14,6 +14,7 @@ import (
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/editor"
 	"code-agent-sentinel/internal/history"
+	"code-agent-sentinel/internal/intercept"
 	"code-agent-sentinel/internal/scan"
 	"code-agent-sentinel/internal/scheduler"
 	"code-agent-sentinel/internal/security"
@@ -26,6 +27,7 @@ type Server struct {
 	ConfigPath      string // 配置文件路径(/api/dir-tags 回写用)
 	Token           string
 	History         *history.Store
+	Intercept       *intercept.Store // Stage R2:运行时拦截记录(~/.claude-sentinel/intercept)
 	Agents          []configengine.Agent
 	SelectedAgentID string
 	Editor          *editor.Editor
@@ -152,6 +154,12 @@ func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	api.PUT("/settings", s.putSettings)
 	api.GET("/pinned-projects", s.getPinnedProjects)
 	api.PUT("/pinned-projects", s.putPinnedProjects)
+	// Stage R2:guard 配置 + 运行时拦截记录 CRUD。
+	api.GET("/guard/config", s.getGuardConfig)
+	api.PUT("/guard/config", s.putGuardConfig)
+	api.GET("/intercept", s.getInterceptList)
+	api.GET("/intercept/:id", s.getInterceptDetail)
+	api.DELETE("/intercept/:id", s.deleteIntercept)
 }
 
 func (s *Server) notImplemented(c *gin.Context) {

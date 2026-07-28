@@ -23,6 +23,7 @@ import (
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/editor"
 	"code-agent-sentinel/internal/history"
+	"code-agent-sentinel/internal/intercept"
 	"code-agent-sentinel/internal/scan"
 	"code-agent-sentinel/internal/scheduler"
 	"code-agent-sentinel/internal/security"
@@ -90,6 +91,8 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newUninstallCmd())
 	// Task 20:service 子命令(install/uninstall/status 管理系统服务)
 	cmd.AddCommand(newServiceCmd())
+	// Stage R2:guard 子命令(运行时拦截 hook,被 Claude Code PreToolUse 调用)
+	cmd.AddCommand(newGuardCmd())
 	return cmd
 }
 
@@ -165,6 +168,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	}
 
 	cfg.EnsureDetectors() // 确保 Detectors 非 nil,检测器持其指针,API 写原地生效
+	cfg.EnsureGuard()     // Stage R2:确保 Guard 非 nil,API PUT /api/guard/config 原地改写生效
 
 	// 多 agent:从 config 解析 enabled agents,桥接为 configengine.Agent。
 	agentCfgs := cfg.ResolveAgents(home)
@@ -213,6 +217,9 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	}
 	histPath := filepath.Join(home, ".claude-sentinel", "history")
 	hist := history.NewStore(histPath)
+	// Stage R2:运行时拦截记录目录(与 history 同级,在 .claude 之外避免被扫到)。
+	interceptPath := filepath.Join(home, ".claude-sentinel", "intercept")
+	istore := intercept.NewStore(interceptPath)
 
 	// 一次性迁移:baseline.json + suppressions.yaml → finding_states.yaml(Task 11)。
 	// statesPath 已存在则跳过(不覆盖用户已有处置);旧文件重命名 .legacy 保留回滚。
@@ -239,6 +246,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	ed := editor.New(eng, cfg.BackupDir, cfg.MaxBackups)
 	srv := api.NewServer(eng, orch, cfg, token, hist, engAgents, ed)
 	srv.ConfigPath = cfgPath
+	srv.Intercept = istore
 	// 多任务调度:每 agent 一个 Scheduler,Manager 增量同步。
 	// makeRun 按 agentID 闭包 srv.Runner.RunScan(内部 EngineFor 按 agentID 池化选 Engine)。
 	mgr := scheduler.NewManager(func(agentID string) func(context.Context) error {
