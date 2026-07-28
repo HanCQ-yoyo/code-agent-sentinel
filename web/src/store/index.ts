@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { apiGet, apiPost, apiPut, apiDelete, AuthError } from '../api/client'
-import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, ScheduleStatus, TreeNode, Project, PinnedProject, DirTagsResponse, RawFile, PreviewResult, EditResult, DetectorsConfig, DashboardData, AgentScanResult, Agent, Finding, FindingState, InterceptRecord } from '../types'
+import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, ScheduleStatus, TreeNode, Project, PinnedProject, DirTagsResponse, RawFile, PreviewResult, EditResult, DetectorsConfig, DashboardData, AgentScanResult, Agent, Finding, FindingState, InterceptRecord, GuardConfig, AllowlistBody } from '../types'
 import { type DirTag, type DirTagsMap } from '../lib/dirTags'
 import i18n from '../i18n'
 
@@ -16,6 +16,11 @@ interface State {
   // Stage R2:Intercept 拦截日志(/api/intercept)。list=列表;fetchIntercepts 可带 ?outcome= 过滤;
   // fetchInterceptDetail 拉单条(返回值交组件本地 state 渲染抽屉,不入 store);deleteIntercept 删单条。
   intercept: InterceptRecord[]
+  // Stage R3 Task 12:Guard 配置 + 放行清单(GET/PUT /api/guard/{config,allowlist})。
+  // guardConfig 初始 null(SettingsGuard 挂载时 fetch;null → 组件返回 null 不渲染)。
+  // allowlist 初始 [](SettingsAllowlist 挂载时 fetch)。PUT 均要求全量(见 types.ts 注释)。
+  guardConfig: GuardConfig | null
+  allowlist: string[]
   loading: boolean
   error: string | null
   authError: boolean
@@ -79,6 +84,14 @@ interface State {
   fetchIntercepts: (outcome?: string) => Promise<void>
   fetchInterceptDetail: (id: string) => Promise<InterceptRecord | undefined>
   deleteIntercept: (id: string) => Promise<void>
+  // Stage R3 Task 12:Guard 配置 + 放行清单 CRUD。API 内联(项目约定:复用 apiGet/apiPut + wrap,
+  // 不建独立 *Api.ts)。PUT /api/guard/config 要求全量 6 键(见 types.ts 注释)——SettingsGuard
+  // fetch 全量后原地编辑、整体保存,保证不丢字段。saveGuardConfig 返回 boolean(与 saveDetectorConfig
+  // 一致),供组件判定是否关闭 saving 状态(实际错误已由 wrap 写入 store.error)。
+  fetchGuardConfig: () => Promise<void>
+  saveGuardConfig: (cfg: GuardConfig) => Promise<boolean>
+  fetchAllowlist: () => Promise<void>
+  saveAllowlist: (list: string[]) => Promise<boolean>
   fetchAgents: () => Promise<void>
   // Task 9:替换 setSelectedAgent。空数组=全选聚合;[id]=单选;[id1,id2]=多选。
   setSelectedAgents: (ids: string[]) => void
@@ -155,6 +168,7 @@ const wrap = async <T>(fn: () => Promise<T>, set: (p: Partial<State>) => void): 
 export const useStore = create<State>((set, get) => ({
   assets: null, scan: null, dashboard: null, detectors: [], detectorConfig: null, history: [], loading: false, error: null, authError: false,
   intercept: [],
+  guardConfig: null, allowlist: [],
   agents: null, selectedAgents: [], scanEnabledAgents: [], schedules: [], tree: null, projects: [], activeProjectTab: { kind: 'global' },
   dirTagsDefaults: {}, dirTagsOverrides: {}, selectedTagFilter: null,
   findings: [],
@@ -314,6 +328,33 @@ export const useStore = create<State>((set, get) => ({
   deleteIntercept: async (id) => {
     await wrap(() => apiDelete(`/api/intercept/${encodeURIComponent(id)}`), set)
     await get().fetchIntercepts()
+  },
+  // Stage R3 Task 12:Guard 配置 + 放行清单。GET 全量 → 前端原地编辑 → PUT 全量(后端顶层键
+  // 校验拒绝部分体,见 handlers_guard.go / handlers_allowlist.go)。saveGuardConfig/saveAllowlist
+  // 返回 boolean(与 saveDetectorConfig 一致):wrap 返回 undefined 表示出错(已写入 store.error)。
+  fetchGuardConfig: async () => {
+    const res = await wrap(() => apiGet<GuardConfig>('/api/guard/config'), set)
+    if (res) set({ guardConfig: res })
+  },
+  saveGuardConfig: async (cfg) => {
+    const res = await wrap(() => apiPut<GuardConfig>('/api/guard/config', cfg), set)
+    if (res) {
+      set({ guardConfig: res })
+      return true
+    }
+    return false
+  },
+  fetchAllowlist: async () => {
+    const body = await wrap(() => apiGet<AllowlistBody>('/api/guard/allowlist'), set)
+    if (body) set({ allowlist: body.allowlist ?? [] })
+  },
+  saveAllowlist: async (list) => {
+    const body = await wrap(() => apiPut<AllowlistBody>('/api/guard/allowlist', { allowlist: list }), set)
+    if (body) {
+      set({ allowlist: body.allowlist ?? [] })
+      return true
+    }
+    return false
   },
   fetchAgents: async () => {
     const res = await wrap(() => apiGet<AgentsResponse>('/api/agents'), set)

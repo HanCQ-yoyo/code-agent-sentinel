@@ -40,7 +40,9 @@
     "noneWord": "None",
     "config": "Config",
     "runtime": "Runtime",
-    "delete": "Delete"
+    "delete": "Delete",
+    "save": "Save",
+    "confirmDelete": "Delete this entry?"
   },
   "dashboard": {
     "detectorStatus": "Detector Status",
@@ -161,7 +163,28 @@
     "nextRun": "Next run",
     "scanMasterToggle": "Allow scheduled scans",
     "scanDefaultInterval": "Default interval (fallback when no tasks)",
-    "scanToggleHint": "When off, all agents' scheduled tasks pause; {{running}} agent(s) currently running. Per-agent enable/interval in the table below."
+    "scanToggleHint": "When off, all agents' scheduled tasks pause; {{running}} agent(s) currently running. Per-agent enable/interval in the table below.",
+    "guardTab": "Guard",
+    "allowlistTab": "Allowlist"
+  },
+  "guard": {
+    "title": "Guard Config",
+    "enabled": "Enabled",
+    "enabledHint": "Master switch for runtime interception",
+    "mode": "Security Mode",
+    "modeStrict": "Strict (deny on uncertainty)",
+    "modeLenient": "Lenient (ask on uncertainty)",
+    "allowlistEnabled": "Allowlist Enabled",
+    "allowlistEnabledHint": "When off, exact-match passthrough is skipped",
+    "deadlineMs": "Deadline (ms)",
+    "maxCommandBytes": "Max command bytes",
+    "allowlistTitle": "Allowlist",
+    "allowlistHint": "Exact command match. No wildcards. Matched commands are allowed even if a rule hits.",
+    "allowlistPlaceholder": "rm -rf node_modules",
+    "allowlistEmpty": "No allowlist entries",
+    "add": "Add",
+    "allowlistDup": "Already in allowlist",
+    "saved": "Guard config saved"
   },
   "findingDrawer": {
     "title": "Finding Details",

@@ -5,6 +5,8 @@ import { useStore } from '../store'
 import type { DetectorMeta, DetectorsConfig } from '../types'
 import { RulesTable } from '../components/RulesTable'
 import { DetectorPanel } from '../components/DetectorPanel'
+import { SettingsGuard } from '../components/SettingsGuard'
+import { SettingsAllowlist } from '../components/SettingsAllowlist'
 import { SettingsAgents } from './SettingsAgents'
 import { SettingsSchedules } from './SettingsSchedules'
 
@@ -95,6 +97,9 @@ export default function Settings() {
     { key: 'agents', label: t('settings.agentsTab'), children: <SettingsAgents /> },
     { key: 'schedules', label: t('settings.schedulesTab'), children: <SettingsSchedules /> },
     { key: 'detectors-rules', label: t('settings.rulesConfig'), children: detectorsAndRules },
+    // Stage R3 Task 12:Guard 运行时拦截配置 + 放行清单编辑面板。
+    { key: 'guard', label: t('settings.guardTab'), children: <SettingsGuard /> },
+    { key: 'allowlist', label: t('settings.allowlistTab'), children: <SettingsAllowlist /> },
   ]
 
   return (

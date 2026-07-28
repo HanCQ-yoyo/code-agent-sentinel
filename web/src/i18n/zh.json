@@ -40,7 +40,9 @@
     "noneWord": "无",
     "config": "配置",
     "runtime": "运行时",
-    "delete": "删除"
+    "delete": "删除",
+    "save": "保存",
+    "confirmDelete": "确认删除此条目?"
   },
   "dashboard": {
     "detectorStatus": "检测器状态",
@@ -161,7 +163,28 @@
     "nextRun": "下次运行",
     "scanMasterToggle": "允许定时扫描",
     "scanDefaultInterval": "默认间隔(无任务时回退)",
-    "scanToggleHint": "关闭后所有 agent 的定时任务暂停;当前 {{running}} 个 agent 在跑。单个 agent 启停/间隔见下表。"
+    "scanToggleHint": "关闭后所有 agent 的定时任务暂停;当前 {{running}} 个 agent 在跑。单个 agent 启停/间隔见下表。",
+    "guardTab": "拦截配置",
+    "allowlistTab": "放行清单"
+  },
+  "guard": {
+    "title": "拦截配置",
+    "enabled": "总开关",
+    "enabledHint": "运行时拦截主开关",
+    "mode": "安全模式",
+    "modeStrict": "严格(不确定时拦截)",
+    "modeLenient": "宽松(不确定时询问)",
+    "allowlistEnabled": "放行清单启用",
+    "allowlistEnabledHint": "关闭后跳过精确匹配放行",
+    "deadlineMs": "评估预算(ms)",
+    "maxCommandBytes": "命令长度上限(字节)",
+    "allowlistTitle": "放行清单",
+    "allowlistHint": "精确命令匹配,不支持通配。命中的命令即便命中规则也放行。",
+    "allowlistPlaceholder": "rm -rf node_modules",
+    "allowlistEmpty": "暂无放行条目",
+    "add": "添加",
+    "allowlistDup": "已在清单中",
+    "saved": "拦截配置已保存"
   },
   "findingDrawer": {
     "title": "风险详情",
