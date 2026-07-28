@@ -1,0 +1,155 @@
+// Package storage 提供 sqlite 持久化访问层(纯净包:只依赖标准库 + modernc.org/sqlite,
+// 不 import security/configengine)。规则定义/启停覆盖/combo 经此层存取,反序列化在
+// ruleengine 侧做。本包只存取 []byte / 字符串字段。
+package storage
+
+import (
+	"database/sql"
+	"fmt"
+
+	_ "modernc.org/sqlite" // 纯 Go sqlite 驱动,无 CGO
+)
+
+// Domain 标识规则所属域:检测(静态扫描)或拦截(运行时 guard)。
+type Domain string
+
+const (
+	DomainDetect    Domain = "detect"
+	DomainIntercept Domain = "intercept"
+)
+
+// rulesTable / overridesTable / combosTable 按 domain 返回表名(全小写,SQL 不引号即可用)。
+func (d Domain) rulesTable() string {
+	return string(d) + "_rules"
+}
+func (d Domain) overridesTable() string {
+	return string(d) + "_overrides"
+}
+func (d Domain) combosTable() string {
+	return string(d) + "_combos"
+}
+
+// DB 是 *sql.DB 的薄包装,持有连接池。WAL 模式下多进程读(server + guard)不互相阻塞。
+type DB struct {
+	sqlDB *sql.DB
+}
+
+// Open 打开/创建 db 文件(路径由调用方注入 home 拼出)。开 WAL + busy_timeout。
+// 文件不存在则 sql.Open 自动创建;目录须由调用方先 MkdirAll(0o700)。
+func Open(path string) (*DB, error) {
+	d, err := sql.Open("sqlite", path+"?_pragma=journal_mode(WAL)&_pragma=busy_timeout(5000)&_pragma=foreign_keys(ON)")
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite %s: %w", path, err)
+	}
+	if err := d.Ping(); err != nil {
+		d.Close()
+		return nil, fmt.Errorf("ping sqlite: %w", err)
+	}
+	return &DB{sqlDB: d}, nil
+}
+
+// Close 关闭连接池。
+func (db *DB) Close() error { return db.sqlDB.Close() }
+
+// SQL 暴露底层 *sql.DB(供 repo 文件与测试用)。
+func (db *DB) SQL() *sql.DB { return db.sqlDB }
+
+// SchemaInitialized 检查元数据表是否存在(迁移是否已跑过)。
+func SchemaInitialized(db *DB) (bool, error) {
+	var name string
+	err := db.sqlDB.QueryRow(
+		"SELECT name FROM sqlite_master WHERE type='table' AND name='schema_meta'").Scan(&name)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// RunMigrations 建表(幂等:CREATE TABLE IF NOT EXISTS)。两域表结构同构。
+// rules 表:rule_id 主键,source 区分 builtin/custom,builtin_version 用于升级刷新判定,
+//   match_json/paths_json/metadata_json 存 JSON 文本(反序列化在 ruleengine 侧)。
+// overrides 表:rule_id 主键,enabled 启停覆盖(缺省=启用,运行时 LEFT JOIN COALESCE)。
+// combos 表:仅 builtin(本次 custom combo 不支持)。
+// schema_meta:迁移标记表,存在即表示已迁移。
+func RunMigrations(db *DB) error {
+	_, err := db.sqlDB.Exec(`
+CREATE TABLE IF NOT EXISTS schema_meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+INSERT OR IGNORE INTO schema_meta(key, value) VALUES ('version', '1');
+
+CREATE TABLE IF NOT EXISTS detect_rules (
+  rule_id         TEXT PRIMARY KEY,
+  source          TEXT NOT NULL,            -- builtin | custom
+  severity        TEXT NOT NULL,
+  asset_type      TEXT NOT NULL,
+  match_json      TEXT NOT NULL,
+  paths_json      TEXT,
+  deobfuscation   TEXT,                     -- JSON 数组
+  dotall          INTEGER NOT NULL DEFAULT 0,
+  post_exclude    TEXT,                     -- JSON 数组
+  remediation     TEXT,
+  description     TEXT,
+  metadata_json   TEXT,
+  builtin_version TEXT,                     -- builtin 行=引擎版本;custom 行=NULL
+  updated_at      TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS detect_overrides (
+  rule_id    TEXT PRIMARY KEY REFERENCES detect_rules(rule_id) ON DELETE CASCADE,
+  enabled    INTEGER NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS detect_combos (
+  rule_id         TEXT PRIMARY KEY,
+  source          TEXT NOT NULL,
+  severity        TEXT NOT NULL,
+  description     TEXT,
+  remediation     TEXT,
+  metadata_json   TEXT,
+  requires_json   TEXT NOT NULL,
+  builtin_version TEXT,
+  updated_at      TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS intercept_rules (
+  rule_id         TEXT PRIMARY KEY,
+  source          TEXT NOT NULL,
+  severity        TEXT NOT NULL,
+  asset_type      TEXT NOT NULL,
+  match_json      TEXT NOT NULL,
+  paths_json      TEXT,
+  deobfuscation   TEXT,
+  dotall          INTEGER NOT NULL DEFAULT 0,
+  post_exclude    TEXT,
+  remediation     TEXT,
+  description     TEXT,
+  metadata_json   TEXT,
+  builtin_version TEXT,
+  updated_at      TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS intercept_overrides (
+  rule_id    TEXT PRIMARY KEY REFERENCES intercept_rules(rule_id) ON DELETE CASCADE,
+  enabled    INTEGER NOT NULL,
+  updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS intercept_combos (
+  rule_id         TEXT PRIMARY KEY,
+  source          TEXT NOT NULL,
+  severity        TEXT NOT NULL,
+  description     TEXT,
+  remediation     TEXT,
+  metadata_json   TEXT,
+  requires_json   TEXT NOT NULL,
+  builtin_version TEXT,
+  updated_at      TEXT NOT NULL
+);
+`)
+	if err != nil {
+		return fmt.Errorf("run migrations: %w", err)
+	}
+	return nil
+}
