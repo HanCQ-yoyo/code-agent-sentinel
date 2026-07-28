@@ -90,6 +90,8 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newUninstallCmd())
 	// Task 20:service 子命令(install/uninstall/status 管理系统服务)
 	cmd.AddCommand(newServiceCmd())
+	// Stage R2:guard 子命令(运行时拦截 hook,被 Claude Code PreToolUse 调用)
+	cmd.AddCommand(newGuardCmd())
 	return cmd
 }
 
