@@ -2,64 +2,14 @@ import { useState, useMemo, useEffect, type HTMLAttributes } from 'react'
 import { Table, Segmented, Empty, Typography, Card, Tooltip, Tag, Space, Switch, Button, Popconfirm } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useTranslation } from 'react-i18next'
-import type { DetectorMeta, Severity, RuleDTO, RuleDomain } from '../types'
+import type { Severity, RuleDTO, RuleDomain } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { RuleDrawer } from './RuleDrawer'
 import { SEVERITY_ORDER, SEVERITY_LABEL_KEY, SEVERITY_DOT } from '../lib/severity'
-import { detectorName, ruleName } from '../lib/i18n-names'
+import { ruleName } from '../lib/i18n-names'
 import { useStore } from '../store'
 
-// 旧 FlatRule 类型(RuleDrawer 仍依赖:import { sourceLabel, type FlatRule } from './RulesTable')。
-// Task 16 将重写 RuleDrawer 改用 RuleDTO,届时 FlatRule 与 sourceLabel 导出将一并移除。
-// 在此之前保留导出以维持 tsc 编译通过(Option A:RulesTable 行类型切到 RuleDTO,但保留 legacy 导出)。
-export type FlatRule = {
-  id: string; severity: Severity; description: string; syntax?: string
-  asset_type?: string; remediation?: string; paths?: { include?: string[]; exclude?: string[] }
-  post_exclude?: string[]; deobfuscation?: string[]; dotall?: boolean
-  metadata?: Record<string, unknown>; source_file?: string; project_path?: string
-  source?: string; valid?: boolean
-  detector: string; detector_id: string
-}
-
 // 级别筛选配色与风险管理列表(FindingTable)共用 .sev-seg 体系:index.css 按 .sev-tab-* 给选中项填级别实色。
-
-// RuleDrawer 仍 import sourceLabel 用于展示来源文案;Task 16 重写后移除。
-export const sourceLabel: Record<string, string> = {
-  baseline: 'ruleTable.sourceBaseline',
-  injection: 'ruleTable.sourceInjection',
-  skill: 'ruleTable.sourceSkill',
-  custom: 'ruleTable.sourceCustom',
-  other: 'ruleTable.sourceOther',
-}
-
-// RuleDTO → FlatRule 适配器:Task 16 将重写 RuleDrawer 改用 RuleDTO,在此之前用此适配器
-// 把 RuleDTO 映射为 RuleDrawer 只读展示所需的 FlatRule 形状(detector/syntax/valid 等 RuleDTO 无字段填占位)。
-// 这是保持 tsc 编译通过 + 不触碰 RuleDrawer(Task 16 职责)的最小方案。
-function ruleDTOToFlatRule(r: RuleDTO, detectors: DetectorMeta[]): FlatRule {
-  // RuleDTO 无 detector/detector_id:按 rule_id 前缀匹配检测器(baseline.* → rules 等),
-  // 找不到则回退 'rules' 检测器名(只读展示,不参与逻辑)。
-  const prefix = r.id.indexOf('.') > 0 ? r.id.slice(0, r.id.indexOf('.')) : ''
-  const det = detectors.find((d) => d.id === prefix || d.id === 'rules') ?? detectors[0]
-  return {
-    id: r.id,
-    severity: r.severity as Severity,
-    description: r.description ?? '',
-    syntax: undefined, // RuleDTO 无 syntax 字段;RuleDrawer 展示 '--'
-    asset_type: r.asset_type,
-    remediation: r.remediation,
-    paths: r.paths ?? undefined,
-    post_exclude: r.post_exclude,
-    deobfuscation: r.deobfuscation,
-    dotall: r.dotall,
-    metadata: r.metadata,
-    source: r.source, // 'builtin'|'custom'
-    valid: true, // RuleDTO 无 valid 字段;后端已校验入库,默认 true
-    detector: det ? detectorName(det) : '--',
-    detector_id: det?.id ?? '',
-    source_file: undefined,
-    project_path: undefined,
-  }
-}
 
 // 级别筛选标签:色点 + 文案 + 计数。「全部」用 accent 点,各级别用对应级别色点。
 function SevSegLabel({ text, count, sev }: { text: string; count: number; sev?: Severity }) {
@@ -92,14 +42,14 @@ export function RulesTable({ domain, onEdit, onFork }: RulesTableProps) {
   const { t } = useTranslation()
   const [sev, setSev] = useState<Severity | 'all'>('all')
   const [src, setSrc] = useState<string>('all')
-  // selectedFlat 为 RuleDrawer 只读展示用(适配自 RuleDTO);Task 16 重写 RuleDrawer 后改用 RuleDTO。
-  const [selectedFlat, setSelectedFlat] = useState<FlatRule | null>(null)
+  // selectedRule 为行点击只读详情抽屉(RuleDrawer mode='view')用,直接存 RuleDTO。
+  // edit/create 抽屉由 Settings(Task 17)拥有;此处仅 view-only。
+  const [selectedRule, setSelectedRule] = useState<RuleDTO | null>(null)
 
   // store 数据源:按 domain 取对应域的 RuleDTO[](Task 14 已建好 state + actions)。
   const {
     detectRules, interceptRules, loadingRuleId,
     toggleRule, deleteRule, fetchDetectRules, fetchInterceptRules,
-    detectors,
   } = useStore()
 
   // domain 切换时拉对应域规则(detect/intercept 对称)。
@@ -236,12 +186,20 @@ export function RulesTable({ domain, onEdit, onFork }: RulesTableProps) {
         pagination={{ defaultPageSize: 20, showSizeChanger: true, pageSizeOptions: ['10', '20', '50', '100'], size: 'default' }}
         size="middle"
         onRow={(r) => ({
-          onClick: () => setSelectedFlat(ruleDTOToFlatRule(r, detectors)),
+          onClick: () => setSelectedRule(r),
           style: { cursor: 'pointer' },
         }) as HTMLAttributes<HTMLElement>}
       />
-      {/* RuleDrawer 仍用 FlatRule(Task 16 改 RuleDTO):用 ruleDTOToFlatRule 适配,只读展示。 */}
-      <RuleDrawer rule={selectedFlat} detectors={detectors} onClose={() => setSelectedFlat(null)} />
+      {/* 行点击只读详情抽屉(mode='view')。edit/create 抽屉由 Settings(Task 17)拥有:
+          RulesTable 的 onEdit/onFork 回调转发给 Settings,Settings 切到编辑抽屉。
+          两抽屉不同时打开(selectedRule 与 Settings 的 editingRule 互斥:用户点编辑按钮前 view 抽屉可先关,
+          或 Settings 在打开 edit 时清空 view 选择——Task 17 接线时处理)。此处仅 view-only,无冲突。 */}
+      <RuleDrawer
+        rule={selectedRule}
+        mode="view"
+        domain={domain}
+        onClose={() => setSelectedRule(null)}
+      />
     </Card>
   )
 }
