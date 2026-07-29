@@ -268,9 +268,15 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
             </Descriptions.Item>
             {/* match 摘要:RuleDTO 把规则语法并入 match 对象(如 {regex: ...});展示完整 JSON。 */}
             <Descriptions.Item label={t('ruleDrawer.ruleSyntax')}>
-              <pre style={{ margin: 0, fontSize: 12, fontFamily: 'var(--font-mono)', wordBreak: 'break-all', color: 'var(--text)' }}>
-                {rule.match && Object.keys(rule.match).length > 0 ? JSON.stringify(rule.match, null, 2) : t('ruleDrawer.none')}
-              </pre>
+              {rule.match && Object.keys(rule.match).length > 0 ? (
+                <MatchTreeEditor
+                  value={matchMapToTree(rule.match)}
+                  matchMap={rule.match}
+                  assetType={rule.asset_type}
+                  readOnly
+                  onChange={() => {}}
+                />
+              ) : <Typography.Text type="secondary">{t('ruleDrawer.none')}</Typography.Text>}
             </Descriptions.Item>
             <Descriptions.Item label={t('ruleDrawer.remediation')}>
               <span style={{ fontSize: 13 }}>{rule.remediation || '--'}</span>
