@@ -111,11 +111,8 @@ function LeafFields({ node, assetType, readOnly, onChange, t }: {
         placeholder={t('ruleForm.opLabel')}
         value={op || undefined}
         onChange={(v: string) => {
-          // 切 op 时按新契约重置 value(exists→'';within→[];其余→'')
-          let value: string | string[] = ''
-          if (ARRAY_OPS.has(v)) value = []
-          else if (NO_VALUE_OPS.has(v)) value = ''
-          else value = ''
+          // 切 op 时按新契约重置 value:within/not_within→[];其余(exists/not_exists/标量/正则)→''
+          const value: string | string[] = ARRAY_OPS.has(v) ? [] : ''
           onChange({ ...node, op: v, value })
         }}
       >

@@ -8,7 +8,7 @@ import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { SEVERITY_LABEL_KEY, SEVERITY_ORDER } from '../lib/severity'
 import { ruleName } from '../lib/i18n-names'
 import { MatchTreeEditor } from './MatchTreeEditor'
-import { matchMapToTree, treeToMatchMap, newLeaf, isUnsupported, type MatchTreeNode } from '../lib/match-tree'
+import { matchMapToTree, treeToMatchMap, newLeaf, type MatchTreeNode } from '../lib/match-tree'
 
 interface RuleDrawerProps {
   rule: RuleDTO | null
@@ -115,7 +115,6 @@ function draftToRuleDTO(draft: RuleDraft, mode: 'edit' | 'create'): Partial<Rule
     if (m.key) metaObj[m.key] = isNaN(Number(m.value)) ? m.value : Number(m.value)
   }
   if (Object.keys(metaObj).length) dto.metadata = metaObj
-  if (mode === 'create') dto.enabled = draft.enabled
   return dto as Partial<RuleDTO>
 }
 
