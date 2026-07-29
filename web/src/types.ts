@@ -240,6 +240,33 @@ export interface AllowlistBody {
   allowlist: string[]
 }
 
+// 规则路径过滤(paths 字段 null 表示不过滤)。
+export interface RulePathFilter {
+  include: string[]
+  exclude: string[]
+}
+// 规则域:检测(detect)或拦截(intercept)。两域共用同一 DTO,Domain 字段标识来源域。
+export type RuleDomain = 'detect' | 'intercept'
+// 规则 DTO(对应后端 internal/api/rules_dto.go 的 ruleDTO,字段名 snake_case 与后端 JSON tag 一致)。
+// source/Enabled/CanEdit/Domain 是派生字段(Enabled 经 overrides 表 JOIN 派生;CanEdit = source=='custom')。
+export interface RuleDTO {
+  id: string
+  severity: string
+  asset_type: string
+  match: Record<string, unknown>
+  deobfuscation?: string[]
+  dotall?: boolean
+  paths?: RulePathFilter | null
+  post_exclude?: string[]
+  remediation?: string
+  description?: string
+  metadata?: Record<string, unknown>
+  source: 'builtin' | 'custom'
+  enabled: boolean
+  can_edit: boolean
+  domain: RuleDomain
+}
+
 // /api/intercept 响应:Guard 守卫拦截日志的一条记录(Stage R2)。
 // 后端 intercept.Record 的 JSON 序列化(snake_case 字段名)。
 // outcome: allow=放行 / deny=拒绝 / warn=警告 / ask=询问用户。

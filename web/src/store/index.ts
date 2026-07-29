@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 import { apiGet, apiPost, apiPut, apiDelete, AuthError } from '../api/client'
-import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, ScheduleStatus, TreeNode, Project, PinnedProject, DirTagsResponse, RawFile, PreviewResult, EditResult, DetectorsConfig, DashboardData, AgentScanResult, Agent, Finding, FindingState, InterceptRecord, GuardConfig, AllowlistBody } from '../types'
+import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, ScheduleStatus, TreeNode, Project, PinnedProject, DirTagsResponse, RawFile, PreviewResult, EditResult, DetectorsConfig, DashboardData, AgentScanResult, Agent, Finding, FindingState, InterceptRecord, GuardConfig, AllowlistBody, RuleDTO, RuleDomain } from '../types'
 import { type DirTag, type DirTagsMap } from '../lib/dirTags'
 import i18n from '../i18n'
 
@@ -21,6 +21,12 @@ interface State {
   // allowlist 初始 [](SettingsAllowlist 挂载时 fetch)。PUT 均要求全量(见 types.ts 注释)。
   guardConfig: GuardConfig | null
   allowlist: string[]
+  // Task 14:规则 CRUD(detect/intercept 两域对称)。后端 /api/{detect,intercept}-rules(sqlite 单一真相)。
+  // detectRules/interceptRules 为 null = 未加载;[] = 已加载但空(与 null 区分,避免组件渲染"加载中"时误判为空)。
+  // loadingRuleId:启停/fork 防抖(同一 rule 同时只发一个请求),saveRule 也占用。
+  detectRules: RuleDTO[] | null
+  interceptRules: RuleDTO[] | null
+  loadingRuleId: string | null
   loading: boolean
   error: string | null
   authError: boolean
@@ -92,6 +98,24 @@ interface State {
   saveGuardConfig: (cfg: GuardConfig) => Promise<boolean>
   fetchAllowlist: () => Promise<void>
   saveAllowlist: (list: string[]) => Promise<boolean>
+  // Task 14:规则 CRUD actions(detect/intercept 两域对称,共用同一组 action + domain 参数分流)。
+  // fetchDetectRules/fetchInterceptRules:拉列表 → set 对应 state(空数组兜底,null 区分未加载)。
+  // saveRule:创建(POST)或更新(PUT)custom 规则。create/update 由 rule.source 判断:
+  //   - source 为空串/undefined(新草稿,未落库)→ POST 创建
+  //   - source 已是 'builtin'/'custom'(已存在)→ PUT 更新(后端对 builtin PUT 返回 409,UI 在 Task 16 灰掉编辑)
+  //   不用 brief 原稿的 `rule.id !== rule.id`(恒 false 的 bug),改用 source 是否已赋值。
+  // toggleRule:PUT /enabled(builtin/custom 都可禁用,builtin 禁用走 override 表不改规则行)。
+  // forkRule:POST /fork(只允许 builtin → custom,后端对 custom 返回 409)。返回新 RuleDTO 供调用方跳转。
+  // deleteRule:DELETE(后端对 builtin 返回 409,UI 在 Task 16 不显删除按钮)。
+  // validateRuleDraft:POST /validate(不落库,返回 {valid, errors};注意 HTTP 200 即使 valid=false,
+  //   wrap 不会吞掉——后端永远 r.ok,errors 在 body 里)。返回值供 RuleDrawer 实时校验提示。
+  fetchDetectRules: () => Promise<void>
+  fetchInterceptRules: () => Promise<void>
+  saveRule: (domain: RuleDomain, rule: RuleDTO) => Promise<void>
+  toggleRule: (domain: RuleDomain, id: string, enabled: boolean) => Promise<void>
+  forkRule: (domain: RuleDomain, id: string, newId: string) => Promise<RuleDTO | undefined>
+  deleteRule: (domain: RuleDomain, id: string) => Promise<void>
+  validateRuleDraft: (domain: RuleDomain, rule: Partial<RuleDTO>) => Promise<{ valid: boolean; errors: string[] } | undefined>
   fetchAgents: () => Promise<void>
   // Task 9:替换 setSelectedAgent。空数组=全选聚合;[id]=单选;[id1,id2]=多选。
   setSelectedAgents: (ids: string[]) => void
@@ -169,6 +193,7 @@ export const useStore = create<State>((set, get) => ({
   assets: null, scan: null, dashboard: null, detectors: [], detectorConfig: null, history: [], loading: false, error: null, authError: false,
   intercept: [],
   guardConfig: null, allowlist: [],
+  detectRules: null, interceptRules: null, loadingRuleId: null,
   agents: null, selectedAgents: [], scanEnabledAgents: [], schedules: [], tree: null, projects: [], activeProjectTab: { kind: 'global' },
   dirTagsDefaults: {}, dirTagsOverrides: {}, selectedTagFilter: null,
   findings: [],
@@ -355,6 +380,57 @@ export const useStore = create<State>((set, get) => ({
       return true
     }
     return false
+  },
+  // Task 14:规则 CRUD(detect/intercept 两域对称)。用 wrap+apiGet/apiPost/apiPut/apiDelete
+  // (与项目其他 action 一致,不建独立 *Api.ts)。成功后重拉对应域列表(与 setFindingState→fetchFindings 同模式)。
+  fetchDetectRules: async () => {
+    const data = await wrap(() => apiGet<RuleDTO[]>('/api/detect-rules'), set)
+    if (data) set({ detectRules: data })
+  },
+  fetchInterceptRules: async () => {
+    const data = await wrap(() => apiGet<RuleDTO[]>('/api/intercept-rules'), set)
+    if (data) set({ interceptRules: data })
+  },
+  // saveRule:创建或更新 custom 规则。
+  // create/update 判定:用 rule.source 是否已赋值——新草稿(未落库)source 为空串/undefined → POST 创建;
+  // 已存在规则 source 为 'builtin'/'custom' → PUT 更新(后端对 builtin PUT 返回 409,UI 在 Task 16 灰掉编辑)。
+  // 不用 brief 原稿 `rule.id !== rule.id`(恒 false 的 bug)。PUT 走 /:id(path id 即 rule.id,后端忽略 body.id)。
+  saveRule: async (domain, rule) => {
+    set({ loadingRuleId: rule.id })
+    const isCreate = !rule.source
+    if (isCreate) {
+      await wrap(() => apiPost<RuleDTO>(`/api/${domain}-rules`, rule), set)
+    } else {
+      await wrap(() => apiPut<RuleDTO>(`/api/${domain}-rules/${encodeURIComponent(rule.id)}`, rule), set)
+    }
+    if (domain === 'detect') await get().fetchDetectRules()
+    else await get().fetchInterceptRules()
+    set({ loadingRuleId: null })
+  },
+  toggleRule: async (domain, id, enabled) => {
+    set({ loadingRuleId: id })
+    await wrap(() => apiPut(`/api/${domain}-rules/${encodeURIComponent(id)}/enabled`, { enabled }), set)
+    if (domain === 'detect') await get().fetchDetectRules()
+    else await get().fetchInterceptRules()
+    set({ loadingRuleId: null })
+  },
+  forkRule: async (domain, id, newId) => {
+    const result = await wrap(() => apiPost<RuleDTO>(`/api/${domain}-rules/${encodeURIComponent(id)}/fork`, { new_id: newId }), set)
+    if (result) {
+      if (domain === 'detect') await get().fetchDetectRules()
+      else await get().fetchInterceptRules()
+    }
+    return result
+  },
+  deleteRule: async (domain, id) => {
+    await wrap(() => apiDelete(`/api/${domain}-rules/${encodeURIComponent(id)}`), set)
+    if (domain === 'detect') await get().fetchDetectRules()
+    else await get().fetchInterceptRules()
+  },
+  validateRuleDraft: async (domain, rule) => {
+    // 后端 validate 永远返回 HTTP 200(即使 valid=false),wrap 不会吞掉;
+    // 返回 {valid, errors} 供 RuleDrawer 实时校验提示。
+    return wrap(() => apiPost<{ valid: boolean; errors: string[] }>(`/api/${domain}-rules/validate`, rule), set)
   },
   fetchAgents: async () => {
     const res = await wrap(() => apiGet<AgentsResponse>('/api/agents'), set)
