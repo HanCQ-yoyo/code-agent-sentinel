@@ -1,13 +1,17 @@
-import { useState, useMemo, type HTMLAttributes } from 'react'
-import { Table, Segmented, Empty, Typography, Card, Tooltip, Alert, Tag } from 'antd'
+import { useState, useMemo, useEffect, type HTMLAttributes } from 'react'
+import { Table, Segmented, Empty, Typography, Card, Tooltip, Tag, Space, Switch, Button, Popconfirm } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useTranslation } from 'react-i18next'
-import type { DetectorMeta, Severity } from '../types'
+import type { DetectorMeta, Severity, RuleDTO, RuleDomain } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { RuleDrawer } from './RuleDrawer'
 import { SEVERITY_ORDER, SEVERITY_LABEL_KEY, SEVERITY_DOT } from '../lib/severity'
 import { detectorName, ruleName } from '../lib/i18n-names'
+import { useStore } from '../store'
 
+// 旧 FlatRule 类型(RuleDrawer 仍依赖:import { sourceLabel, type FlatRule } from './RulesTable')。
+// Task 16 将重写 RuleDrawer 改用 RuleDTO,届时 FlatRule 与 sourceLabel 导出将一并移除。
+// 在此之前保留导出以维持 tsc 编译通过(Option A:RulesTable 行类型切到 RuleDTO,但保留 legacy 导出)。
 export type FlatRule = {
   id: string; severity: Severity; description: string; syntax?: string
   asset_type?: string; remediation?: string; paths?: { include?: string[]; exclude?: string[] }
@@ -19,13 +23,7 @@ export type FlatRule = {
 
 // 级别筛选配色与风险管理列表(FindingTable)共用 .sev-seg 体系:index.css 按 .sev-tab-* 给选中项填级别实色。
 
-// 按 rule_id 前缀推导来源分组(baseline./injection./skill./custom.)。
-// 后端 RuleInfo 目前未带 source 字段;前端按前缀推导,后端补充后优先用 r.source。
-function ruleSource(r: FlatRule): string {
-  if (r.source) return r.source
-  const i = r.id.indexOf('.')
-  return i > 0 ? r.id.slice(0, i) : 'other'
-}
+// RuleDrawer 仍 import sourceLabel 用于展示来源文案;Task 16 重写后移除。
 export const sourceLabel: Record<string, string> = {
   baseline: 'ruleTable.sourceBaseline',
   injection: 'ruleTable.sourceInjection',
@@ -33,7 +31,35 @@ export const sourceLabel: Record<string, string> = {
   custom: 'ruleTable.sourceCustom',
   other: 'ruleTable.sourceOther',
 }
-const sourceOrder = ['baseline', 'injection', 'skill', 'custom', 'other']
+
+// RuleDTO → FlatRule 适配器:Task 16 将重写 RuleDrawer 改用 RuleDTO,在此之前用此适配器
+// 把 RuleDTO 映射为 RuleDrawer 只读展示所需的 FlatRule 形状(detector/syntax/valid 等 RuleDTO 无字段填占位)。
+// 这是保持 tsc 编译通过 + 不触碰 RuleDrawer(Task 16 职责)的最小方案。
+function ruleDTOToFlatRule(r: RuleDTO, detectors: DetectorMeta[]): FlatRule {
+  // RuleDTO 无 detector/detector_id:按 rule_id 前缀匹配检测器(baseline.* → rules 等),
+  // 找不到则回退 'rules' 检测器名(只读展示,不参与逻辑)。
+  const prefix = r.id.indexOf('.') > 0 ? r.id.slice(0, r.id.indexOf('.')) : ''
+  const det = detectors.find((d) => d.id === prefix || d.id === 'rules') ?? detectors[0]
+  return {
+    id: r.id,
+    severity: r.severity as Severity,
+    description: r.description ?? '',
+    syntax: undefined, // RuleDTO 无 syntax 字段;RuleDrawer 展示 '--'
+    asset_type: r.asset_type,
+    remediation: r.remediation,
+    paths: r.paths ?? undefined,
+    post_exclude: r.post_exclude,
+    deobfuscation: r.deobfuscation,
+    dotall: r.dotall,
+    metadata: r.metadata,
+    source: r.source, // 'builtin'|'custom'
+    valid: true, // RuleDTO 无 valid 字段;后端已校验入库,默认 true
+    detector: det ? detectorName(det) : '--',
+    detector_id: det?.id ?? '',
+    source_file: undefined,
+    project_path: undefined,
+  }
+}
 
 // 级别筛选标签:色点 + 文案 + 计数。「全部」用 accent 点,各级别用对应级别色点。
 function SevSegLabel({ text, count, sev }: { text: string; count: number; sev?: Severity }) {
@@ -49,73 +75,76 @@ function SevSegLabel({ text, count, sev }: { text: string; count: number; sev?: 
   )
 }
 
-// 规则总览:汇总所有检测器的规则,按 sev + 检测器筛选。规则号 mono,sev 标签,检测器名,说明。
-// detectorFilter(可选):外部胶囊行点击检测器后传入,只显示该检测器规则。
-export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorMeta[]; detectorFilter?: string }) {
+// 来源筛选选项(builtin/custom/all):RuleDTO.source 只有 builtin|custom 两值。
+const SOURCE_OPTIONS = ['builtin', 'custom'] as const
+
+interface RulesTableProps {
+  domain: RuleDomain
+  onEdit?: (r: RuleDTO) => void
+  onFork?: (r: RuleDTO) => void
+}
+
+// 规则总览:按域(detect/intercept)从 store 读 RuleDTO[],按 sev + 来源筛选。
+// 操作列:启停 Switch(custom/builtin 都可)+ custom 规则的 Edit/Delete + builtin 规则的 Fork。
+// onEdit/onFork 回调由 Settings 页传入(Task 17 接 Segmented 域切换 + Task 16 接 RuleDrawer 编辑模式)。
+// Task 15:Settings 暂硬编码 domain="detect",onEdit/onFork 为 no-op(占位,Task 16/17 接线)。
+export function RulesTable({ domain, onEdit, onFork }: RulesTableProps) {
   const { t } = useTranslation()
   const [sev, setSev] = useState<Severity | 'all'>('all')
   const [src, setSrc] = useState<string>('all')
-  const [selected, setSelected] = useState<FlatRule | null>(null)
+  // selectedFlat 为 RuleDrawer 只读展示用(适配自 RuleDTO);Task 16 重写 RuleDrawer 后改用 RuleDTO。
+  const [selectedFlat, setSelectedFlat] = useState<FlatRule | null>(null)
 
-  const allRules = useMemo<FlatRule[]>(
-    () => detectors.flatMap((d) => (d.rules ?? []).map((r) => {
-      // detector 字段用双语名(先 i18n detectors.<id>,回退 d.name);description 原样保留,
-      // 展示时再经 ruleName() 取双语名(先 i18n rules.<id>,回退 description)。
-      const fr: FlatRule = { ...r, detector: detectorName(d), detector_id: d.id }
-      // 后端 RuleInfo 未带 source:前端按 rule_id 前缀推导并写入 FlatRule.source,
-      // 使列表列、来源筛选与 RuleDrawer 来源展示共用同一推导结果(单一推导点)。
-      fr.source = fr.source ?? ruleSource(fr)
-      return fr
-    })),
-    [detectors]
-  )
+  // store 数据源:按 domain 取对应域的 RuleDTO[](Task 14 已建好 state + actions)。
+  const {
+    detectRules, interceptRules, loadingRuleId,
+    toggleRule, deleteRule, fetchDetectRules, fetchInterceptRules,
+    detectors,
+  } = useStore()
 
-  // 先按检测器筛选(detectorFilter 来自胶囊行),再据此算 sev 分布 + 二次 sev 筛选。
-  // 这样 Segmented 计数随检测器筛选联动,「全部 N」反映当前检测器规则数,而非全局。
-  const byDetector = useMemo(
-    () => allRules.filter((r) => !detectorFilter || r.detector_id === detectorFilter),
-    [allRules, detectorFilter]
-  )
+  // domain 切换时拉对应域规则(detect/intercept 对称)。
+  useEffect(() => {
+    if (domain === 'detect') fetchDetectRules()
+    else fetchInterceptRules()
+  }, [domain, fetchDetectRules, fetchInterceptRules])
 
-  // 来源分布:按 rule_id 前缀分组(baseline/injection/skill/custom/other),计数随检测器筛选联动。
+  const rawRules: RuleDTO[] = useMemo(() => {
+    const list = domain === 'detect' ? detectRules : interceptRules
+    return list ?? []
+  }, [domain, detectRules, interceptRules])
+
+  // 来源分布:按 rule.source(builtin/custom)计数。
   const sourceCounts = useMemo(() => {
-    const c: Record<string, number> = { all: byDetector.length }
-    for (const r of byDetector) {
-      const s = ruleSource(r)
-      c[s] = (c[s] ?? 0) + 1
-    }
+    const c: Record<string, number> = { all: rawRules.length, builtin: 0, custom: 0 }
+    for (const r of rawRules) c[r.source] = (c[r.source] ?? 0) + 1
     return c
-  }, [byDetector])
+  }, [rawRules])
 
-  // 来源筛选:在 byDetector 基础上再按来源前缀过滤,实现"按来源分组"。
+  // 来源筛选:在 rawRules 基础上按 source 过滤(来源 → 级别两级过滤)。
   const bySource = useMemo(
-    () => src === 'all' ? byDetector : byDetector.filter((r) => ruleSource(r) === src),
-    [byDetector, src]
+    () => src === 'all' ? rawRules : rawRules.filter((r) => r.source === src),
+    [rawRules, src]
   )
 
-  // 级别分布:在来源筛选基础上算,使 Segmented 计数随来源筛选联动(检测器 → 来源 → 级别)。
+  // 级别分布:在来源筛选基础上算,使 Segmented 计数随来源筛选联动。
   const counts = useMemo(() => {
     const c: Record<string, number> = { all: bySource.length, critical: 0, high: 0, medium: 0, low: 0, info: 0 }
     for (const r of bySource) c[r.severity] = (c[r.severity] ?? 0) + 1
     return c
   }, [bySource])
 
-  // 合并筛选:在 bySource 基础上再按 sev(检测器 → 来源 → 级别三级过滤)。
+  // 合并筛选:在 bySource 基础上再按 sev(来源 → 级别两级过滤)。
   const filtered = sev === 'all' ? bySource : bySource.filter((r) => r.severity === sev)
 
-  // 无效规则(valid === false)置顶横幅:后端 Meta() 目前只返回已 Validate 的规则(全 valid),
-  // 此横幅为防御性能力——后端补充 valid 字段后即生效。
-  const invalidRules = useMemo(() => byDetector.filter((r) => r.valid === false), [byDetector])
-
-  // 列顺序:规则号 → 规则名称 → 级别 → 来源 → 校验 → 检测器 → 规则语法。
-  // 规则号/规则语法加宽并 mono;规则名称作弹性列(ellipsis 截断),收窄其占比。
-  // 行可点击 → 打开规则详情抽屉(展示完整语法 + 所属检测器上下文)。
-  const columns: ColumnsType<FlatRule> = [
+  // 列顺序:规则号 → 规则名称 → 级别 → 来源 → 操作。
+  // RuleDTO 无 detector/syntax/valid 字段(旧 FlatRule 才有),故去掉检测器列与规则语法列。
+  // 行可点击 → 打开规则详情抽屉(只读,Task 16 改编辑模式)。
+  const columns: ColumnsType<RuleDTO> = [
     { title: t('ruleTable.colRuleId'), width: 260, dataIndex: 'id', render: (id: string) => <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{id}</Typography.Text> },
     {
-      title: t('ruleTable.colRuleName'), ellipsis: true, render: (_: unknown, r: FlatRule) => {
+      title: t('ruleTable.colRuleName'), ellipsis: true, render: (_: unknown, r: RuleDTO) => {
         // 规则名称取双语名(ruleName:先 i18n rules.<id>,回退 r.description 后端原文)。
-        const name = ruleName(r)
+        const name = ruleName({ id: r.id, description: r.description ?? '' })
         return (
           <Tooltip title={name}>
             <span>{name}</span>
@@ -123,53 +152,53 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
         )
       },
     },
-    { title: t('ruleTable.colSeverity'), width: 80, render: (_: unknown, r: FlatRule) => <SevBadge tone={`sev-${r.severity}` as BadgeTone}>{t(SEVERITY_LABEL_KEY[r.severity])}</SevBadge> },
+    { title: t('ruleTable.colSeverity'), width: 80, render: (_: unknown, r: RuleDTO) => <SevBadge tone={`sev-${r.severity}` as BadgeTone}>{t(SEVERITY_LABEL_KEY[r.severity as Severity])}</SevBadge> },
     {
-      // 来源:按 rule_id 前缀推导(baseline./injection./skill./custom.),后端带 source 则优先。
-      title: t('ruleTable.colSource'), width: 90, render: (_: unknown, r: FlatRule) => (
-        <Tag style={{ marginInlineEnd: 0, fontSize: 11, borderColor: 'var(--bg-border)', color: 'var(--text-muted)', background: 'transparent' }}>
-          {t(sourceLabel[ruleSource(r)] ?? '') || ruleSource(r)}
+      // 来源:RuleDTO.source 只有 builtin(灰 Tag)/ custom(蓝 Tag)。
+      title: t('ruleTable.colSource'), width: 90, render: (_: unknown, r: RuleDTO) => (
+        <Tag
+          color={r.source === 'custom' ? 'blue' : 'default'}
+          style={{ marginInlineEnd: 0, fontSize: 11 }}
+        >
+          {r.source === 'custom' ? t('ruleTable.sourceCustom') : t('ruleTable.sourceBaseline')}
         </Tag>
       ),
     },
     {
-      // 校验:valid 默认 true(Meta() 只返回已 Validate 的规则);false → 红色标记。
-      // 用 Badge 实色填充 + 白字(design.md #3:原 antd Tag color=success 在浅色下黑底黑字,
-      // 改 Badge tone=sev-low 绿底白字 / tone=sev-critical 红底白字,与风险级别标签统一)。
-      title: t('ruleTable.colValidity'), width: 70, render: (_: unknown, r: FlatRule) => (
-        r.valid === false
-          ? <SevBadge tone="sev-critical">{t('ruleTable.invalid')}</SevBadge>
-          : <SevBadge tone="sev-low">{t('ruleTable.valid')}</SevBadge>
-      ),
-    },
-    { title: t('ruleTable.colDetector'), width: 120, dataIndex: 'detector' },
-    {
-      // 规则语法:baseline 按 op 拼、injection 为正则原文;无则 '--'。列表截断,详情抽屉展示完整。
-      title: t('ruleTable.colRuleSyntax'), width: 320, ellipsis: true, render: (_: unknown, r: FlatRule) => (
-        <Tooltip title={r.syntax || '--'}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{r.syntax || '--'}</span>
-        </Tooltip>
+      // 操作列:启停 Switch + custom→Edit/Delete + builtin→Fork。
+      // rulesManage.* i18n key 由 Task 17 添加,缺失时 t() 返回 key 字符串(可接受,build 不受影响)。
+      title: t('rulesManage.actions'), key: 'actions', width: 220, render: (_: unknown, r: RuleDTO) => (
+        <Space size="small" onClick={(e) => e.stopPropagation()}>
+          <Switch
+            size="small"
+            checked={r.enabled}
+            loading={loadingRuleId === r.id}
+            onChange={(checked) => { void toggleRule(domain, r.id, checked) }}
+          />
+          {r.source === 'custom' ? (
+            <>
+              <Button size="small" onClick={() => onEdit?.(r)}>{t('rulesManage.edit')}</Button>
+              <Popconfirm
+                title={t('rulesManage.confirmDelete')}
+                onConfirm={() => { void deleteRule(domain, r.id) }}
+              >
+                <Button size="small" danger>{t('rulesManage.delete')}</Button>
+              </Popconfirm>
+            </>
+          ) : (
+            <Button size="small" onClick={() => onFork?.(r)}>{t('rulesManage.fork')}</Button>
+          )}
+        </Space>
       ),
     },
   ]
 
-  if (allRules.length === 0) return <Empty description={t('ruleTable.empty')} />
+  if (rawRules.length === 0) return <Empty description={t('ruleTable.empty')} />
 
   return (
     <Card>
-      {/* 无效规则横幅:valid === false 的规则置顶提示。后端 Meta() 目前只返回已校验规则,
-          此横幅为防御性能力(后端补充 valid 字段后即生效)。 */}
-      {invalidRules.length > 0 ? (
-        <Alert
-          type="warning"
-          showIcon
-          style={{ marginBottom: 12 }}
-          message={t('ruleTable.invalidAlert', { count: invalidRules.length })}
-          description={invalidRules.map((r) => r.id).join('、')}
-        />
-      ) : null}
       {/* 筛选工具栏行(design.md #2:统一模式——框在结果 Card 内顶部 + 底部 hairline 分隔)。
-          来源 + 级别两组筛选同一行(flex-wrap),复用 sev-seg 配色,组合:检测器 → 来源 → 级别。 */}
+          来源 + 级别两组筛选同一行(flex-wrap),复用 sev-seg 配色,组合:来源 → 级别。 */}
       <div className="filter-toolbar">
         <Segmented
           className="sev-seg"
@@ -177,9 +206,9 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
           onChange={(v) => setSrc(v as string)}
           options={[
             { value: 'all', label: <SevSegLabel text={t('ruleTable.all')} count={sourceCounts.all} />, className: 'sev-tab-all' },
-            ...sourceOrder.map((s) => ({
+            ...SOURCE_OPTIONS.map((s) => ({
               value: s,
-              label: <SevSegLabel text={t(sourceLabel[s])} count={sourceCounts[s] ?? 0} />,
+              label: <SevSegLabel text={s === 'builtin' ? t('ruleTable.sourceBaseline') : t('ruleTable.sourceCustom')} count={sourceCounts[s] ?? 0} />,
               className: 'sev-tab-all',
             })),
           ]}
@@ -198,8 +227,8 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
           ]}
         />
       </div>
-      <Table<FlatRule>
-        rowKey={(r) => `${r.detector_id}:${r.id}`}
+      <Table<RuleDTO>
+        rowKey={(r) => r.id}
         columns={columns}
         dataSource={filtered}
         // 分页:defaultPageSize(非受控)而非 pageSize(受控)——同 AssetTable,避免页大小选择器
@@ -207,11 +236,12 @@ export function RulesTable({ detectors, detectorFilter }: { detectors: DetectorM
         pagination={{ defaultPageSize: 20, showSizeChanger: true, pageSizeOptions: ['10', '20', '50', '100'], size: 'default' }}
         size="middle"
         onRow={(r) => ({
-          onClick: () => setSelected(r),
+          onClick: () => setSelectedFlat(ruleDTOToFlatRule(r, detectors)),
           style: { cursor: 'pointer' },
         }) as HTMLAttributes<HTMLElement>}
       />
-      <RuleDrawer rule={selected} detectors={detectors} onClose={() => setSelected(null)} />
+      {/* RuleDrawer 仍用 FlatRule(Task 16 改 RuleDTO):用 ruleDTOToFlatRule 适配,只读展示。 */}
+      <RuleDrawer rule={selectedFlat} detectors={detectors} onClose={() => setSelectedFlat(null)} />
     </Card>
   )
 }

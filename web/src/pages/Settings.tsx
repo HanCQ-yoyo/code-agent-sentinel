@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Card, Empty, Tabs, Switch, Input, Button } from 'antd'
+import { Card, Tabs, Switch, Input, Button } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
-import type { DetectorMeta, DetectorsConfig } from '../types'
+import type { DetectorMeta, DetectorsConfig, RuleDTO } from '../types'
 import { RulesTable } from '../components/RulesTable'
 import { DetectorPanel } from '../components/DetectorPanel'
 import { SettingsGuard } from '../components/SettingsGuard'
@@ -70,7 +70,12 @@ export default function Settings() {
   useEffect(() => { if (detectorConfig) setDraft(detectorConfig) }, [detectorConfig])
 
   const selected = filter ? detectors.find((d) => d.id === filter) : undefined
-  const totalRules = detectors.reduce((n, d) => n + (d.rules ?? []).length, 0)
+
+  // Task 15:RulesTable 改读 store 的 RuleDTO[](sqlite),不再依赖 detectors 的 rules 字段。
+  // domain 硬编码 "detect";onEdit/onFork 占位(Task 16 接 RuleDrawer 编辑模式,Task 17 接 Segmented 域切换)。
+  const [editingRule, setEditingRule] = useState<RuleDTO | null>(null)
+  const handleEdit = (r: RuleDTO) => { setEditingRule(r) }
+  const handleFork = (r: RuleDTO) => { setEditingRule(r) }
 
   const detectorsAndRules = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -89,7 +94,9 @@ export default function Settings() {
           </div>
         </>
       ) : null}
-      {totalRules === 0 ? <Empty description={t('settings.noRules')} /> : <RulesTable detectors={detectors} detectorFilter={filter} />}
+      {/* Task 17:此处加 Segmented 域切换(detect/intercept);Task 15 暂硬编码 detect。
+          RulesTable 内部 useEffect 按 domain 拉对应域规则,空列表显示 Empty。 */}
+      <RulesTable domain="detect" onEdit={handleEdit} onFork={handleFork} />
     </div>
   )
 
