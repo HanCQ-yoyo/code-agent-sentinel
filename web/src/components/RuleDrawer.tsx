@@ -1,18 +1,14 @@
-import { useState, useEffect, useRef, useCallback, lazy, Suspense } from 'react'
-import { Drawer, Descriptions, Typography, Badge as AntBadge, Button, Space, Modal, Input, Alert, Spin, message } from 'antd'
+import { useState, useEffect, useRef, useCallback } from 'react'
+import { Drawer, Descriptions, Typography, Badge as AntBadge, Button, Space, Modal, Input, Alert, message, Form, Select, Switch, Collapse } from 'antd'
+import { PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
-// js-yaml:用命名导入(v5 ESM 仅有命名导出,无 default;@types/js-yaml 同步为命名导出)。
-// yamlDump/yamlLoad 对应 js-yaml 的 dump/load(brief 原稿命名)。
-import { dump as yamlDump, load as yamlLoad } from 'js-yaml'
 import type { RuleDTO, RuleDomain, Severity } from '../types'
 import { useStore } from '../store'
-import { useTheme } from '../theme'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
-import { SEVERITY_LABEL_KEY } from '../lib/severity'
+import { SEVERITY_LABEL_KEY, SEVERITY_ORDER } from '../lib/severity'
 import { ruleName } from '../lib/i18n-names'
-// MonacoViewer 懒加载:与 ContentArea/MonacoBlock/RawFilePanel 一致,保持 monaco chunk 独立
-// (静态导入会触发 vite 警告 + 把 monaco 并入主 chunk,增大首屏)。
-const MonacoViewer = lazy(() => import('./MonacoViewer'))
+import { MatchTreeEditor } from './MatchTreeEditor'
+import { matchMapToTree, treeToMatchMap, newLeaf, isUnsupported, type MatchTreeNode } from '../lib/match-tree'
 
 interface RuleDrawerProps {
   rule: RuleDTO | null
@@ -24,29 +20,6 @@ interface RuleDrawerProps {
   onSaved?: () => void
   // fork 成功后回调,传入新创建的 custom RuleDTO(Settings 可切到编辑态打开新规则)。
   onForked?: (created: RuleDTO) => void
-}
-
-// RuleDTO → YAML 编辑器文本对象:去掉派生字段(source/enabled/can_edit/domain),
-// 这些由后端管理,不应进 YAML 草稿;id 在 create 模式下用户可改,edit 模式下保留。
-// 序列化字段顺序按 RuleDTO 声明顺序(js-yaml dump 按 Object insertion order)。
-function ruleToYamlObj(rule: RuleDTO, mode: 'edit' | 'create'): Record<string, unknown> {
-  const obj: Record<string, unknown> = {
-    id: rule.id,
-    severity: rule.severity,
-    asset_type: rule.asset_type,
-    match: rule.match,
-  }
-  if (rule.deobfuscation) obj.deobfuscation = rule.deobfuscation
-  if (rule.dotall) obj.dotall = rule.dotall
-  if (rule.paths) obj.paths = rule.paths
-  if (rule.post_exclude) obj.post_exclude = rule.post_exclude
-  if (rule.remediation) obj.remediation = rule.remediation
-  if (rule.description) obj.description = rule.description
-  if (rule.metadata) obj.metadata = rule.metadata
-  // create 模式默认 enabled=true,便于用户直接编辑(后端 POST 接收 enabled)。
-  if (mode === 'create') obj.enabled = true
-  else obj.enabled = rule.enabled
-  return obj
 }
 
 // 防抖 effect hook:value 变化后 delayMs 内无新变化才触发 effect。
@@ -76,43 +49,97 @@ function useDebouncedEffect(
   }, [value, delayMs])
 }
 
-// 安全解析 YAML 字符串 → 对象;解析失败返回 null(供校验/保存分支识别)。
-// 包裹 js-yaml load:抛异常 / 非对象 / 数组 → null。
-function parseYaml(text: string): Record<string, unknown> | null {
-  try {
-    const parsed = yamlLoad(text)
-    if (parsed === null || typeof parsed !== 'object' || Array.isArray(parsed)) return null
-    return parsed as Record<string, unknown>
-  } catch {
-    return null
+// 表单 draft:RuleDTO 可编辑字段的结构化状态。source/enabled/can_edit/domain 为派生/管理态,
+// id 在 edit 模式只读,故 draft 只持用户可改字段。matchTree 是 match map 的树形镜像。
+interface RuleDraft {
+  id: string
+  severity: string
+  asset_type: string
+  matchTree: MatchTreeNode | null    // null = match map 不支持形状(降级只读)
+  matchMap: Record<string, unknown>  // 原始 match(降级块显示 + 不支持形状保存回写)
+  description: string
+  remediation: string
+  dotall: boolean
+  deobfuscation: string[]
+  post_exclude: string[]
+  pathsInclude: string[]
+  pathsExclude: string[]
+  metadata: { key: string; value: string }[]  // 动态行(序列化为 map)
+  enabled: boolean
+}
+
+// RuleDTO → draft。match 用 matchMapToTree 解析;不支持形状 → matchTree=null(降级)。
+function ruleToDraft(rule: RuleDTO): RuleDraft {
+  const matchMap = (rule.match && Object.keys(rule.match).length > 0) ? rule.match : {}
+  const matchTree = Object.keys(matchMap).length > 0 ? matchMapToTree(matchMap) : newLeaf()
+  return {
+    id: rule.id,
+    severity: rule.severity,
+    asset_type: rule.asset_type,
+    matchTree,
+    matchMap,
+    description: rule.description ?? '',
+    remediation: rule.remediation ?? '',
+    dotall: rule.dotall ?? false,
+    deobfuscation: rule.deobfuscation ?? [],
+    post_exclude: rule.post_exclude ?? [],
+    pathsInclude: rule.paths?.include ?? [],
+    pathsExclude: rule.paths?.exclude ?? [],
+    metadata: rule.metadata
+      ? Object.entries(rule.metadata).map(([k, v]) => ({ key: k, value: String(v) }))
+      : [],
+    enabled: rule.enabled,
   }
+}
+
+// draft → RuleDTO map(用于 validate / save)。空字段不写入(对齐旧 ruleToYamlObj 序列化规则)。
+function draftToRuleDTO(draft: RuleDraft, mode: 'edit' | 'create'): Partial<RuleDTO> {
+  const match = draft.matchTree ? treeToMatchMap(draft.matchTree) : draft.matchMap
+  const dto: Record<string, unknown> = {
+    id: draft.id,
+    severity: draft.severity,
+    asset_type: draft.asset_type,
+    match,
+    enabled: draft.enabled,
+  }
+  if (draft.description) dto.description = draft.description
+  if (draft.remediation) dto.remediation = draft.remediation
+  if (draft.dotall) dto.dotall = draft.dotall
+  if (draft.deobfuscation.length) dto.deobfuscation = draft.deobfuscation
+  if (draft.post_exclude.length) dto.post_exclude = draft.post_exclude
+  if (draft.pathsInclude.length || draft.pathsExclude.length) {
+    dto.paths = { include: draft.pathsInclude, exclude: draft.pathsExclude }
+  }
+  const metaObj: Record<string, unknown> = {}
+  for (const m of draft.metadata) {
+    if (m.key) metaObj[m.key] = isNaN(Number(m.value)) ? m.value : Number(m.value)
+  }
+  if (Object.keys(metaObj).length) dto.metadata = metaObj
+  if (mode === 'create') dto.enabled = draft.enabled
+  return dto as Partial<RuleDTO>
 }
 
 // 规则详情抽屉:支持 view(只读)/edit(编辑 custom)/create(新建 custom)三态 + builtin fork。
 // Task 16:从旧 FlatRule(含 detector/syntax/valid/source_file/project_path)迁移到 RuleDTO。
 //   - view 模式:Descriptions 展示 RuleDTO 字段 + match 摘要(规则语法已并入 match,无独立 syntax)。
-//   - edit/create 模式:Monaco YAML 编辑器 + 防抖实时校验(POST /validate)+ Save/Cancel。
+//   - edit/create 模式:结构化表单(基础区 + match 树编辑器 + 高级折叠区)+ 防抖实时校验(POST /validate)+ Save/Cancel。
 //   - builtin 规则:抽屉顶部「复制为自定义」按钮 → Modal 填 new_id → forkRule → onForked。
 // 抽屉由调用方(Settings Task 17 / RulesTable 行点击 view)控制 open/close,RuleDrawer 只管自身编辑态。
 export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: RuleDrawerProps) {
   const { t } = useTranslation()
-  const { theme } = useTheme()
   const saveRule = useStore((s) => s.saveRule)
   const forkRule = useStore((s) => s.forkRule)
   const validateRuleDraft = useStore((s) => s.validateRuleDraft)
   const loadingRuleId = useStore((s) => s.loadingRuleId)
 
-  // YAML 草稿文本(编辑器内容);实时校验结果;保存中标记。
-  const [draftYaml, setDraftYaml] = useState('')
+  const [draft, setDraft] = useState<RuleDraft | null>(null)
   const [validation, setValidation] = useState<{ valid: boolean; errors: string[] } | null>(null)
   const [saving, setSaving] = useState(false)
-  // fork Modal 状态:newId 输入 + Modal 开关。
   const [forkOpen, setForkOpen] = useState(false)
   const [newId, setNewId] = useState('')
   const [forking, setForking] = useState(false)
 
-  // 进入 edit/create 时(或 rule 切换时),把 rule 序列化成 YAML 填入 draft + 清旧校验。
-  // create 模式 rule 可能为 null → 用空模板(id 占位 custom.<...>)。
+  // 进入 edit/create 时(或 rule 切换)初始化 draft + 清旧校验。
   useEffect(() => {
     if (mode === 'view') return
     const base: RuleDTO = rule ?? {
@@ -125,54 +152,38 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
       can_edit: true,
       domain,
     }
-    setDraftYaml(yamlDump(ruleToYamlObj(base, mode)))
+    setDraft(ruleToDraft(base))
     setValidation(null)
-    // 依赖 mode/rule.id/domain:rule 切换或模式切换时重置草稿。rule.id 而非 rule 整体,
-    // 避免 rule 对象引用变化(列表重拉)导致正在编辑的草稿被覆盖。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, rule?.id, domain])
 
-  // 防抖实时校验:草稿变化后 500ms 无新输入 → 解析 + POST /validate。
-  // YAML 解析失败 → 直接展示语法错误(不调后端)。解析成功但缺 id 等也交后端 validate 报错。
-  useDebouncedEffect(draftYaml, 500, () => {
-    if (mode === 'view') return
-    const parsed = parseYaml(draftYaml)
-    if (parsed === null) {
-      setValidation({ valid: false, errors: [t('ruleDrawer.yamlParseError')] })
-      return
-    }
+  // 防抖实时校验:draft 变化后 500ms → 序列化 RuleDTO map → POST /validate。
+  const draftKey = draft ? JSON.stringify(draft) : ''
+  useDebouncedEffect(draftKey, 500, () => {
+    if (mode === 'view' || !draft) return
+    const dto = draftToRuleDTO(draft, mode)
     let stale = false
-    validateRuleDraft(domain, parsed as Partial<RuleDTO>).then((res) => {
+    validateRuleDraft(domain, dto).then((res) => {
       if (!stale && res) setValidation(res)
     })
     return () => { stale = true }
   })
 
-  // 保存:解析草稿 → saveRule(source 判定 create/update)。后端对 builtin PUT 返回 409,
-  // 但 edit 模式仅对 custom 规则开放(builtin 抽屉无编辑入口),故此处 source 必为 'custom'。
-  // create 模式不带 source(草稿未落库)→ saveRule 走 POST。
   const onSave = useCallback(async () => {
-    const parsed = parseYaml(draftYaml)
-    if (parsed === null) {
-      message.error(t('ruleDrawer.yamlParseError'))
-      return
-    }
+    if (!draft) return
+    if (mode === 'view') return
+    const dto = draftToRuleDTO(draft, mode)
     setSaving(true)
-    // edit:带 source='custom' → PUT /:id;create:不带 source → POST。
-    // id 优先用草稿里的(用户可能改了 id,仅 create 有意义;edit 的 id 后端按 path 取)。
     const payload = mode === 'edit'
-      ? { ...(parsed as object), id: rule?.id ?? parsed.id, source: 'custom' as const }
-      : { ...(parsed as object), id: parsed.id ?? '' }
-    // 保存失败不应关抽屉/丢弃草稿(Task 16 review Important #3)。saveRule 失败时 wrap 写入
-    // store.error 且不抛出(返回 void),故用 getState() 读最新 error 判断成功失败:
-    // 调用前清空旧 error(避免上一次 action 的残留 error 误判),调用后 error 非空 = 失败。
+      ? { ...dto, id: rule?.id ?? draft.id, source: 'custom' as const }
+      : { ...dto, id: draft.id }
     useStore.getState().clearError()
     await saveRule(domain, payload as Parameters<typeof saveRule>[1])
     setSaving(false)
     if (!useStore.getState().error) {
       onSaved?.()
     }
-  }, [draftYaml, mode, rule?.id, domain, saveRule, onSaved, t])
+  }, [draft, mode, rule?.id, domain, saveRule, onSaved])
 
   // fork builtin → custom:Modal 填 new_id → forkRule(domain, rule.id, newId) → onForked(新 RuleDTO)。
   // 调用方(Settings Task 17)收到 onForked 后可切到新 custom 的 edit 态。
@@ -195,7 +206,7 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
 
   const isEditing = mode !== 'view'
   // builtin 规则在 edit 模式:防御纵深(Task 17 调用方应保证 builtin 不进 edit,此处兜底)。
-  // can_edit=false → Monaco 只读 + Save 禁用;保留 warning + Fork 入口(view 正文已无,extra 仍显示)。
+  // can_edit=false → 表单只读 + Save 禁用;保留 warning + Fork 入口(view 正文已无,extra 仍显示)。
   const isBuiltinEdit = mode === 'edit' && rule?.source === 'builtin'
   // builtin 规则在 view 模式提供 fork 入口;custom 规则不提供(后端 fork 仅 builtin→custom)。
   const canFork = (mode === 'view' || isBuiltinEdit) && rule?.source === 'builtin'
@@ -301,31 +312,121 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
         </div>
       ) : null}
 
-      {/* edit/create 模式:Monaco YAML 编辑器 + 实时校验 Alert。 */}
-      {isEditing ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {/* create 模式无 rule,提示用户编辑草稿;builtin 在 edit 模式由调用方保证不进,
-              但防御纵深:若 builtin 进了 edit,显示 warning + 只读编辑器 + 禁用 Save。 */}
+      {isEditing && draft ? (
+        <Form layout="vertical" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {rule && rule.source === 'builtin' ? (
             <Alert type="warning" message={t('rulesManage.builtinReadonly')} showIcon style={{ marginBottom: 4 }} />
           ) : null}
-          <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
-            <MonacoViewer
-              value={draftYaml}
-              readOnly={isBuiltinEdit}
-              language="yaml"
-              theme={theme}
-              height="400px"
-              onChange={(v) => setDraftYaml(v ?? '')}
+
+          {/* 基础区 */}
+          <Typography.Title level={5} style={{ marginTop: 0 }}>{t('ruleForm.basicSection')}</Typography.Title>
+          <Form.Item label={t('ruleDrawer.ruleId')}>
+            <Input
+              value={draft.id}
+              disabled={isBuiltinEdit || mode === 'edit'}
+              onChange={(e) => setDraft({ ...draft, id: e.target.value })}
             />
-          </Suspense>
+          </Form.Item>
+          <Form.Item label={t('ruleDrawer.severity')}>
+            <Select
+              value={draft.severity || undefined}
+              disabled={isBuiltinEdit}
+              onChange={(v: string) => setDraft({ ...draft, severity: v })}
+            >
+              {SEVERITY_ORDER.map((s) => (
+                <Select.Option key={s} value={s}>
+                  <Space><SevBadge tone={`sev-${s}` as BadgeTone}>{t(SEVERITY_LABEL_KEY[s as Severity])}</SevBadge></Space>
+                </Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+          <Form.Item label={t('ruleDrawer.assetType')}>
+            <Select
+              value={draft.asset_type || undefined}
+              disabled={isBuiltinEdit}
+              allowClear
+              placeholder={t('ruleForm.anyAssetType')}
+              onChange={(v: string) => setDraft({ ...draft, asset_type: v ?? '' })}
+            >
+              {['settings','permissions','hook','mcp_server','skill','command','agent','plugin','memory','keybinding','script','credential'].map((a) => (
+                <Select.Option key={a} value={a}>{a}</Select.Option>
+              ))}
+            </Select>
+          </Form.Item>
+          <Form.Item label={t('ruleDrawer.dotall')} style={{ marginBottom: 0 }}>
+            <Switch
+              checked={draft.dotall}
+              disabled={isBuiltinEdit}
+              onChange={(v) => setDraft({ ...draft, dotall: v })}
+            />
+          </Form.Item>
+
+          {/* match 树 */}
+          <Typography.Title level={5}>{t('ruleForm.matchTreeTitle')}</Typography.Title>
+          <MatchTreeEditor
+            value={draft.matchTree}
+            matchMap={draft.matchMap}
+            assetType={draft.asset_type}
+            readOnly={isBuiltinEdit}
+            onChange={(next) => setDraft({ ...draft, matchTree: next })}
+          />
           {validation && !validation.valid ? (
             <Alert type="error" message={validation.errors.join('; ')} showIcon />
           ) : null}
           {validation && validation.valid ? (
             <Alert type="success" message={t('ruleDrawer.validationOk')} showIcon />
           ) : null}
-        </div>
+
+          {/* 高级区(折叠) */}
+          <Collapse
+            ghost
+            items={[{
+              key: 'advanced',
+              label: t('ruleForm.advancedSection'),
+              children: (
+                <>
+                  <Form.Item label={t('ruleDrawer.ruleName')}>
+                    <Input value={draft.description} disabled={isBuiltinEdit}
+                      onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
+                  </Form.Item>
+                  <Form.Item label={t('ruleDrawer.remediation')}>
+                    <Input.TextArea rows={2} value={draft.remediation} disabled={isBuiltinEdit}
+                      onChange={(e) => setDraft({ ...draft, remediation: e.target.value })} />
+                  </Form.Item>
+                  <Form.Item label={t('ruleDrawer.deobfuscation')}>
+                    <Select mode="multiple" value={draft.deobfuscation} disabled={isBuiltinEdit} placeholder="--"
+                      onChange={(v: string[]) => setDraft({ ...draft, deobfuscation: v })}
+                      options={['zero_width','html_comment','base64','leetspeak','wrapper_strip','ansi_c_decode'].map((d) => ({ value: d, label: d }))} />
+                  </Form.Item>
+                  <Form.Item label={t('ruleDrawer.postExclude')}>
+                    <Select mode="tags" value={draft.post_exclude} disabled={isBuiltinEdit}
+                      onChange={(v: string[]) => setDraft({ ...draft, post_exclude: v })} />
+                  </Form.Item>
+                  <Form.Item label={t('ruleDrawer.pathFilter')}>
+                    <Select mode="tags" value={draft.pathsInclude} disabled={isBuiltinEdit} placeholder="include"
+                      onChange={(v: string[]) => setDraft({ ...draft, pathsInclude: v })} />
+                    <Select mode="tags" value={draft.pathsExclude} disabled={isBuiltinEdit} placeholder="exclude" style={{ marginTop: 4 }}
+                      onChange={(v: string[]) => setDraft({ ...draft, pathsExclude: v })} />
+                  </Form.Item>
+                  <Form.Item label={t('ruleDrawer.metadata')} style={{ marginBottom: 0 }}>
+                    {draft.metadata.map((m, i) => (
+                      <Space key={i} style={{ display: 'flex', marginBottom: 4 }} align="baseline">
+                        <Input value={m.key} disabled={isBuiltinEdit} placeholder="key" style={{ width: 140 }}
+                          onChange={(e) => setDraft({ ...draft, metadata: draft.metadata.map((x, j) => j === i ? { ...x, key: e.target.value } : x) })} />
+                        <Input value={m.value} disabled={isBuiltinEdit} placeholder="value" style={{ width: 200 }}
+                          onChange={(e) => setDraft({ ...draft, metadata: draft.metadata.map((x, j) => j === i ? { ...x, value: e.target.value } : x) })} />
+                        {!isBuiltinEdit && <Button type="text" danger icon={<DeleteOutlined />}
+                          onClick={() => setDraft({ ...draft, metadata: draft.metadata.filter((_, j) => j !== i) })} />}
+                      </Space>
+                    ))}
+                    {!isBuiltinEdit && <Button type="dashed" icon={<PlusOutlined />} size="small"
+                      onClick={() => setDraft({ ...draft, metadata: [...draft.metadata, { key: '', value: '' }] })}>+</Button>}
+                  </Form.Item>
+                </>
+              ),
+            }]}
+          />
+        </Form>
       ) : null}
 
       {/* fork Modal:填 new_id(custom.xxx)→ forkRule → onForked。 */}
