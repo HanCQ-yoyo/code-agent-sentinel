@@ -167,6 +167,9 @@ func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	api.GET("/intercept", s.getInterceptList)
 	api.GET("/intercept/:id", s.getInterceptDetail)
 	api.DELETE("/intercept/:id", s.deleteIntercept)
+	// Task 11:规则管理 CRUD + 启停 + fork + validate(检测/拦截两域对称)。
+	// registerRulesRoutes 注册 8+8 路由,经路径前缀分流到同一组 handler。
+	s.registerRulesRoutes(api)
 }
 
 func (s *Server) notImplemented(c *gin.Context) {

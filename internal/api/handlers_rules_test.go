@@ -1,0 +1,363 @@
+package api
+
+import (
+	"bytes"
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"path/filepath"
+	"testing"
+
+	"github.com/gin-gonic/gin"
+
+	"code-agent-sentinel/internal/security/ruleengine"
+	"code-agent-sentinel/internal/storage"
+)
+
+// newServerWithRulesDB 构造带 sqlite 规则库的测试服务器:
+//  1. 在 t.TempDir() 下开 db 文件,RunMigrations 建表;
+//  2. LoadBuiltin + SyncBuiltin 把 embed 内置规则同步进 detect + intercept 两域(版本 v1);
+//  3. 赋值 srv.DB;
+//  4. 在 srv 的 router 上注册 8+8 规则路由(检测/拦截对称)。
+//
+// Task 12 会把规则路由注册并入 registerRoutes + newTestServer 注入 db;
+// 此 helper 在 Task 11 单独维护,确保 handlers 测试可独立跑(路由未全局注册前)。
+func newServerWithRulesDB(t *testing.T) *Server {
+	t.Helper()
+	gin.SetMode(gin.TestMode)
+	home := t.TempDir()
+	srv := newTestServer(t, home)
+
+	dbPath := filepath.Join(home, "test-rules.db")
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := storage.RunMigrations(db); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+
+	// 同步 builtin 规则进两域(镜像 cmd/sentinel/syncBuiltinRules)。
+	builtin, builtinCombos, loadErrs := ruleengine.LoadBuiltin()
+	for _, e := range loadErrs {
+		t.Logf("builtin load err %s: %s", e.Source, e.Reason)
+	}
+	builtinStored := make([]storage.StoredRule, 0, len(builtin))
+	for _, r := range builtin {
+		s, convErr := ruleengine.RuleToStoredRule(r, "builtin", "v1")
+		if convErr != nil {
+			t.Fatalf("convert builtin rule %s: %v", r.ID, convErr)
+		}
+		builtinStored = append(builtinStored, s)
+	}
+	builtinComboStored := make([]storage.StoredCombo, 0, len(builtinCombos))
+	for _, c := range builtinCombos {
+		s, convErr := ruleengine.ComboToStoredCombo(c, "builtin", "v1")
+		if convErr != nil {
+			t.Fatalf("convert builtin combo %s: %v", c.ID, convErr)
+		}
+		builtinComboStored = append(builtinComboStored, s)
+	}
+	if _, err := storage.SyncBuiltin(db, storage.DomainDetect, builtinStored, builtinComboStored, "v1"); err != nil {
+		t.Fatalf("sync builtin detect: %v", err)
+	}
+	if _, err := storage.SyncBuiltin(db, storage.DomainIntercept, builtinStored, nil, "v1"); err != nil {
+		t.Fatalf("sync builtin intercept: %v", err)
+	}
+
+	srv.DB = db
+	return srv
+}
+
+// rmRfRuleID 是测试用的 builtin 规则 ID(原 brief 写 filesystem.rm-rf-root-home,
+// 实际 builtin ID 带前缀 destructive.,见 destructive_commands.yaml:234)。
+const rmRfRuleID = "destructive.filesystem.rm-rf-root-home"
+
+func TestGetDetectRulesReturnsList(t *testing.T) {
+	srv := newServerWithRulesDB(t)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/detect-rules", nil)
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	srv.Router().ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	var dtos []ruleDTO
+	if err := json.Unmarshal(w.Body.Bytes(), &dtos); err != nil {
+		t.Fatal(err)
+	}
+	if len(dtos) == 0 {
+		t.Fatal("expected builtin rules in list")
+	}
+	// 列表里的 builtin 规则默认 enabled=true,source=builtin,can_edit=false。
+	var found bool
+	for _, d := range dtos {
+		if d.ID == rmRfRuleID {
+			found = true
+			if d.Source != "builtin" {
+				t.Errorf("rule %s source = %q, want builtin", d.ID, d.Source)
+			}
+			if d.CanEdit {
+				t.Errorf("rule %s can_edit = true, want false (builtin 只读)", d.ID)
+			}
+			if !d.Enabled {
+				t.Errorf("rule %s enabled = false, want true (无 override 默认启用)", d.ID)
+			}
+			if d.Domain != "detect" {
+				t.Errorf("rule %s domain = %q, want detect", d.ID, d.Domain)
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("list 不含 %s;got %d rules", rmRfRuleID, len(dtos))
+	}
+}
+
+func TestToggleBuiltinRuleDisabled(t *testing.T) {
+	srv := newServerWithRulesDB(t)
+	body, _ := json.Marshal(map[string]bool{"enabled": false})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PUT", "/api/detect-rules/"+rmRfRuleID+"/enabled", bytes.NewReader(body))
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	req.Header.Set("Content-Type", "application/json")
+	srv.Router().ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("toggle status = %d, body = %s", w.Code, w.Body.String())
+	}
+	// 重新 GET 单条,断言 enabled=false(override 已写入)。
+	w2 := httptest.NewRecorder()
+	req2, _ := http.NewRequest("GET", "/api/detect-rules/"+rmRfRuleID, nil)
+	req2.Host = "127.0.0.1"
+	req2.Header.Set("Authorization", "Bearer tok")
+	srv.Router().ServeHTTP(w2, req2)
+	if w2.Code != 200 {
+		t.Fatalf("GET after toggle status = %d, body = %s", w2.Code, w2.Body.String())
+	}
+	var dto ruleDTO
+	if err := json.Unmarshal(w2.Body.Bytes(), &dto); err != nil {
+		t.Fatal(err)
+	}
+	if dto.Enabled {
+		t.Errorf("after disable, rule %s enabled = true, want false", rmRfRuleID)
+	}
+	// builtin 规则本身仍存在(source 未变),只是被 override 禁用。
+	if dto.Source != "builtin" {
+		t.Errorf("after toggle, source = %q, want builtin (override 不改 source)", dto.Source)
+	}
+}
+
+func TestPutBuiltinRuleReturns409(t *testing.T) {
+	srv := newServerWithRulesDB(t)
+	body, _ := json.Marshal(ruleDTO{ID: rmRfRuleID, Severity: "low", Source: "custom"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("PUT", "/api/detect-rules/"+rmRfRuleID, bytes.NewReader(body))
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	req.Header.Set("Content-Type", "application/json")
+	srv.Router().ServeHTTP(w, req)
+	if w.Code != 409 {
+		t.Fatalf("expected 409 for builtin PUT, got %d; body = %s", w.Code, w.Body.String())
+	}
+	var resp map[string]map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp["error"]["code"] != "builtin_readonly" {
+		t.Errorf("error code = %q, want builtin_readonly", resp["error"]["code"])
+	}
+}
+
+func TestCreateCustomRuleValidates(t *testing.T) {
+	srv := newServerWithRulesDB(t)
+	// 合法规则 → 200
+	body, _ := json.Marshal(ruleDTO{
+		ID: "custom.test", Severity: "high", AssetType: "command",
+		Match: map[string]any{"field": "command", "op": "contains", "value": "evil"},
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/detect-rules", bytes.NewReader(body))
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	req.Header.Set("Content-Type", "application/json")
+	srv.Router().ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("create status = %d, body = %s", w.Code, w.Body.String())
+	}
+	var dto ruleDTO
+	if err := json.Unmarshal(w.Body.Bytes(), &dto); err != nil {
+		t.Fatal(err)
+	}
+	if dto.Source != "custom" || !dto.CanEdit || !dto.Enabled {
+		t.Errorf("created rule dto = %+v, want source=custom/can_edit/enabled", dto)
+	}
+	// 非法规则(缺 op)→ 400
+	badBody, _ := json.Marshal(ruleDTO{
+		ID: "custom.bad", Severity: "high", AssetType: "command",
+		Match: map[string]any{"field": "command"}, // 缺 op
+	})
+	w2 := httptest.NewRecorder()
+	req2, _ := http.NewRequest("POST", "/api/detect-rules", bytes.NewReader(badBody))
+	req2.Host = "127.0.0.1"
+	req2.Header.Set("Authorization", "Bearer tok")
+	req2.Header.Set("Content-Type", "application/json")
+	srv.Router().ServeHTTP(w2, req2)
+	if w2.Code != 400 {
+		t.Fatalf("expected 400 for invalid rule, got %d; body = %s", w2.Code, w2.Body.String())
+	}
+}
+
+func TestForkBuiltinToCustom(t *testing.T) {
+	srv := newServerWithRulesDB(t)
+	body, _ := json.Marshal(map[string]string{"new_id": "custom.forked"})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/detect-rules/"+rmRfRuleID+"/fork", bytes.NewReader(body))
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	req.Header.Set("Content-Type", "application/json")
+	srv.Router().ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("fork status = %d, body = %s", w.Code, w.Body.String())
+	}
+	var dto ruleDTO
+	if err := json.Unmarshal(w.Body.Bytes(), &dto); err != nil {
+		t.Fatal(err)
+	}
+	if dto.Source != "custom" || dto.ID != "custom.forked" {
+		t.Fatalf("fork result = %+v, want source=custom id=custom.forked", dto)
+	}
+	if !dto.CanEdit {
+		t.Errorf("forked rule can_edit = false, want true (custom 可编辑)")
+	}
+	// 原 builtin 规则仍存在(没被覆盖/禁用):GET 原 id 仍 200,source=builtin。
+	w2 := httptest.NewRecorder()
+	req2, _ := http.NewRequest("GET", "/api/detect-rules/"+rmRfRuleID, nil)
+	req2.Host = "127.0.0.1"
+	req2.Header.Set("Authorization", "Bearer tok")
+	srv.Router().ServeHTTP(w2, req2)
+	if w2.Code != 200 {
+		t.Fatalf("builtin rule after fork status = %d, want 200 (原 builtin 应不受影响)", w2.Code)
+	}
+	var orig ruleDTO
+	if err := json.Unmarshal(w2.Body.Bytes(), &orig); err != nil {
+		t.Fatal(err)
+	}
+	if orig.Source != "builtin" {
+		t.Errorf("after fork, original rule source = %q, want builtin (fork 不应改原行)", orig.Source)
+	}
+	// fork 出的新 id 也能 GET 到。
+	w3 := httptest.NewRecorder()
+	req3, _ := http.NewRequest("GET", "/api/detect-rules/custom.forked", nil)
+	req3.Host = "127.0.0.1"
+	req3.Header.Set("Authorization", "Bearer tok")
+	srv.Router().ServeHTTP(w3, req3)
+	if w3.Code != 200 {
+		t.Fatalf("GET forked rule status = %d, want 200", w3.Code)
+	}
+}
+
+func TestValidateDraftDoesNotPersist(t *testing.T) {
+	srv := newServerWithRulesDB(t)
+	body, _ := json.Marshal(ruleDTO{
+		ID: "draft.test", Severity: "high", AssetType: "command",
+		Match: map[string]any{"field": "command", "op": "contains", "value": "x"},
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/detect-rules/validate", bytes.NewReader(body))
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	req.Header.Set("Content-Type", "application/json")
+	srv.Router().ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("validate status = %d, body = %s", w.Code, w.Body.String())
+	}
+	var resp map[string]any
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp["valid"] != true {
+		t.Errorf("validate resp = %+v, want valid=true", resp)
+	}
+	// draft.test 不应被持久化:GET 返回 404。
+	w2 := httptest.NewRecorder()
+	req2, _ := http.NewRequest("GET", "/api/detect-rules/draft.test", nil)
+	req2.Host = "127.0.0.1"
+	req2.Header.Set("Authorization", "Bearer tok")
+	srv.Router().ServeHTTP(w2, req2)
+	if w2.Code != 404 {
+		t.Fatalf("GET draft.test after validate status = %d, want 404 (validate 不应落库)", w2.Code)
+	}
+}
+
+// TestGetInterceptRulesReturnsList 验证拦截域对称:同 handler 经路径前缀分流返回 intercept 域规则。
+func TestGetInterceptRulesReturnsList(t *testing.T) {
+	srv := newServerWithRulesDB(t)
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("GET", "/api/intercept-rules", nil)
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	srv.Router().ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("status = %d, body = %s", w.Code, w.Body.String())
+	}
+	var dtos []ruleDTO
+	if err := json.Unmarshal(w.Body.Bytes(), &dtos); err != nil {
+		t.Fatal(err)
+	}
+	if len(dtos) == 0 {
+		t.Fatal("expected builtin rules in intercept list")
+	}
+	for _, d := range dtos {
+		if d.Domain != "intercept" {
+			t.Errorf("rule %s domain = %q, want intercept", d.ID, d.Domain)
+		}
+	}
+}
+
+// TestDeleteCustomRule 验证 custom 规则可删,builtin 不可删。
+func TestDeleteCustomRule(t *testing.T) {
+	srv := newServerWithRulesDB(t)
+	// 先建一条 custom 规则。
+	create, _ := json.Marshal(ruleDTO{
+		ID: "custom.todelete", Severity: "medium", AssetType: "command",
+		Match: map[string]any{"field": "command", "op": "contains", "value": "bad"},
+	})
+	w0 := httptest.NewRecorder()
+	req0, _ := http.NewRequest("POST", "/api/detect-rules", bytes.NewReader(create))
+	req0.Host = "127.0.0.1"
+	req0.Header.Set("Authorization", "Bearer tok")
+	req0.Header.Set("Content-Type", "application/json")
+	srv.Router().ServeHTTP(w0, req0)
+	if w0.Code != 200 {
+		t.Fatalf("create status = %d, body = %s", w0.Code, w0.Body.String())
+	}
+	// 删除 custom → 200。
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("DELETE", "/api/detect-rules/custom.todelete", nil)
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	srv.Router().ServeHTTP(w, req)
+	if w.Code != 200 {
+		t.Fatalf("delete custom status = %d, body = %s", w.Code, w.Body.String())
+	}
+	// 再 GET → 404。
+	w2 := httptest.NewRecorder()
+	req2, _ := http.NewRequest("GET", "/api/detect-rules/custom.todelete", nil)
+	req2.Host = "127.0.0.1"
+	req2.Header.Set("Authorization", "Bearer tok")
+	srv.Router().ServeHTTP(w2, req2)
+	if w2.Code != 404 {
+		t.Errorf("GET deleted rule status = %d, want 404", w2.Code)
+	}
+	// 删 builtin → 409。
+	w3 := httptest.NewRecorder()
+	req3, _ := http.NewRequest("DELETE", "/api/detect-rules/"+rmRfRuleID, nil)
+	req3.Host = "127.0.0.1"
+	req3.Header.Set("Authorization", "Bearer tok")
+	srv.Router().ServeHTTP(w3, req3)
+	if w3.Code != 409 {
+		t.Errorf("delete builtin status = %d, want 409", w3.Code)
+	}
+}
