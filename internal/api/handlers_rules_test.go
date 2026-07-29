@@ -170,6 +170,90 @@ func TestPutBuiltinRuleReturns409(t *testing.T) {
 	}
 }
 
+// TestPostOverBuiltinReturns409 回归测试:POST /api/detect-rules 携带一个已存在的 builtin
+// rule id 时必须 409,绝不能让 UpsertRule 的 ON CONFLICT DO UPDATE 把 builtin 行改成 custom
+// 并覆盖其 match(那会静默禁用安全规则,且后续 PUT/DELETE 的 builtin_readonly 409 关卡失效——
+// "内置只读"铁律被完整绕过)。POST 是 create(非 upsert),任何已存在 id(含 custom)都应拒。
+func TestPostOverBuiltinReturns409(t *testing.T) {
+	srv := newServerWithRulesDB(t)
+
+	// 先 GET 该 builtin id 确认存在且 source=builtin/severity=critical/asset_type=hook,
+	// 记录原始 match 作为"未被篡改"基准。
+	w0 := httptest.NewRecorder()
+	req0, _ := http.NewRequest("GET", "/api/detect-rules/"+rmRfRuleID, nil)
+	req0.Host = "127.0.0.1"
+	req0.Header.Set("Authorization", "Bearer tok")
+	srv.Router().ServeHTTP(w0, req0)
+	if w0.Code != 200 {
+		t.Fatalf("GET builtin %s status = %d, want 200; body = %s", rmRfRuleID, w0.Code, w0.Body.String())
+	}
+	var orig ruleDTO
+	if err := json.Unmarshal(w0.Body.Bytes(), &orig); err != nil {
+		t.Fatal(err)
+	}
+	if orig.Source != "builtin" {
+		t.Fatalf("baseline source = %q, want builtin", orig.Source)
+	}
+	if orig.Severity != "critical" {
+		t.Fatalf("baseline severity = %q, want critical", orig.Severity)
+	}
+	if orig.AssetType != "hook" {
+		t.Fatalf("baseline asset_type = %q, want hook", orig.AssetType)
+	}
+	origMatchJSON, _ := json.Marshal(orig.Match)
+
+	// POST 同一 builtin id + 一个永不命中的 benign body,企图覆盖。
+	attack, _ := json.Marshal(ruleDTO{
+		ID:        rmRfRuleID,
+		Severity:  "info",
+		AssetType: "command",
+		Match:     map[string]any{"field": "command", "op": "contains", "value": "zzz-never-match-zzz"},
+	})
+	w := httptest.NewRecorder()
+	req, _ := http.NewRequest("POST", "/api/detect-rules", bytes.NewReader(attack))
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	req.Header.Set("Content-Type", "application/json")
+	srv.Router().ServeHTTP(w, req)
+	if w.Code != 409 {
+		t.Fatalf("POST over builtin id status = %d, want 409; body = %s", w.Code, w.Body.String())
+	}
+	var resp map[string]map[string]string
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp["error"]["code"] != "builtin_readonly" {
+		t.Errorf("error code = %q, want builtin_readonly", resp["error"]["code"])
+	}
+
+	// 关键回归断言:builtin 规则原样不动——source 仍 builtin,severity/match 未被覆盖。
+	w2 := httptest.NewRecorder()
+	req2, _ := http.NewRequest("GET", "/api/detect-rules/"+rmRfRuleID, nil)
+	req2.Host = "127.0.0.1"
+	req2.Header.Set("Authorization", "Bearer tok")
+	srv.Router().ServeHTTP(w2, req2)
+	if w2.Code != 200 {
+		t.Fatalf("GET builtin after rejected POST status = %d, want 200; body = %s", w2.Code, w2.Body.String())
+	}
+	var after ruleDTO
+	if err := json.Unmarshal(w2.Body.Bytes(), &after); err != nil {
+		t.Fatal(err)
+	}
+	if after.Source != "builtin" {
+		t.Errorf("after rejected POST, source = %q, want builtin (POST 不应改 source)", after.Source)
+	}
+	if after.Severity != "critical" {
+		t.Errorf("after rejected POST, severity = %q, want critical (未被覆盖)", after.Severity)
+	}
+	if after.AssetType != "hook" {
+		t.Errorf("after rejected POST, asset_type = %q, want hook (未被覆盖)", after.AssetType)
+	}
+	afterMatchJSON, _ := json.Marshal(after.Match)
+	if string(afterMatchJSON) != string(origMatchJSON) {
+		t.Errorf("after rejected POST, match changed:\n  was %s\n  now %s", origMatchJSON, afterMatchJSON)
+	}
+}
+
 func TestCreateCustomRuleValidates(t *testing.T) {
 	srv := newServerWithRulesDB(t)
 	// 合法规则 → 200

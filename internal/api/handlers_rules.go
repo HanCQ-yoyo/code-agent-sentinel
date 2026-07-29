@@ -116,6 +116,20 @@ func (s *Server) postRule(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "bad_request", "message": err.Error()}})
 		return
 	}
+	// POST = 创建,不允许覆盖已有规则(含 builtin)。builtin id 冲突尤其须拒:
+	// UpsertRule 的 ON CONFLICT(rule_id) DO UPDATE 会把 builtin 行的 source 改成 custom
+	// 并覆盖其 match,静默禁用安全规则——违反"内置只读"铁律。更新走 PUT(PUT 对 builtin 返回 409)。
+	// 镜像 forkRule 的冲突检查模式。即便针对 custom 也拒:create 重复 id 是冲突,改用 PUT 或换 id。
+	if existing, ok, _ := storage.GetRule(s.DB, domain, dto.ID); ok {
+		code := "id_conflict"
+		msg := "规则 ID 已存在"
+		if existing.Source == "builtin" {
+			code = "builtin_readonly"
+			msg = "内置规则 ID 已存在,请 fork 或换一个 ID"
+		}
+		c.JSON(http.StatusConflict, gin.H{"error": gin.H{"code": code, "message": msg}})
+		return
+	}
 	if err := validateAndUpsertRule(s, domain, dto, "custom", ""); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": gin.H{"code": "invalid_rule", "message": err.Error()}})
 		return
