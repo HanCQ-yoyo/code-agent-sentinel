@@ -59,11 +59,18 @@ function useDebouncedEffect(
   const effectRef = useRef(effect)
   useEffect(() => { effectRef.current = effect })
   useEffect(() => {
+    // 关键:effect 返回的 cleanup 必须延迟到 React 清理阶段(下次防抖/unmount)调用,
+    // 不能在 effect 同步执行后立即调用——否则 stale 立即被置 true,异步 validateRuleDraft
+    // 的 .then 永远命中 stale=true,实时校验结果永远不展示(Task 16 review Critical #1)。
+    let cleanupFn: (() => void) | undefined
     const handle = setTimeout(() => {
-      const cleanup = effectRef.current()
-      if (typeof cleanup === 'function') cleanup()
+      const ret = effectRef.current()
+      if (typeof ret === 'function') cleanupFn = ret
     }, delayMs)
-    return () => clearTimeout(handle)
+    return () => {
+      clearTimeout(handle)
+      if (typeof cleanupFn === 'function') cleanupFn()
+    }
     // value 变化触发防抖;delayMs 稳定常量。effect 经 ref 取最新,不入依赖(否则每次重渲染都重置定时器)。
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [value, delayMs])
@@ -156,11 +163,15 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
     const payload = mode === 'edit'
       ? { ...(parsed as object), id: rule?.id ?? parsed.id, source: 'custom' as const }
       : { ...(parsed as object), id: parsed.id ?? '' }
+    // 保存失败不应关抽屉/丢弃草稿(Task 16 review Important #3)。saveRule 失败时 wrap 写入
+    // store.error 且不抛出(返回 void),故用 getState() 读最新 error 判断成功失败:
+    // 调用前清空旧 error(避免上一次 action 的残留 error 误判),调用后 error 非空 = 失败。
+    useStore.getState().clearError()
     await saveRule(domain, payload as Parameters<typeof saveRule>[1])
     setSaving(false)
-    // saveRule 失败时 wrap 写入 store.error,loadingRuleId 已复位;此处不判成功失败,
-    // 与项目其他保存 action 一致(错误由全局 error 展示)。成功后关抽屉。
-    onSaved?.()
+    if (!useStore.getState().error) {
+      onSaved?.()
+    }
   }, [draftYaml, mode, rule?.id, domain, saveRule, onSaved, t])
 
   // fork builtin → custom:Modal 填 new_id → forkRule(domain, rule.id, newId) → onForked(新 RuleDTO)。
@@ -183,8 +194,11 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
   }, [rule, newId, domain, forkRule, onForked, t])
 
   const isEditing = mode !== 'view'
+  // builtin 规则在 edit 模式:防御纵深(Task 17 调用方应保证 builtin 不进 edit,此处兜底)。
+  // can_edit=false → Monaco 只读 + Save 禁用;保留 warning + Fork 入口(view 正文已无,extra 仍显示)。
+  const isBuiltinEdit = mode === 'edit' && rule?.source === 'builtin'
   // builtin 规则在 view 模式提供 fork 入口;custom 规则不提供(后端 fork 仅 builtin→custom)。
-  const canFork = mode === 'view' && rule?.source === 'builtin'
+  const canFork = (mode === 'view' || isBuiltinEdit) && rule?.source === 'builtin'
   // 抽屉标题:view=规则详情;edit=编辑规则;create=新建规则。
   const title = isEditing
     ? (mode === 'create' ? t('rulesManage.create') : t('rulesManage.edit'))
@@ -210,7 +224,12 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
           {isEditing ? (
             <>
               <Button onClick={onClose}>{t('common.cancel')}</Button>
-              <Button type="primary" loading={saving || loadingRuleId === rule?.id} onClick={onSave}>
+              <Button
+                type="primary"
+                loading={saving || loadingRuleId === rule?.id}
+                onClick={onSave}
+                disabled={isBuiltinEdit}
+              >
                 {t('common.save')}
               </Button>
             </>
@@ -285,14 +304,15 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
       {/* edit/create 模式:Monaco YAML 编辑器 + 实时校验 Alert。 */}
       {isEditing ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-          {/* create 模式无 rule,提示用户编辑草稿;builtin 在 edit 模式不应出现(调用方保证)。 */}
+          {/* create 模式无 rule,提示用户编辑草稿;builtin 在 edit 模式由调用方保证不进,
+              但防御纵深:若 builtin 进了 edit,显示 warning + 只读编辑器 + 禁用 Save。 */}
           {rule && rule.source === 'builtin' ? (
             <Alert type="warning" message={t('rulesManage.builtinReadonly')} showIcon style={{ marginBottom: 4 }} />
           ) : null}
           <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
             <MonacoViewer
               value={draftYaml}
-              readOnly={false}
+              readOnly={isBuiltinEdit}
               language="yaml"
               theme={theme}
               height="400px"
