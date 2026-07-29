@@ -100,10 +100,12 @@ interface State {
   saveAllowlist: (list: string[]) => Promise<boolean>
   // Task 14:规则 CRUD actions(detect/intercept 两域对称,共用同一组 action + domain 参数分流)。
   // fetchDetectRules/fetchInterceptRules:拉列表 → set 对应 state(空数组兜底,null 区分未加载)。
-  // saveRule:创建(POST)或更新(PUT)custom 规则。create/update 由 rule.source 判断:
-  //   - source 为空串/undefined(新草稿,未落库)→ POST 创建
-  //   - source 已是 'builtin'/'custom'(已存在)→ PUT 更新(后端对 builtin PUT 返回 409,UI 在 Task 16 灰掉编辑)
+  // saveRule:创建(POST)或更新(PUT)custom 规则。入参 source 可选,据此判定 create/update:
+  //   - source 缺省(新草稿,Task 16 构造未落库的 draft 时不带 source)→ POST 创建
+  //   - source 为 'builtin'/'custom'(已从 db 加载的规则)→ PUT 更新(后端对 builtin PUT 返回 409,UI 在 Task 16 灰掉编辑)
   //   不用 brief 原稿的 `rule.id !== rule.id`(恒 false 的 bug),改用 source 是否已赋值。
+  //   入参类型用 Omit<RuleDTO,'source'> & { source?: 'builtin'|'custom' }:RuleDTO 本身保持 source 必填
+  //   (db 加载形状),仅 saveRule 入参放宽为可选,与 validateRuleDraft(domain, rule: Partial<RuleDTO>)同思路。
   // toggleRule:PUT /enabled(builtin/custom 都可禁用,builtin 禁用走 override 表不改规则行)。
   // forkRule:POST /fork(只允许 builtin → custom,后端对 custom 返回 409)。返回新 RuleDTO 供调用方跳转。
   // deleteRule:DELETE(后端对 builtin 返回 409,UI 在 Task 16 不显删除按钮)。
@@ -111,7 +113,7 @@ interface State {
   //   wrap 不会吞掉——后端永远 r.ok,errors 在 body 里)。返回值供 RuleDrawer 实时校验提示。
   fetchDetectRules: () => Promise<void>
   fetchInterceptRules: () => Promise<void>
-  saveRule: (domain: RuleDomain, rule: RuleDTO) => Promise<void>
+  saveRule: (domain: RuleDomain, rule: Omit<RuleDTO, 'source'> & { source?: 'builtin' | 'custom' }) => Promise<void>
   toggleRule: (domain: RuleDomain, id: string, enabled: boolean) => Promise<void>
   forkRule: (domain: RuleDomain, id: string, newId: string) => Promise<RuleDTO | undefined>
   deleteRule: (domain: RuleDomain, id: string) => Promise<void>
@@ -391,9 +393,8 @@ export const useStore = create<State>((set, get) => ({
     const data = await wrap(() => apiGet<RuleDTO[]>('/api/intercept-rules'), set)
     if (data) set({ interceptRules: data })
   },
-  // saveRule:创建或更新 custom 规则。
-  // create/update 判定:用 rule.source 是否已赋值——新草稿(未落库)source 为空串/undefined → POST 创建;
-  // 已存在规则 source 为 'builtin'/'custom' → PUT 更新(后端对 builtin PUT 返回 409,UI 在 Task 16 灰掉编辑)。
+  // saveRule:创建或更新 custom 规则。入参 source 可选:缺省(新草稿,Task 16 未落库 draft)→ POST 创建;
+  // 已赋值 'builtin'/'custom'(已从 db 加载)→ PUT 更新(后端对 builtin PUT 返回 409,UI 在 Task 16 灰掉编辑)。
   // 不用 brief 原稿 `rule.id !== rule.id`(恒 false 的 bug)。PUT 走 /:id(path id 即 rule.id,后端忽略 body.id)。
   saveRule: async (domain, rule) => {
     set({ loadingRuleId: rule.id })
