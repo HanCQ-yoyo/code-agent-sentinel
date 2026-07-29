@@ -12,6 +12,31 @@
 
 ---
 
+## 规则结构化表单 + match 树编辑器
+
+- **合入日期**:2026-07-29(分支 `feat/rule-form-match-tree`)
+- **合入 SHA**:`3842580`(main,merge commit,11 commits,10 任务 SDD 全 review clean + 最终整支 review Ready to merge 0 Critical/0 Important)
+
+### 升级
+
+- **RuleDrawer edit/create 改全结构化表单(移除 Monaco YAML 编辑器)**:edit/create 模式从 Monaco YAML 文本编辑器替换为结构化表单——基础区(id / severity 带色点 / asset_type 12 项 / dotall 开关)+ match 树编辑器 + 高级折叠区(description / remediation / deobfuscation 6 技术 / post_exclude / paths include+exclude / metadata 动态 key-value)。`useDebouncedEffect` 数据源从 YAML 字符串改 draft 对象(防抖 500ms → POST /validate),`onSave` 序列化 draft 为 RuleDTO map。零后端 / 零 store / 零 RuleDTO 类型改动,复用 validateRuleDraft/saveRule/forkRule/useDebouncedEffect/SevBadge/ruleName。
+- **match 树编辑器(递归 + 任意深度嵌套)**:新增纯函数模块 `web/src/lib/match-tree.ts`(树对象 ↔ RuleDTO.match map 双向转换 + 节点变换,零依赖独立单测)+ `asset-fields.ts`(asset_type→field 建议表)。组件 `MatchTreeEditor.tsx`(递归渲染整棵树)+ `MatchNodeRow.tsx`(单节点行:AND/OR/NOT 分组标题 + field AutoComplete + op 4 组下拉 + value 动态控件)。支持 and/or/not 节点 + field/op/value 叶子,节点可转换/删除/上下移,任意深度嵌套(逐层冒泡)。op 11 个分 4 类:value 控件随 op 契约动态切换(无 value / Tags 数组 / Input 标量,正则带 (?s) 提示)。对齐 `internal/security/ruleengine/schema.go` + `validate.go` 数据契约。
+- **view 模式 match 摘要改树形只读渲染**:从 `JSON.stringify` 改为 `MatchTreeEditor readOnly`,内置规则的 and/or/not 结构以树形展示而非裸 JSON。
+- **降级保护(无损)**:含特殊 op(repeat_check/homoglyph_check,非用户 op)或异形 match(混键等)的规则 → match 区降级为只读 JSON 块 + 警告,`matchMapToTree` 返回 null 为唯一真源;保存时原 matchMap 原样回写,不丢数据。
+- **新增 vitest 纯函数单测 + Playwright e2e**:引入 vitest(`match-tree.test.ts` 往返/变换/降级,25 用例);`rules-form.spec.ts` e2e 覆盖 create 单叶子保存 / view 内置规则树渲染 / builtin view 只读核心路径。
+
+### 修复
+
+- **e2e create 测试不可重入**:POST /api/detect-rules 对已存在 id 返回 409(`handlers_rules.go:postRule`,create 重复 id 非幂等),create 测试写的 `custom.e2e-single-leaf` 持久化在 SQLite → 上次运行残留 → 本次保存 POST 409 → `waitForResponse(200)` timeout。修:`beforeEach` 先 DELETE 清残留规则,保证每次 create 从干净态出发(连续 3 次重跑验证确定性)。
+
+### 已知限制
+
+- 不暴露 repeat_check/homoglyph_check 特殊 op(内置规则用,走降级只读 JSON)。
+- e2e 未覆盖 edit→AND 分组变换路径(brief 原列该覆盖但未给测试代码,本计划遵 brief 只交付 3 测试);edit 态变换经手动验收。
+- 既有 `e2e.spec.ts` 的「项目 tab 右键置顶」测试预先存在失败(非本分支引入,与本特性无关)。
+
+---
+
 ## 规则可配置化 + sqlite 存储迁移
 
 - **合入日期**:2026-07-29(规则可配置化分支 `feat/rule-configurable-sqlite`)
@@ -23,7 +48,7 @@
 - **启动迁移旧规则文件 + 双域 builtin 同步**:`main.go` 启动注入 db;`migrate.go` 把旧 `~/.claude-sentinel/rules/*.yaml` 旧文件规则迁入 db(对侧域标签修正 + 重命名语义);`SyncBuiltin` 把 embed 内置规则同步进两域 db(覆盖 builtin 行 + 报告孤儿 override 供审计)。
 - **规则 CRUD + 启停 + fork + validate(检测/拦截对称)**:API 两域对称 16 端点(`/api/{detect|intercept}-rules` CRUD + `/:id/enabled` 启停 + `/:id/fork` builtin→custom + `/validate` 不落库校验)。`POST` 拒绝覆盖 builtin id(409,闭合"内置只读"绕过:UpsertRule ON CONFLICT 本可静默改 builtin 的 match/source)。`dtoToRule` 直接构造 `ruleengine.Rule` 经 `NewMatchNode(dto.Match)` + `Validate`(与 YAML 加载同路径,保等价)。
 - **运行时热重载 + fail-open**:`RulesDetector` 持 db 引用,扫描时实时读 db(规则改动无需重启,修 Finding #5 旧文件缓存);`guard` 守卫读 db 拦截规则,db 故障 fail-open 回退 builtin(4 种故障子情况全覆盖:dbPath 空/Open 失败/List 失败/表空,corrupt db 经 Ping 失败不 panic)。combos 构造时预编译不热重载。
-- **前端规则管理 + 域切换**:`RuleDTO` 统一类型(两域共用,`domain` 标识来源域);`store` 规则 actions(`fetchDetectRules`/`fetchInterceptRules`/`saveRule`/`toggleRule`/`forkRule`/`deleteRule`/`validateRuleDraft`);`RulesTable` 操作列(启停/来源筛选);`RuleDrawer` view/edit/create 三态 + builtin fork + 防抖实时校验(Monaco YAML 编辑器);`Settings` 域切换(检测/拦截两域同表单)。e2e 覆盖启停/域切换核心路径。
+- **前端规则管理 + 域切换**:`RuleDTO` 统一类型(两域共用,`domain` 标识来源域);`store` 规则 actions(`fetchDetectRules`/`fetchInterceptRules`/`saveRule`/`toggleRule`/`forkRule`/`deleteRule`/`validateRuleDraft`);`RulesTable` 操作列(启停/来源筛选);`RuleDrawer` view/edit/create 三态 + builtin fork + 防抖实时校验(注:edit/create 的 Monaco YAML 编辑器在下一里程碑「规则结构化表单 + match 树编辑器」已替换为结构化表单);`Settings` 域切换(检测/拦截两域同表单)。e2e 覆盖启停/域切换核心路径。
 
 ### 修复
 
