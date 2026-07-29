@@ -13,7 +13,26 @@ import { test, expect } from '@playwright/test'
 
 const TOKEN = 'e2e-test-token-123'
 
+// create 测试写入的 custom 规则 ID。POST /api/detect-rules 对已存在 ID 返回 409
+// (handlers_rules.go:postRule — create 重复 id 是冲突,非幂等),持久化在 SQLite
+// (/tmp/sentinel-e2e-home 的 sentinel.db)。若上次运行残留该行,本次 create 的保存
+// POST 会 409 → waitForResponse(200) 永不命中 → 测试 timeout。故 beforeEach 先 DELETE
+// 清掉残留,保证每次 create 都从干净态出发(镜像 e2e.spec.ts 用 API fetch 重置状态的模式)。
+const CREATE_RULE_ID = 'custom.e2e-single-leaf'
+const API_BASE = 'http://127.0.0.1:41999'
+const AUTH = { Authorization: `Bearer ${TOKEN}` }
+
+async function deleteTestRuleIfAny() {
+  try {
+    await fetch(`${API_BASE}/api/detect-rules/${encodeURIComponent(CREATE_RULE_ID)}`, {
+      method: 'DELETE',
+      headers: AUTH,
+    })
+  } catch { /* server 尚未就绪(webServer 启动中),忽略 */ }
+}
+
 test.beforeEach(async ({ page }) => {
+  await deleteTestRuleIfAny()
   await page.route('**/*.woff2', (r) => r.abort())
   await page.route('**/fonts.googleapis.com/**', (r) => r.abort())
   await page.route('**/fonts.gstatic.com/**', (r) => r.abort())
@@ -39,7 +58,7 @@ test('create 新建单叶子规则保存后列表出现', async ({ page }) => {
 
   // 填 id(基础区第一个 Input,create 模式可编辑)。
   const idInput = page.locator('.rule-drawer input').first()
-  await idInput.fill('custom.e2e-single-leaf')
+  await idInput.fill(CREATE_RULE_ID)
 
   // 选 asset_type=settings(让 field 建议表生效)。
   // asset_type Select 在 create 模式空值,placeholder「任意类型」可见。点该 Select 的 selector 开下拉。
@@ -76,7 +95,7 @@ test('create 新建单叶子规则保存后列表出现', async ({ page }) => {
   await saveResp
 
   // 保存成功后列表重拉,新规则行出现。
-  await expect(page.locator('.ant-table-row').filter({ hasText: 'custom.e2e-single-leaf' })).toBeVisible({ timeout: 10000 })
+  await expect(page.locator('.ant-table-row').filter({ hasText: CREATE_RULE_ID })).toBeVisible({ timeout: 10000 })
 })
 
 test('view 内置规则 match 树渲染非纯 JSON', async ({ page }) => {
