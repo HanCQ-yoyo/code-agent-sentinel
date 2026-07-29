@@ -252,6 +252,37 @@
     "validationOk": "校验通过",
     "yamlParseError": "YAML 解析失败,请检查语法"
   },
+  "ruleForm": {
+    "basicSection": "基础信息",
+    "advancedSection": "高级",
+    "matchTreeTitle": "匹配条件",
+    "addCondition": "添加条件",
+    "addGroup": "添加分组",
+    "convertToAnd": "转为 AND 分组",
+    "convertToOr": "转为 OR 分组",
+    "convertToNot": "用 NOT 包裹",
+    "unwrapToLeaf": "展开为条件",
+    "deleteNode": "删除",
+    "moveUp": "上移",
+    "moveDown": "下移",
+    "fieldLabel": "字段",
+    "opLabel": "操作",
+    "valueLabel": "值",
+    "fieldPlaceholder": "字段名",
+    "valuePlaceholder": "值",
+    "regexPlaceholder": "正则表达式",
+    "dotallHint": "`.` 匹配换行(?s),受高级区 Dotall 开关控制",
+    "anyAssetType": "任意类型",
+    "unsupportedMatch": "此规则的匹配结构含本编辑器不支持的写法(如特殊求值模式),已切只读",
+    "unsupportedMatchHint": "可正常保存;如需编辑该结构请改用其他方式",
+    "emptyMatch": "匹配条件为空,请添加字段",
+    "opGroup": {
+      "existence": "存在性",
+      "set": "集合",
+      "text": "文本匹配",
+      "regex": "正则匹配"
+    }
+  },
   "ruleTable": {
     "colRuleId": "规则号",
     "colRuleName": "规则名称",
