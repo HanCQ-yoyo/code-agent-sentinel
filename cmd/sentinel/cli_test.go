@@ -8,6 +8,7 @@ import (
 
 	"code-agent-sentinel/internal/config"
 	"code-agent-sentinel/internal/security/findingstate"
+	"code-agent-sentinel/internal/storage"
 )
 
 // TestRulesValidateReportsInvalid 验证 sentinel rules validate <file> 能检出非法 op。
@@ -62,6 +63,53 @@ func TestRulesListShowsBuiltin(t *testing.T) {
 	// 应含表头
 	if !strings.Contains(out, "ID") || !strings.Contains(out, "SEVERITY") {
 		t.Fatalf("rules list 应含表头: %s", out)
+	}
+}
+
+// TestRulesListReadsFromDB 验证 rules list 优先读 sqlite(Task 13):
+// 建 db + 同步 builtin + 插一条 custom 规则,断言 list 输出含该 custom 规则
+// (fail-open 路径只显 builtin,显出 custom 即证走的是 db 路径)。
+func TestRulesListReadsFromDB(t *testing.T) {
+	home := t.TempDir()
+	// writeTestConfig 会建 ~/.claude-sentinel/config.yaml,但 db 路径是
+	// <home>/.claude-sentinel/sentinel.db(与 main.go 启动一致)。先建目录+建 db:
+	sentinelDir := filepath.Join(home, ".claude-sentinel")
+	if err := os.MkdirAll(sentinelDir, 0o700); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	dbPath := filepath.Join(sentinelDir, "sentinel.db")
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := storage.RunMigrations(db); err != nil {
+		t.Fatalf("RunMigrations: %v", err)
+	}
+	// 同步 builtin(模拟 main.go 启动),再插一条 custom 规则。
+	syncBuiltinRules(db)
+	custom := storage.StoredRule{
+		ID: "custom.cli-list-probe", Severity: "high", AssetType: "command",
+		MatchJSON: `{"field":"command","op":"contains","value":"cli-list-probe"}`,
+		Source: "custom",
+	}
+	if err := storage.UpsertRule(db, storage.DomainDetect, "custom", custom, ""); err != nil {
+		t.Fatalf("UpsertRule custom: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("db.Close: %v", err)
+	}
+
+	out, err := execRulesList(home)
+	if err != nil {
+		t.Fatalf("rules list error: %v", err)
+	}
+	// custom 规则应可见(证明读的是 db,非 fail-open builtin)
+	if !strings.Contains(out, "custom.cli-list-probe") {
+		t.Fatalf("rules list 应从 db 读到 custom 规则 custom.cli-list-probe: %s", out)
+	}
+	// builtin 也应在(db 同步了 builtin 行)
+	if !strings.Contains(out, "baseline.wildcard-bash") {
+		t.Fatalf("rules list 应从 db 读到 builtin baseline.wildcard-bash: %s", out)
 	}
 }
 

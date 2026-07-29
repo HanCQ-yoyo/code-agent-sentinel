@@ -227,21 +227,6 @@ func RowToCombo(row ComboRow) (ComboRule, error) {
 	}, nil
 }
 
-// comboRowToJSON / comboRowFromJSON 是 ComboRow 与落库 JSON 文本之间的转换(Task 6
-// load_db.go 用)。ComboRow 已以 JSON 文本列存储,这两个函数提供"整行 marshal/unmarshal"
-// 便捷入口,便于 Task 6 把一行扫描结果整体反序列化。
-func comboRowToJSON(row ComboRow) ([]byte, error) {
-	return json.Marshal(row)
-}
-
-func comboRowFromJSON(data []byte) (ComboRow, error) {
-	var row ComboRow
-	if err := json.Unmarshal(data, &row); err != nil {
-		return ComboRow{}, err
-	}
-	return row, nil
-}
-
 // jsonMarshalMap 把 map 序列化为 JSON 文本(nil/空 → "")。
 func jsonMarshalMap(m map[string]any) (string, error) {
 	if len(m) == 0 {

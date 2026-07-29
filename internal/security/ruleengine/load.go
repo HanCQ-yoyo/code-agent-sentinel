@@ -124,6 +124,12 @@ func Merge(layers ...[]Rule) []Rule {
 //   - combos:builtin + global 的 ComboRule(项目 combo 暂不接,保持"项目规则只单资产"语义)。
 //     combo 不经 Merge(无 id 覆盖语义,直接 concat),也不经 Validate——返回 raw,
 //     由 RulesDetector 构造时调 ValidateCombo 预编译(controller addendum 决议 4)。
+//
+// Deprecated:DB 模式下主加载器是 LoadDetectRules(从 sqlite 读 detect_rules + overrides,
+// enabled 过滤、热重载)。本函数仅作为 RulesDetector 的 nil-db fail-open 回退保留
+// (internal/security/rules_detector.go:131,db 不可用时维持检测能力,与 guard fail-open
+// 同语义),以及 load_test.go 的旧文件路径等价性测试。新代码应调 LoadDetectRules(db, projects)。
+// 不得删除:删除会让 RulesDetector 在 db 故障时丢失检测能力,违反"存储故障不致检测失效"铁律。
 func LoadForScan(home string, inventory *configengine.Inventory) (rules []Rule, combos []ComboRule, errs []RuleLoadError) {
 	builtin, builtinCombos, errs := LoadBuiltin()
 	combos = append(combos, builtinCombos...)

@@ -165,11 +165,8 @@ func StoredRuleToRule(s storage.StoredRule) (Rule, error) {
 
 // ComboToStoredCombo 把 ComboRule 转成 storage.StoredCombo。
 //
-// 偏差说明(brief 修正 #1):brief 假设 comboRowToJSON(row) 返回
-// (requiresJSON, metaJSON, err),但 Task 3 实际落地的 comboRowToJSON 签名是
-// (ComboRow) ([]byte, error)——整行 marshal,非按字段拆分。而 ComboToRow 产出的
-// ComboRow 已经把 RequiresJSON / MetadataJSON 作为 JSON 文本列直接持有(persist.go:34),
-// 故此处直接从 row 取这两个字段,不再调用 comboRowToJSON(那个 helper 仅用于整行序列化场景)。
+// ComboToRow 产出的 ComboRow 已把 RequiresJSON / MetadataJSON 作为 JSON 文本列直接
+// 持有(persist.go),此处直接从 row 取这两个字段,无需额外序列化 helper。
 func ComboToStoredCombo(c ComboRule, source, version string) (storage.StoredCombo, error) {
 	row, err := ComboToRow(c)
 	if err != nil {
@@ -184,7 +181,7 @@ func ComboToStoredCombo(c ComboRule, source, version string) (storage.StoredComb
 
 // StoredComboToCombo 把 storage.StoredCombo 还原成 ComboRule。
 // 用 StoredCombo 的 JSON 文本列字段重建 ComboRow,再经 RowToCombo 反序列化
-// (与 ComboToStoredCombo 对称,不经 comboRowFromJSON——同理,那是整行反序列化 helper)。
+// (与 ComboToStoredCombo 对称)。
 func StoredComboToCombo(s storage.StoredCombo) (ComboRule, error) {
 	row := ComboRow{
 		ID: s.ID, Severity: s.Severity, Description: s.Description, Remediation: s.Remediation,

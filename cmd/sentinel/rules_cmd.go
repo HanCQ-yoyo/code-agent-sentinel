@@ -10,15 +10,21 @@ import (
 
 	"code-agent-sentinel/internal/config"
 	"code-agent-sentinel/internal/security/ruleengine"
+	"code-agent-sentinel/internal/storage"
 )
 
 // newRulesCmd 构造 `sentinel rules` 子命令,含 list / validate [file]。
 //
-// rules list:列出所有已加载规则(builtin + global),含 id/severity/source/valid。
-// rules validate [file]:校验单个规则文件(无参数则校验 builtin + global 全量)。
+// rules list:列出检测域全局规则(builtin + custom),含 id/severity/source/valid。
+//   - 优先读 sqlite(~/.claude-sentinel/sentinel.db,enabled 过滤);
+//   - db 不可用/空 → fail-open 回退 builtin(与检测器 nil-db 语义一致)。
 //
-// 路径解析:读 config(默认 ~/.claude-sentinel/config.yaml),用 cfg.ResolveSentinelRulesDir(home)
-// 解析全局规则目录。文件不存在 → 仅列/校验内置规则。
+// rules validate [file]:校验单个规则文件(无参数则校验 builtin + custom 全量)。
+//   - 单文件模式用 LoadDir 临时目录,与 db 无关(校验文件本身);
+//   - 全量模式复用 loadRulesForCLI(db 优先,回退 builtin)。
+//
+// 路径解析:读 config(默认 ~/.claude-sentinel/config.yaml)取 home;db 路径固定
+// <home>/.claude-sentinel/sentinel.db(与 main.go server 启动一致)。
 func newRulesCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rules",
@@ -29,17 +35,31 @@ func newRulesCmd() *cobra.Command {
 	return cmd
 }
 
-// loadRulesForCLI 加载 builtin + global 规则供 CLI 展示/校验。
-// 返回 Validate 后的 valid 规则 + 全部加载/校验错误。
+// loadRulesForCLI 加载检测域全局规则供 CLI 展示/校验。
+//
+// Task 13:改为优先读 sqlite detect 规则(builtin + custom,enabled 过滤)。
+// db 不可用或空(用户从未启动 server,db 未建/未同步)→ fail-open 回退 LoadBuiltin,
+// 与 RulesDetector/guard 的 nil-db fail-open 语义一致:存储故障不致 CLI 不可用。
+//
 // 不加载项目规则(CLI 场景用户关心全局规则;项目规则在扫描时动态加载)。
 // combo 暂不展示(_ 丢弃):rules 命令面向单资产规则,Task 8 范畴不扩 combo UI。
+//
+// cfg 保留在签名中以最小化调用点改动(未来可能接 cfg.SentinelRulesDir 做 db 路径覆盖);
+// 当前 db 路径固定为 <home>/.claude-sentinel/sentinel.db(与 main.go 一致)。
 func loadRulesForCLI(cfg *config.Config, home string) ([]ruleengine.Rule, []ruleengine.RuleLoadError) {
+	_ = cfg // 预留:未来可从 cfg 读 db 路径覆盖;当前与 main.go 一致用 home 拼接。
+	dbPath := filepath.Join(home, ".claude-sentinel", "sentinel.db")
+	if db, err := storage.Open(dbPath); err == nil {
+		defer db.Close()
+		rules, _, errs := ruleengine.LoadDetectRules(db, nil)
+		if len(rules) > 0 {
+			return rules, errs
+		}
+		// db 空(未同步 builtin)→ 回退 LoadBuiltin。不返回 errs,避免把 db 空
+		// 误报为加载错误(此时 rules 为空是正常态,回退 builtin 才是正确展示)。
+	}
 	builtin, _, errs := ruleengine.LoadBuiltin()
-	globalDir := cfg.ResolveSentinelRulesDir(home)
-	global, _, globalErrs := ruleengine.LoadDir(globalDir, "global:"+globalDir)
-	errs = append(errs, globalErrs...)
-	merged := ruleengine.Merge(builtin, global)
-	valid, validateErrs := ruleengine.Validate(merged)
+	valid, validateErrs := ruleengine.Validate(builtin)
 	errs = append(errs, validateErrs...)
 	return valid, errs
 }
@@ -122,7 +142,7 @@ func newRulesValidateCmd() *cobra.Command {
 				return err
 			}
 			rules, loadErrs := loadRulesForCLI(cfg, home)
-			return reportValidate(out, rules, loadErrs, "builtin + global")
+			return reportValidate(out, rules, loadErrs, "检测域全局规则(db)")
 		},
 	}
 	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.claude-sentinel/config.yaml)")
