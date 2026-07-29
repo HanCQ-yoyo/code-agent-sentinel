@@ -105,12 +105,14 @@ export function RulesTable({ domain, onEdit, onFork }: RulesTableProps) {
     { title: t('ruleTable.colSeverity'), width: 80, render: (_: unknown, r: RuleDTO) => <SevBadge tone={`sev-${r.severity}` as BadgeTone}>{t(SEVERITY_LABEL_KEY[r.severity as Severity])}</SevBadge> },
     {
       // 来源:RuleDTO.source 只有 builtin(灰 Tag)/ custom(蓝 Tag)。
+      // Task 17:改用 rulesManage.sourceBuiltin/sourceCustom(内置/自定义),比 ruleTable.sourceBaseline
+      //   (基线,旧 FlatRule 语义)更贴合 RuleDTO 的 builtin/custom 二分。
       title: t('ruleTable.colSource'), width: 90, render: (_: unknown, r: RuleDTO) => (
         <Tag
           color={r.source === 'custom' ? 'blue' : 'default'}
           style={{ marginInlineEnd: 0, fontSize: 11 }}
         >
-          {r.source === 'custom' ? t('ruleTable.sourceCustom') : t('ruleTable.sourceBaseline')}
+          {r.source === 'custom' ? t('rulesManage.sourceCustom') : t('rulesManage.sourceBuiltin')}
         </Tag>
       ),
     },
@@ -158,7 +160,7 @@ export function RulesTable({ domain, onEdit, onFork }: RulesTableProps) {
             { value: 'all', label: <SevSegLabel text={t('ruleTable.all')} count={sourceCounts.all} />, className: 'sev-tab-all' },
             ...SOURCE_OPTIONS.map((s) => ({
               value: s,
-              label: <SevSegLabel text={s === 'builtin' ? t('ruleTable.sourceBaseline') : t('ruleTable.sourceCustom')} count={sourceCounts[s] ?? 0} />,
+              label: <SevSegLabel text={s === 'builtin' ? t('rulesManage.sourceBuiltin') : t('rulesManage.sourceCustom')} count={sourceCounts[s] ?? 0} />,
               className: 'sev-tab-all',
             })),
           ]}

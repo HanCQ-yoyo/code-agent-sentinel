@@ -245,7 +245,12 @@
     "engines": "Engines",
     "covers": "Coverage",
     "coversAll": "All assets",
-    "notFound": "Detector not found"
+    "notFound": "Detector not found",
+    "forkHint": "Fork rule {{id}} as a custom rule to edit and save. New rule ID:",
+    "forkIdRequired": "Please enter a new rule ID",
+    "forkSuccess": "Forked as custom rule",
+    "validationOk": "Validation passed",
+    "yamlParseError": "YAML parse failed, please check syntax"
   },
   "ruleTable": {
     "colRuleId": "Rule ID",
@@ -265,6 +270,21 @@
     "sourceSkill": "Skill",
     "sourceCustom": "Custom",
     "sourceOther": "Other"
+  },
+  "rulesManage": {
+    "detectRules": "Detect Rules",
+    "interceptRules": "Intercept Rules",
+    "actions": "Actions",
+    "edit": "Edit",
+    "delete": "Delete",
+    "fork": "Fork as Custom",
+    "forkTitle": "Fork as Custom Rule",
+    "confirmDelete": "Delete this rule?",
+    "create": "New Rule",
+    "createTitle": "New Rule",
+    "builtinReadonly": "Built-in rules are read-only; fork to custom to edit",
+    "sourceBuiltin": "Built-in",
+    "sourceCustom": "Custom"
   },
   "assetEditor": {
     "edit": "Edit",

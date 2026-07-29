@@ -245,7 +245,12 @@
     "engines": "引擎",
     "covers": "覆盖范围",
     "coversAll": "全部资产",
-    "notFound": "未找到检测器"
+    "notFound": "未找到检测器",
+    "forkHint": "复制规则 {{id}} 为自定义规则,可编辑后保存。新规则 ID:",
+    "forkIdRequired": "请输入新规则 ID",
+    "forkSuccess": "已复制为自定义规则",
+    "validationOk": "校验通过",
+    "yamlParseError": "YAML 解析失败,请检查语法"
   },
   "ruleTable": {
     "colRuleId": "规则号",
@@ -265,6 +270,21 @@
     "sourceSkill": "技能",
     "sourceCustom": "自定义",
     "sourceOther": "其他"
+  },
+  "rulesManage": {
+    "detectRules": "检测规则",
+    "interceptRules": "拦截规则",
+    "actions": "操作",
+    "edit": "编辑",
+    "delete": "删除",
+    "fork": "复制为自定义",
+    "forkTitle": "复制为自定义规则",
+    "confirmDelete": "确定删除这条规则?",
+    "create": "新建规则",
+    "createTitle": "新建规则",
+    "builtinReadonly": "内置规则只读,请复制为自定义后编辑",
+    "sourceBuiltin": "内置",
+    "sourceCustom": "自定义"
   },
   "assetEditor": {
     "edit": "编辑",

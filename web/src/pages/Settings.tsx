@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Card, Tabs, Switch, Input, Button } from 'antd'
+import { Card, Tabs, Switch, Input, Button, Segmented } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
-import type { DetectorMeta, DetectorsConfig, RuleDTO } from '../types'
+import type { DetectorMeta, DetectorsConfig, RuleDTO, RuleDomain } from '../types'
 import { RulesTable } from '../components/RulesTable'
+import { RuleDrawer } from '../components/RuleDrawer'
 import { DetectorPanel } from '../components/DetectorPanel'
 import { SettingsGuard } from '../components/SettingsGuard'
 import { SettingsAllowlist } from '../components/SettingsAllowlist'
@@ -71,11 +72,28 @@ export default function Settings() {
 
   const selected = filter ? detectors.find((d) => d.id === filter) : undefined
 
-  // Task 15:RulesTable 改读 store 的 RuleDTO[](sqlite),不再依赖 detectors 的 rules 字段。
-  // domain 硬编码 "detect";onEdit/onFork 占位(Task 16 接 RuleDrawer 编辑模式,Task 17 接 Segmented 域切换)。
+  // Task 17:规则域切换(detect/intercept)+ 编辑/新建抽屉所有权。
+  // RuleDrawer 有两个实例:① RulesTable 内部的 view-only 抽屉(行点击只读);② 此处的 edit/create 抽屉。
+  // 两者不会同时打开同一条规则:RulesTable 的 view 抽屉由 selectedRule 控制,本处的 edit/create 抽屉
+  //   由 editingRule+drawerMode 控制。用户点 Edit/Fork → onEdit/onFork → 关 view 抽屉(若开着)+ 开 edit 抽屉。
+  //   实际中用户点操作按钮前不会同时开两个抽屉(操作按钮在表格行内,行点击才开 view 抽屉),故无需显式互斥。
+  const [ruleDomain, setRuleDomain] = useState<RuleDomain>('detect')
   const [editingRule, setEditingRule] = useState<RuleDTO | null>(null)
-  const handleEdit = (r: RuleDTO) => { setEditingRule(r) }
-  const handleFork = (r: RuleDTO) => { setEditingRule(r) }
+  const [drawerMode, setDrawerMode] = useState<'view' | 'edit' | 'create'>('view')
+
+  // onEdit:custom 规则点编辑 → 进 edit 模式打开抽屉。
+  const handleEdit = (r: RuleDTO) => { setEditingRule(r); setDrawerMode('edit') }
+  // onFork:builtin 规则点「复制为自定义」→ 进 view 模式打开抽屉(RuleDrawer view 模式自带 fork Modal 入口)。
+  //   选 view 而非 edit:builtin 不能直接 edit(RuleDrawer 对 builtin edit 会禁用 Save + 只读编辑器);
+  //   view 模式顶部有 Fork 按钮,用户填 new_id → forkRule → onForked 切到新 custom 的 edit 态。
+  const handleFork = (r: RuleDTO) => { setEditingRule(r); setDrawerMode('view') }
+  // 新建规则:create 模式(rule=null)。
+  const handleCreate = () => { setEditingRule(null); setDrawerMode('create') }
+  // 保存成功:关抽屉(saveRule 内部已重拉列表,store state 已更新)。
+  const handleSaved = () => { setEditingRule(null); setDrawerMode('view') }
+  // fork 成功:切到新 custom 规则的 edit 态(created 为新创建的 RuleDTO,source=custom、can_edit=true)。
+  const handleForked = (created: RuleDTO) => { setEditingRule(created); setDrawerMode('edit') }
+  const handleDrawerClose = () => { setEditingRule(null); setDrawerMode('view') }
 
   const detectorsAndRules = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -94,9 +112,32 @@ export default function Settings() {
           </div>
         </>
       ) : null}
-      {/* Task 17:此处加 Segmented 域切换(detect/intercept);Task 15 暂硬编码 detect。
-          RulesTable 内部 useEffect 按 domain 拉对应域规则,空列表显示 Empty。 */}
-      <RulesTable domain="detect" onEdit={handleEdit} onFork={handleFork} />
+      {/* Task 17:域切换 Segmented(detect/intercept)+ 新建规则按钮。
+          RulesTable 按 ruleDomain 拉对应域规则;切换域时 RulesTable 内部 useEffect 重拉。
+          新建规则按钮:打开 create 模式抽屉(rule=null)。 */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <Segmented
+          value={ruleDomain}
+          onChange={(v) => setRuleDomain(v as RuleDomain)}
+          options={[
+            { label: t('rulesManage.detectRules'), value: 'detect' },
+            { label: t('rulesManage.interceptRules'), value: 'intercept' },
+          ]}
+        />
+        <Button type="primary" onClick={handleCreate}>{t('rulesManage.create')}</Button>
+      </div>
+      <RulesTable domain={ruleDomain} onEdit={handleEdit} onFork={handleFork} />
+      {/* edit/create 抽屉(Settings 拥有,与 RulesTable 的 view 抽屉分离)。
+          open 由 rule!==null || mode==='create' 控制(RuleDrawer 内部)。
+          domain 传当前 ruleDomain:fork/create 都基于当前选中域。 */}
+      <RuleDrawer
+        rule={editingRule}
+        mode={drawerMode}
+        domain={ruleDomain}
+        onClose={handleDrawerClose}
+        onSaved={handleSaved}
+        onForked={handleForked}
+      />
     </div>
   )
 
