@@ -172,11 +172,39 @@ export function MatchNodeRow({
                 onWrap={(k) => node.type === 'not' ? onChildWrap(0, k) : onChildWrap(i, k)}
                 onUnwrap={() => {}}
                 onDelete={() => node.type === 'not' ? onChildDelete(0) : onChildDelete(i)}
-                onAddChild={() => {}}
-                onMoveChild={() => {}}
-                onChildChange={() => {}}
-                onChildDelete={() => {}}
-                onChildWrap={() => {}}
+                onAddChild={(ck) => {
+                  // 子层加子节点:把子层变换后整体冒泡
+                  if (child.type === 'and' || child.type === 'or') {
+                    const newChild: MatchTreeNode = ck === 'leaf' ? newLeaf() : { type: 'and', children: [newLeaf()] }
+                    const next = { ...child, children: [...child.children, newChild] } as MatchTreeNode
+                    node.type === 'not' ? onChildChange(0, next) : onChildChange(i, next)
+                  }
+                }}
+                onMoveChild={(ci, dir) => {
+                  if (child.type === 'and' || child.type === 'or') {
+                    const next = moveChild(child, ci, dir)
+                    node.type === 'not' ? onChildChange(0, next) : onChildChange(i, next)
+                  }
+                }}
+                onChildChange={(ci, next) => {
+                  if (child.type === 'and' || child.type === 'or') {
+                    const updated = { ...child, children: child.children.map((c, j) => (j === ci ? next : c)) } as MatchTreeNode
+                    node.type === 'not' ? onChildChange(0, updated) : onChildChange(i, updated)
+                  }
+                }}
+                onChildDelete={(ci) => {
+                  if (child.type === 'and' || child.type === 'or') {
+                    const children = child.children.filter((_, j) => j !== ci)
+                    const next: MatchTreeNode = children.length === 0 ? newLeaf() : { ...child, children } as MatchTreeNode
+                    node.type === 'not' ? onChildChange(0, next) : onChildChange(i, next)
+                  }
+                }}
+                onChildWrap={(ci, k) => {
+                  if (child.type === 'and' || child.type === 'or') {
+                    const updated = { ...child, children: child.children.map((c, j) => (j === ci ? wrapAs(c, k) : c)) } as MatchTreeNode
+                    node.type === 'not' ? onChildChange(0, updated) : onChildChange(i, updated)
+                  }
+                }}
               />
               {!readOnly && node.type !== 'not' && (
                 <Space direction="vertical" size={0}>
