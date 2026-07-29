@@ -361,7 +361,6 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 			Remediation: "修复规则文件语法或配置(详见 evidence)",
 		}
 		// load-error 无 Fingerprint(空串),applyFindingState 只设 Status="open"(无匹配状态)。
-		// load-error 无 Fingerprint(空串),applyFindingState 只设 Status="open"(无匹配状态)。
 		applyFindingState(&f, "", d.states)
 		out = append(out, f)
 	}
