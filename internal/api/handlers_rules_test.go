@@ -5,69 +5,22 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 
 	"github.com/gin-gonic/gin"
-
-	"code-agent-sentinel/internal/security/ruleengine"
-	"code-agent-sentinel/internal/storage"
 )
 
-// newServerWithRulesDB 构造带 sqlite 规则库的测试服务器:
-//  1. 在 t.TempDir() 下开 db 文件,RunMigrations 建表;
-//  2. LoadBuiltin + SyncBuiltin 把 embed 内置规则同步进 detect + intercept 两域(版本 v1);
-//  3. 赋值 srv.DB;
-//  4. 在 srv 的 router 上注册 8+8 规则路由(检测/拦截对称)。
+// newServerWithRulesDB 构造带 sqlite 规则库的测试服务器。
 //
-// Task 12 会把规则路由注册并入 registerRoutes + newTestServer 注入 db;
-// 此 helper 在 Task 11 单独维护,确保 handlers 测试可独立跑(路由未全局注册前)。
+// Task 11 时规则路由尚未全局注册、newTestServer 也未注入 db,此 helper 独立
+// 开 db + 同步 builtin + 注册路由。Task 12 把路由注册并入 registerRoutes、
+// db 注入并入 newTestServer(经共享 newTestDB 助手),故此 helper 现仅转发
+// 到 newTestServer——保留旧名以免改 8 处测试调用点;语义不变(仍得到带
+// builtin 规则 + 已注册 8+8 路由的服务器)。
 func newServerWithRulesDB(t *testing.T) *Server {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
-	home := t.TempDir()
-	srv := newTestServer(t, home)
-
-	dbPath := filepath.Join(home, "test-rules.db")
-	db, err := storage.Open(dbPath)
-	if err != nil {
-		t.Fatalf("open db: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := storage.RunMigrations(db); err != nil {
-		t.Fatalf("run migrations: %v", err)
-	}
-
-	// 同步 builtin 规则进两域(镜像 cmd/sentinel/syncBuiltinRules)。
-	builtin, builtinCombos, loadErrs := ruleengine.LoadBuiltin()
-	for _, e := range loadErrs {
-		t.Logf("builtin load err %s: %s", e.Source, e.Reason)
-	}
-	builtinStored := make([]storage.StoredRule, 0, len(builtin))
-	for _, r := range builtin {
-		s, convErr := ruleengine.RuleToStoredRule(r, "builtin", "v1")
-		if convErr != nil {
-			t.Fatalf("convert builtin rule %s: %v", r.ID, convErr)
-		}
-		builtinStored = append(builtinStored, s)
-	}
-	builtinComboStored := make([]storage.StoredCombo, 0, len(builtinCombos))
-	for _, c := range builtinCombos {
-		s, convErr := ruleengine.ComboToStoredCombo(c, "builtin", "v1")
-		if convErr != nil {
-			t.Fatalf("convert builtin combo %s: %v", c.ID, convErr)
-		}
-		builtinComboStored = append(builtinComboStored, s)
-	}
-	if _, err := storage.SyncBuiltin(db, storage.DomainDetect, builtinStored, builtinComboStored, "v1"); err != nil {
-		t.Fatalf("sync builtin detect: %v", err)
-	}
-	if _, err := storage.SyncBuiltin(db, storage.DomainIntercept, builtinStored, nil, "v1"); err != nil {
-		t.Fatalf("sync builtin intercept: %v", err)
-	}
-
-	srv.DB = db
-	return srv
+	return newTestServer(t, t.TempDir())
 }
 
 // rmRfRuleID 是测试用的 builtin 规则 ID(原 brief 写 filesystem.rm-rf-root-home,

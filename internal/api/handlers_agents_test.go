@@ -39,7 +39,7 @@ func TestGetAgents(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	eng := configengine.NewEngine(dir, "")
 	agents := configengine.DefaultAgents(dir, "")
-	s := NewServer(eng, nil, config.DefaultConfig(), "tok", nil, agents, nil)
+	s := NewServer(eng, nil, config.DefaultConfig(), "tok", nil, agents, nil, nil)
 	r := s.Router()
 	req := httptest.NewRequest("GET", "/api/agents", nil)
 	req.Host = "127.0.0.1"
@@ -123,7 +123,7 @@ func TestGetAgentsMixedClaudeAndCodex(t *testing.T) {
 		{ID: "claude-code", Name: "Claude Code", Kind: "claude-code", RootDir: filepath.Join(dir, ".claude"), HomeDir: dir},
 		{ID: "codex", Name: "Codex CLI", Kind: "codex", RootDir: filepath.Join(dir, ".codex"), HomeDir: dir},
 	}
-	s := NewServer(eng, nil, config.DefaultConfig(), "tok", nil, agents, nil)
+	s := NewServer(eng, nil, config.DefaultConfig(), "tok", nil, agents, nil, nil)
 	w := reqAgent(t, s, "GET", "/api/agents", nil)
 	if w.Code != 200 {
 		t.Fatalf("got %d: %s", w.Code, w.Body)

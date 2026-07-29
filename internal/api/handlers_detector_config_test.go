@@ -24,11 +24,11 @@ func newConfigTestServer(t *testing.T) (*Server, string) {
 	cfg.EnsureDetectors()
 	eng := configengine.NewEngine(dir, "")
 	r := security.NewRegistry()
-	r.Register(security.NewRulesDetector(dir, cfg.Detectors, nil)) // db 临时 nil,Task 12 给真 test db
+	r.Register(security.NewRulesDetector(dir, cfg.Detectors, nil)) // db=nil:此测试不涉及规则 CRUD,fail-open 回退 LoadForScan
 	r.Register(security.NewSecretDetector(cfg.Detectors))
 	r.Register(security.NewDependencyDetector(cfg.Detectors))
 	orch := &security.Orchestrator{Registry: r}
-	srv := NewServer(eng, orch, cfg, "tok", nil, nil, nil)
+	srv := NewServer(eng, orch, cfg, "tok", nil, nil, nil, nil)
 	srv.ConfigPath = cfgPath
 	return srv, cfgPath
 }

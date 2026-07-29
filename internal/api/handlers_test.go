@@ -15,18 +15,73 @@ import (
 	"code-agent-sentinel/internal/editor"
 	"code-agent-sentinel/internal/history"
 	"code-agent-sentinel/internal/security"
+	"code-agent-sentinel/internal/security/ruleengine"
+	"code-agent-sentinel/internal/storage"
 )
+
+// newTestDB 是 Task 12 提取的共享 db 构造助手:
+//  1. 在 home 下开临时 db 文件,RunMigrations 建表;
+//  2. LoadBuiltin + SyncBuiltin 把 embed 内置规则同步进 detect + intercept 两域(版本 v1);
+//  3. 注册 t.Cleanup(db.Close)。
+//
+// newTestServer / newTestServerWithAgents / newServerWithRulesDB 共用此 helper,
+// 确保规则 API 测试 + 普通测试 + handler 测试看到的规则库一致。镜像
+// cmd/sentinel/syncBuiltinRules 的语义(detect 域带 combos,intercept 域只带规则)。
+func newTestDB(t *testing.T, home string) *storage.DB {
+	t.Helper()
+	dbPath := filepath.Join(home, "test.db")
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := storage.RunMigrations(db); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+
+	// 同步 builtin 规则进两域(镜像 cmd/sentinel/syncBuiltinRules)。
+	builtin, builtinCombos, loadErrs := ruleengine.LoadBuiltin()
+	for _, e := range loadErrs {
+		t.Logf("builtin load err %s: %s", e.Source, e.Reason)
+	}
+	builtinStored := make([]storage.StoredRule, 0, len(builtin))
+	for _, r := range builtin {
+		s, convErr := ruleengine.RuleToStoredRule(r, "builtin", "v1")
+		if convErr != nil {
+			t.Fatalf("convert builtin rule %s: %v", r.ID, convErr)
+		}
+		builtinStored = append(builtinStored, s)
+	}
+	builtinComboStored := make([]storage.StoredCombo, 0, len(builtinCombos))
+	for _, c := range builtinCombos {
+		s, convErr := ruleengine.ComboToStoredCombo(c, "builtin", "v1")
+		if convErr != nil {
+			t.Fatalf("convert builtin combo %s: %v", c.ID, convErr)
+		}
+		builtinComboStored = append(builtinComboStored, s)
+	}
+	if _, err := storage.SyncBuiltin(db, storage.DomainDetect, builtinStored, builtinComboStored, "v1"); err != nil {
+		t.Fatalf("sync builtin detect: %v", err)
+	}
+	if _, err := storage.SyncBuiltin(db, storage.DomainIntercept, builtinStored, nil, "v1"); err != nil {
+		t.Fatalf("sync builtin intercept: %v", err)
+	}
+	return db
+}
 
 func newTestServer(t *testing.T, home string) *Server {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
 	eng := configengine.NewEngine(home, "")
+	// Task 12:注入真实 test db(而非 nil),使 /api/detect-rules 等
+	// 规则路由经 newTestServer 即可访问 builtin 规则,无需 newServerWithRulesDB。
+	db := newTestDB(t, home)
 	r := security.NewRegistry()
-	r.Register(security.NewRulesDetector(home, nil, nil))
+	r.Register(security.NewRulesDetector(home, nil, db))
 	orch := &security.Orchestrator{Registry: r}
 	hist := history.NewStore(filepath.Join(home, "..", "history")) // 历史目录与 .claude 同级,在 home 之外
 	ed := editor.New(eng, "", 0)
-	return NewServer(eng, orch, config.DefaultConfig(), "tok", hist, configengine.DefaultAgents(home, ""), ed)
+	return NewServer(eng, orch, config.DefaultConfig(), "tok", hist, configengine.DefaultAgents(home, ""), ed, db)
 }
 
 // newTestServerWithAgents 用指定 agents 构造 Server(多 agent fixture 用)。
@@ -34,15 +89,17 @@ func newTestServer(t *testing.T, home string) *Server {
 // NewServer 内部用此 agents 列表构造 scan.Runner,EngineFor 按 agentID 池化。
 // hist 目录同样放在 home 外(与 .claude 同级)避免 configengine 扫到。
 // SelectedAgentID 默认置为 agents[0].ID(NewServer 既有行为)。
+// Task 12:同样注入真实 test db(规则路由可用,保持与 newTestServer 对称)。
 func newTestServerWithAgents(t *testing.T, eng *configengine.Engine, agents []configengine.Agent) *Server {
 	t.Helper()
 	gin.SetMode(gin.TestMode)
+	db := newTestDB(t, eng.HomeDir)
 	r := security.NewRegistry()
-	r.Register(security.NewRulesDetector(eng.HomeDir, nil, nil))
+	r.Register(security.NewRulesDetector(eng.HomeDir, nil, db))
 	orch := &security.Orchestrator{Registry: r}
 	hist := history.NewStore(filepath.Join(eng.HomeDir, "..", "history"))
 	ed := editor.New(eng, "", 0)
-	return NewServer(eng, orch, config.DefaultConfig(), "tok", hist, agents, ed)
+	return NewServer(eng, orch, config.DefaultConfig(), "tok", hist, agents, ed, db)
 }
 
 func TestGetAssets(t *testing.T) {

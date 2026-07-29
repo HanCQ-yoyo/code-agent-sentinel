@@ -299,11 +299,10 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	// `sentinel setup` 把 claude-code 排首位规避。扫描/看板/健康分走 Runner.EngineFor(agentID)
 	// 按 agent 多路复用,不受此限。后续若加 Codex 编辑,需把 editor 也接到 EngineFor。
 	ed := editor.New(eng, cfg.BackupDir, cfg.MaxBackups)
-	srv := api.NewServer(eng, orch, cfg, token, hist, engAgents, ed)
+	srv := api.NewServer(eng, orch, cfg, token, hist, engAgents, ed, db)
 	srv.ConfigPath = cfgPath
 	srv.Intercept = istore
 	srv.Allowlist = allowlist
-	srv.DB = db // Task 10:注入规则库(API 侧规则配置 CRUD 用,Task 12 将改入参)
 	// 多任务调度:每 agent 一个 Scheduler,Manager 增量同步。
 	// makeRun 按 agentID 闭包 srv.Runner.RunScan(内部 EngineFor 按 agentID 池化选 Engine)。
 	mgr := scheduler.NewManager(func(agentID string) func(context.Context) error {

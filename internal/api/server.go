@@ -35,8 +35,8 @@ type Server struct {
 	Editor          *editor.Editor
 	Runner          ScanRunner         // HTTP/scheduler/CLI 共用的扫描路径(接口可注入 spy 测试)
 	ScheduleManager *scheduler.Manager // 多任务调度管理器(/api/schedules CRUD + /api/scheduler deprecated 转发)
-	// Task 10:规则库句柄(API 侧规则配置 CRUD 将用,Task 12 把它并入 NewServer 入参)。
-	// 当前由 main.go 构造 Server 后赋值;nil 表示 db 不可用(检测器/guard 已 fail-open)。
+	// 规则库 sqlite 句柄(nil 表示不可用 → 检测器/guard 已 fail-open 回退 LoadForScan)。
+	// Task 12 起 NewServer 直接注入(main.go Task 10 曾用构造后赋值 srv.DB=db)。
 	DB *storage.DB
 }
 
@@ -47,7 +47,9 @@ type ScanRunner interface {
 	EngineFor(agentID string) *configengine.Engine
 }
 
-func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *config.Config, token string, hist *history.Store, agents []configengine.Agent, ed *editor.Editor) *Server {
+// NewServer 构造 Server。db 为规则库 sqlite 句柄(main.go 已在 Task 10 开启,
+// Task 12 把它从构造后字段赋值改为入参注入);nil 表示 db 不可用(检测器/guard fail-open)。
+func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *config.Config, token string, hist *history.Store, agents []configengine.Agent, ed *editor.Editor, db *storage.DB) *Server {
 	if len(agents) == 0 {
 		agents = configengine.DefaultAgents(eng.HomeDir, eng.ClaudeDir)
 	}
@@ -57,7 +59,7 @@ func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *confi
 	}
 	// Task 8:Runner 持真实 agents 列表(由 main.go 从 config 解析传入),
 	// 内部按 agentID 池化 Engine,扫描时按请求/调度选 agent。
-	return &Server{Engine: eng, Orchestrator: orch, Config: cfg, Token: token, History: hist, Agents: agents, SelectedAgentID: current, Editor: ed, Runner: scan.NewRunner(agents, orch, hist)}
+	return &Server{Engine: eng, Orchestrator: orch, Config: cfg, Token: token, History: hist, Agents: agents, SelectedAgentID: current, Editor: ed, Runner: scan.NewRunner(agents, orch, hist), DB: db}
 }
 
 func (s *Server) Router() *gin.Engine {
