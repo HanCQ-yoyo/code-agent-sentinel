@@ -32,14 +32,13 @@ type MigrateRulesReport struct {
 //     静态检测与运行时拦截都需看到这些 custom 规则。
 //   - builtin_version 传 ""(custom 行存 NULL,见 builtinVersionOrNull)。
 //   - Imported 统计成功写入传入域的条数(对侧域写入失败不计入 Imported,只记 Errors,
-//     因为传入域成功即视为该规则已迁移;对侧域失败不阻断整体,下次启动会再同步 builtin
-//     但 custom 已在此 —— 注意:对侧域失败会在下次 MigrateLegacyRules 调用时被 Upsert
-//     覆盖重试,前提是旧文件未被重命名。调用方在 Imported>0 后才重命名 .legacy,
-//     故对侧域失败时旧文件保留,下次重试)。
+//     因为传入域成功即视为该规则已迁移;对侧域失败不阻断整体,但旧文件仍被调用方重命名
+//     .legacy(一次性迁移语义:坏文件不应每次启动重试解析),对侧域缺口不自愈)。
 //
-// 注意:本函数不重命名旧文件 —— 那是调用方的职责(调用方在判断 Imported 后决定是否
-// 重命名,避免 db 写入失败却已重命名导致规则丢失)。故本函数名虽含 "Migrate",
-// 实际只做 "Import custom rows to db",重命名逻辑在 main.go。
+// 注意:本函数不重命名旧文件 —— 那是调用方的职责。调用方(main.go 的
+// migrateLegacyRulesFiles)在调本函数后无条件重命名所有 *.yaml/*.yml 为 .legacy
+// (即使部分转换/写入失败也重命名:避免每次启动重试坏文件;回滚需删 db 重建)。
+// 故本函数名虽含 "Migrate",实际只做 "Import custom rows to db",重命名逻辑在 main.go。
 func MigrateLegacyRules(db *DB, domain Domain, rules []StoredRule) (MigrateRulesReport, error) {
 	var rep MigrateRulesReport
 	// 对侧域:detect ↔ intercept 双向。两域规则定义现状共用,custom 规则同时落两侧。
@@ -53,9 +52,10 @@ func MigrateLegacyRules(db *DB, domain Domain, rules []StoredRule) (MigrateRules
 			continue
 		}
 		// 对侧域写入失败不阻断本条计入 Imported(传入域已成功),仅记错误。
-		// 对侧域失败时旧文件由调用方保留(未重命名),下次启动重试。
+		// 对侧域失败时旧文件由调用方保留(无条件重命名,见下),下次启动 schema 已初始化
+		// 不会再迁——故对侧域缺口不自愈,但两域同 UpsertRule 同时失败概率极低。
 		if err := UpsertRule(db, otherDomain, "custom", stored, ""); err != nil {
-			rep.Errors = append(rep.Errors, fmt.Sprintf("%s(intercept-side): %v", stored.ID, err))
+			rep.Errors = append(rep.Errors, fmt.Sprintf("%s(%s-side): %v", stored.ID, otherDomain, err))
 		}
 		rep.Imported++
 	}
