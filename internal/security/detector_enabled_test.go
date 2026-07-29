@@ -13,7 +13,7 @@ func TestOrchestratorSkipsDisabledDetector(t *testing.T) {
 	r := NewRegistry()
 	r.Register(fakeDetector{id: "fake", avail: true}) // fake 始终 enabled
 	// 用 rules 检测器作为可禁用对象(其 Enabled 读 cfg.Rules.Enabled)。
-	rd := NewRulesDetector(t.TempDir(), cfg)
+	rd := NewRulesDetector(t.TempDir(), cfg, nil) // db 临时 nil(rules 被禁用,Scan 不跑)
 	r.Register(rd)
 	o := &Orchestrator{Registry: r}
 

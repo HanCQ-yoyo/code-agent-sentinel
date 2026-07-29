@@ -67,7 +67,7 @@ func runFullScan(cfg *config.Config, home string) (*security.ScanResult, error) 
 	}
 	cfg.EnsureDetectors() // 与 main.go 一致:检测器持 cfg.Detectors 指针
 	r := security.NewRegistry()
-	r.Register(security.NewRulesDetector(home, cfg.Detectors))
+	r.Register(security.NewRulesDetector(home, cfg.Detectors, nil)) // db 临时 nil,Task 10 注入真 db
 	r.Register(security.NewSecretDetector(cfg.Detectors))
 	r.Register(security.NewDependencyDetector(cfg.Detectors))
 	orch := &security.Orchestrator{Registry: r}

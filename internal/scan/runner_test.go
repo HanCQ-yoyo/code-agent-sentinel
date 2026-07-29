@@ -27,7 +27,7 @@ func newTestRunner(t *testing.T, home string) *Runner {
 	t.Helper()
 	agents := configengine.DefaultAgents(home, "")
 	r := security.NewRegistry()
-	r.Register(security.NewRulesDetector(home, nil))
+	r.Register(security.NewRulesDetector(home, nil, nil))
 	orch := &security.Orchestrator{Registry: r}
 	hist := history.NewStore(filepath.Join(home, "..", "history"))
 	return NewRunner(agents, orch, hist)
@@ -44,7 +44,7 @@ func TestRunnerRunScanWritesHistory(t *testing.T) {
 	}
 	agents := configengine.DefaultAgents(dir, "")
 	r := security.NewRegistry()
-	r.Register(security.NewRulesDetector(dir, nil))
+	r.Register(security.NewRulesDetector(dir, nil, nil))
 	orch := &security.Orchestrator{Registry: r}
 	hist := history.NewStore(filepath.Join(dir, "history"))
 	runner := NewRunner(agents, orch, hist)
@@ -73,7 +73,7 @@ func TestRunnerNilHistoryNoPanic(t *testing.T) {
 	dir := t.TempDir()
 	agents := configengine.DefaultAgents(dir, "")
 	r := security.NewRegistry()
-	r.Register(security.NewRulesDetector(dir, nil))
+	r.Register(security.NewRulesDetector(dir, nil, nil))
 	orch := &security.Orchestrator{Registry: r}
 	runner := NewRunner(agents, orch, nil) // History nil
 	res, err := runner.RunScan(context.Background(), "", ScanScope{Type: "global"}, nil, "")

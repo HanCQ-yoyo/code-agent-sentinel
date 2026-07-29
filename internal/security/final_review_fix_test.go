@@ -39,7 +39,7 @@ func hasFindingSeverity(fs []Finding, ruleIDPrefix string, want Severity) bool {
 // 不在 Safe 行集合内 → 保留,destructive.filesystem.* (critical) finding 仍触发。
 func TestC1_SafeDoesNotSuppressDestructiveOnOtherLine(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:      "script-mixed",
 		Type:    configengine.AssetScript,
@@ -62,7 +62,7 @@ func TestC1_SafeDoesNotSuppressDestructiveOnOtherLine(t *testing.T) {
 // 第 1 行 rm -i 是 interactive(Safe),第 2 行 rm -rf / 真实破坏性。修前 Safe 跨行抑制漏报。
 func TestC1_RmInteractiveSafeDoesNotSuppressRmRf(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:      "script-rmi-then-rmrf",
 		Type:    configengine.AssetScript,
@@ -83,7 +83,7 @@ func TestC1_RmInteractiveSafeDoesNotSuppressRmRf(t *testing.T) {
 // 第 1 行 git restore --staged 是 Safe(仅影响索引),第 2 行 rm -rf / 真实破坏性。
 func TestC1_GitRestoreStagedSafeDoesNotSuppressRmRf(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:      "script-restore-then-rmrf",
 		Type:    configengine.AssetScript,
@@ -103,7 +103,7 @@ func TestC1_GitRestoreStagedSafeDoesNotSuppressRmRf(t *testing.T) {
 // TestC1_SkillAssetSafeOnOtherLine 验证 skill/memory 资产同样不被跨行 Safe 漏报。
 func TestC1_SkillAssetSafeOnOtherLine(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{
 		{
 			ID:      "skill-mixed",
@@ -136,7 +136,7 @@ func TestC1_SkillAssetSafeOnOtherLine(t *testing.T) {
 // 守卫,确保按行 span-scoping 后单行 Safe 仍正常生效。
 func TestC1_SingleLineSafeStillSuppressedWithinLine(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:      "script-single-safe",
 		Type:    configengine.AssetScript,
@@ -165,7 +165,7 @@ func TestC1_SingleLineSafeStillSuppressedWithinLine(t *testing.T) {
 // 了正确的 critical 正则规则。
 func TestC2_SnowflakeDropDatabaseCritical(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:   "hook-snow-dropdb",
 		Type: configengine.AssetHook,
@@ -197,7 +197,7 @@ func TestC2_SnowflakeDropDatabaseCritical(t *testing.T) {
 // 语义 RuleID="snowflake.drop-table",severity critical。
 func TestC2_SnowflakeDropTableCritical(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:   "hook-snow-droptable",
 		Type: configengine.AssetHook,
@@ -228,7 +228,7 @@ func TestC2_SnowflakeDropTableCritical(t *testing.T) {
 // 语义 RuleID="snowflake.truncate-table",severity critical。
 func TestC2_SnowflakeTruncateCritical(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:   "hook-snow-truncate",
 		Type: configengine.AssetHook,
@@ -259,7 +259,7 @@ func TestC2_SnowflakeTruncateCritical(t *testing.T) {
 // 语义 RuleID="snowflake.drop-schema",severity critical。
 func TestC2_SnowflakeDropSchemaCritical(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:   "hook-snow-dropschema",
 		Type: configengine.AssetHook,
@@ -306,7 +306,7 @@ func TestC2_SnowflakeDropSchemaCritical(t *testing.T) {
 // critical 正则规则 destructive.database.snowflake.update-all。
 func TestC2_SnowflakeUpdateTableSetCritical(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:   "hook-snow-update-table-set",
 		Type: configengine.AssetHook,
@@ -339,7 +339,7 @@ func TestC2_SnowflakeUpdateTableSetCritical(t *testing.T) {
 // snowflakeRuleIDForSQL 回退 snowflake.drop → carrier 被扭曲为 high。
 func TestC2_SnowflakeTruncateNoTableKeywordCritical(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:   "hook-snow-truncate-notable",
 		Type: configengine.AssetHook,

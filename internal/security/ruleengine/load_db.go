@@ -17,7 +17,15 @@ import (
 //
 // 本函数取代文件加载路径 LoadForScan 用于 DB 模式(LoadForScan 暂留,Task 13 废弃)。
 // Finding #5(硬编码路径)随此闭合:统一读 db,不再假定 ~/.claude-sentinel。
-func LoadDetectRules(db *storage.DB, inv *configengine.Inventory) (rules []Rule, combos []ComboRule, errs []RuleLoadError) {
+//
+// 参数 projects(Task 8):项目级 .sentinel/rules 加载的项目列表(各项目规则带
+// ProjectPath=p.Path 标记)。传 nil 跳过项目级加载(builtin+custom 仍加载)。
+// 原 Task 6 签名是 `inv *configengine.Inventory`,但 RulesDetector.Scan 收到的是
+// []Asset 而非 *Inventory(Scan 没有 Assets/Duplicates),只有 Projects 这一项用得上;
+// 为让 Scan 能直接传入项目列表(不构造空壳 Inventory),签名改为 `projects []configengine.Project`。
+// 项目规则加载语义与 LoadForScan 完全一致:每个项目 LoadDir(.sentinel/rules)、
+// 设 ProjectPath、Merge 作第二层、Validate。Merge/Validate 行为未改。
+func LoadDetectRules(db *storage.DB, projects []configengine.Project) (rules []Rule, combos []ComboRule, errs []RuleLoadError) {
 	if db == nil {
 		errs = append(errs, RuleLoadError{Source: "db", Reason: "detect rules db is nil"})
 		return nil, nil, errs
@@ -41,16 +49,14 @@ func LoadDetectRules(db *storage.DB, inv *configengine.Inventory) (rules []Rule,
 
 	// 3. 项目级规则(文件,带 ProjectPath)。项目 combo 暂不接(与 LoadForScan 同语义)。
 	var projectRules []Rule
-	if inv != nil {
-		for _, p := range inv.Projects {
-			dir := filepath.Join(p.Path, ".sentinel", "rules")
-			prules, _, perrs := LoadDir(dir, "project")
-			errs = append(errs, perrs...)
-			for i := range prules {
-				prules[i].ProjectPath = p.Path
-			}
-			projectRules = append(projectRules, prules...)
+	for _, p := range projects {
+		dir := filepath.Join(p.Path, ".sentinel", "rules")
+		prules, _, perrs := LoadDir(dir, "project")
+		errs = append(errs, perrs...)
+		for i := range prules {
+			prules[i].ProjectPath = p.Path
 		}
+		projectRules = append(projectRules, prules...)
 	}
 
 	// 4. Merge + Validate

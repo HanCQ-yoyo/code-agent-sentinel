@@ -29,7 +29,7 @@ import (
 // filesystem 语义解析器)。R2 下整体 Safe 会抑制该行正则,且无 semantic finding。
 func TestStaticLayerChainSplitFindsRmRf(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:      "script-chain",
 		Type:    configengine.AssetScript,
@@ -71,7 +71,7 @@ func TestStaticLayerChainSplitFindsRmRf(t *testing.T) {
 // 用 AssetScript + Content(走 content 字段,产生 Locations 供 span 复核)。
 func TestStaticLayerSpanDataNoFinding(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:      "script-echo",
 		Type:    configengine.AssetScript,
@@ -101,7 +101,7 @@ func TestStaticLayerSpanDataNoFinding(t *testing.T) {
 // 字节偏移检查 span(brief Step 4 推荐方法的 command 字段延伸)。
 func TestStaticLayerHookCommandSpanDataNoFinding(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:   "hook-echo",
 		Type: configengine.AssetHook,
@@ -134,7 +134,7 @@ func TestStaticLayerHookCommandSpanDataNoFinding(t *testing.T) {
 // → 漏报。修后:跳过 Data span Deny,存 Executed Deny → emit。
 func TestStaticLayerDataSpanDenyDoesNotSuppressRealDeny(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:      "script-mixed",
 		Type:    configengine.AssetScript,

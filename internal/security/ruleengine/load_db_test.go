@@ -124,8 +124,8 @@ rules:
 `), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	inv := &configengine.Inventory{Projects: []configengine.Project{{Path: projDir}}}
-	rules, _, errs := LoadDetectRules(db, inv)
+	projects := []configengine.Project{{Path: projDir}}
+	rules, _, errs := LoadDetectRules(db, projects)
 	if len(errs) != 0 {
 		t.Fatalf("errs = %+v", errs)
 	}

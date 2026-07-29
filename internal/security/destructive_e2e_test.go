@@ -35,7 +35,7 @@ import (
 // 命令行(hook command / mcp_server command),而非脚本正文。
 func TestDestructive_EndToEnd(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 
 	assets := []configengine.Asset{
 		{
@@ -105,7 +105,7 @@ func TestDestructive_EndToEnd(t *testing.T) {
 // 期望:零 destructive.* / semantic.* finding。
 func TestDestructive_NoFalsePositiveOnSafeAssets(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 
 	assets := []configengine.Asset{
 		{

@@ -11,36 +11,41 @@ import (
 	"code-agent-sentinel/internal/security/findingstate"
 	"code-agent-sentinel/internal/security/ruleengine"
 	"code-agent-sentinel/internal/security/ruleengine/semantics"
+	"code-agent-sentinel/internal/storage"
 )
 
 // RulesDetector 是统一声明式规则引擎检测器,替代旧 BaselineDetector + InjectionDetector。
 //
-// 它加载内置 + 全局 + 项目规则(经 ruleengine.LoadForScan:合并 + Validate),对每个资产
-// 按规则 asset_type 路由求值;命中产 Finding,施加处置状态(applyFindingState);规则加载/校验
-// 错误产独立的 load-error Finding(Severity=Info,不进健康分)。
+// 它从 sqlite db 读内置 + custom 规则(Task 8:每次 Scan 实时读 → 热重载,API 改规则后
+// 下次扫描即时生效),叠加项目级 .sentinel/rules 文件规则(经 ruleengine.LoadDetectRules:
+// Merge + Validate),对每个资产按规则 asset_type 路由求值;命中产 Finding,施加处置状态
+// (applyFindingState);规则加载/校验错误产独立的 load-error Finding(Severity=Info,
+// 不进健康分)。
 //
 // 设计要点(controller 预飞行决议):
 //   - Covers() 返回 nil —— orchestrator 的 filterByCovers 在 covers 为空时传全部资产,
 //     RulesDetector 内部按 r.AssetType 路由(各资产只跑匹配类型规则),等价于旧两个检测器
 //     各自声明 Covers 的并集,且天然支持未来新 asset_type 的规则(无需改 Covers)。
-//   - 加载分层:内置 + 全局 + 处置状态(finding_states)在构造时一次性加载(d.baseRules +
-//     d.loadErrs,Meta 与 Scan 共用);项目规则随每次 Scan 动态加载(从 ~/.claude.json 读
-//     已知项目,见 Scan.loadProjectRules 注释)。
+//   - 加载分层:db 规则(builtin + custom)+ 项目规则在每次 Scan 经 LoadDetectRules 实时
+//     读 + Merge + Validate(热重载);combos 在构造时从 db 读一次预编译(预编译昂贵且 custom
+//     combo 不支持,故不热重载,下次启动才刷新);处置状态(finding_states)构造时加载。
 //   - load-error Finding 用 SeverityInfo(系数 0.0),确保 ComputeHealth 不为其扣分
 //     (见 TestRulesDetectorLoadErrorNotInHealth 的数学验证)。
+//
+// Finding #5 闭合(Task 8):扫描侧不再硬编码 ~/.claude-sentinel 全局规则目录,统一读 db。
+// 路径覆盖(用户在 config 改 sentinel_rules_dir)由写侧同步进 db(SyncBuiltin),扫描侧
+// 读 db 即自动生效,不再静默不生效。
 type RulesDetector struct {
 	home string
 	cfg  *config.DetectorsConfig
+	db   *storage.DB // sqlite 句柄,Scan 时实时读(热重载)。nil=临时(Task 10 注入真 db 前),Scan 无规则。
 
-	// builtin + global 合并 + Validate 后的规则(Meta 与 Scan 基础层)。
-	// Scan 时再叠加项目规则得到 allRules。
-	baseRules []ruleengine.Rule
-	// builtin + global 的 ComboRule(Task 8 加载,Task 9 在 Scan 第二遍求值)。
-	// 已在 NewRulesDetector 构造时经 ValidateCombo 预编译(Requires[*].compiled 填充)。
-	// 项目 combo 暂不接(LoadForScan 丢弃项目 combo,保持"项目规则只单资产"语义)。
+	// combos(builtin + global):构造时从 db 读一次 + ValidateCombo 预编译。
+	// 注:Scan 时规则每次重读 db,但 combos 预编译昂贵,构造时读一次。
+	// custom combo 不支持,故 combos 只在启动同步后稳定(下次启动才刷新)。
 	baseComboRules []ruleengine.ComboRule
-	// 构造时的加载/校验错误(builtin + global + finding_states)。
-	// Scan 时追加项目规则错误,合并成 load-error findings。
+	// 构造时的加载/校验错误(combos 加载/校验 + finding_states 加载)。
+	// Scan 时追加本次 LoadDetectRules 的错误,合并成 load-error findings。
 	loadErrs []ruleengine.RuleLoadError
 
 	// 处置生命周期状态(Task 7 引入,Task 11 删 suppression 后独占处置生命周期)。
@@ -51,52 +56,51 @@ type RulesDetector struct {
 	negationDropped int
 }
 
-// NewRulesDetector 构造检测器:加载内置 + 全局规则 + 处置状态。
+// NewRulesDetector 构造检测器:从 db 读 combos + 加载处置状态。
 //
-// 项目规则不在此加载 —— Scan 时按传入资产的已知项目动态加载(见 Scan.loadProjectRules)。
-// 原因:Scan 收到的是 []Asset 而非 *Inventory,无法直接拿到 inventory.Projects;
-// 项目列表的唯一权威来源是 ~/.claude.json(readProjectList),Scan 内用 configengine
-// .NewEngine(home).ListProjects() 读取即可(文件缺失返回 nil,nil,安全)。
+// 规则(builtin + custom + 项目)不在构造时加载 —— Scan 每次实时读 db(热重载):
+// API 改规则(SetOverride / UpsertRule)后下次扫描即时生效,无需重启或重建检测器。
+// combos 在构造时从 db 读一次 + ValidateCombo 预编译(预编译昂贵,且 custom combo 不支持,
+// 故不热重载,下次启动才刷新)。
 //
-// 路径 TODO(Finding #5):finding_states/全局规则目录的路径目前硬编码
-// filepath.Join(home, ".claude-sentinel", ...),扫描侧(scan-time)不读 cfg 配置。
-// CLI/API 写侧已通过 cfg.ResolveStatesPath/ResolveRulesDir 支持 config 覆盖
-// (sentinel_rules_dir);若用户在 config 里改了这些路径,写会落到自定义路径,
-// 但本检测器仍读默认路径 → 扫描时处置状态/全局规则静默不生效。security 包目前不接收
-// config(controller 决议待定),故此处不改行为,仅标注。将来把 config 接入本检测器时,
-// 改这两处 filepath.Join 为 cfg.Resolve*Path(home)。
-func NewRulesDetector(home string, cfg *config.DetectorsConfig) *RulesDetector {
-	d := &RulesDetector{home: home, cfg: cfg}
+// db 由 main.go 注入(WAL,server 独占写,guard 只读)。db==nil 是临时态(Task 10 前
+// main.go 传 nil):LoadDetectRules(nil,...) 返回 "db is nil" 错误,Scan 无规则,只产
+// load-error finding(Severity=Info 不进健康分)。Task 10 注入真 db 后即正常。
+//
+// 顺带修 Finding #5:扫描侧不再硬编码 ~/.claude-sentinel 全局规则目录,统一读 db。
+func NewRulesDetector(home string, cfg *config.DetectorsConfig, db *storage.DB) *RulesDetector {
+	d := &RulesDetector{home: home, cfg: cfg, db: db}
 
-	// 内置 + 全局规则:LoadForScan(home, nil) = builtin + global(无项目),合并 + Validate。
-	// 用 LoadForScan 而非 LoadBuiltin+LoadDir 分开调,是为了复用 Merge+Validate 一次成型。
-	// 路径 Finding #5:全局规则目录在 LoadForScan 内硬编码,扫描侧不读 cfg(sentinel_rules_dir)。
-	//
-	// combos(builtin + global 的 ComboRule):Task 8 加载并赋 d.baseComboRules,
-	// 经 ValidateCombo 预编译(Requires[*].compiled 填充)。Task 9 的 Scan 第二遍接 comboMatches 求值。
-	// ValidateCombo 错误进 d.loadErrs(load-error Finding,Severity=Info 不进健康分)。
-	rules, combos, errs := ruleengine.LoadForScan(home, nil)
+	// combos:构造时从 db 读 + ValidateCombo 预编译。
+	// 规则在 Scan 时重读 db,但 combos 预编译昂贵且 custom combo 不支持,故构造时读一次。
+	// 项目级 combos 不接(与 LoadForScan 同语义,保持"项目规则只单资产")。传 nil projects
+	// → LoadDetectRules 只读 db 的 builtin combos,不读项目 combo(本就丢弃)。
+	_, combos, errs := ruleengine.LoadDetectRules(db, nil)
 	validCombos, comboErrs := ruleengine.ValidateCombo(combos)
-	d.baseRules = rules
 	d.baseComboRules = validCombos
-	d.loadErrs = errs
+	d.loadErrs = append(d.loadErrs, errs...)
 	d.loadErrs = append(d.loadErrs, comboErrs...)
 
-	// 处置生命周期状态(Task 7 引入,Task 11 删 suppression 后独占处置生命周期):
-	// 加载 ~/.claude-sentinel/finding_states.yaml。文件不存在 → (nil,nil) 安全降级
-	// (applyFindingState 见 nil 直接 return)。加载错误 → 记 loadErr(不致命)。
-	// 旧 baseline.json/suppressions.yaml 经 main.go 迁移触发重命名为 .legacy,
-	// 本检测器不再读它们(迁移逻辑在 findingstate.MigrateFromLegacy,一次性)。
-	statesPath := filepath.Join(home, ".claude-sentinel", "finding_states.yaml")
-	if s, err := findingstate.Load(statesPath); err != nil {
+	// 处置生命周期状态(finding_states.yaml,仍文件,本次不迁)。
+	d.loadStates()
+	return d
+}
+
+// loadStates 加载 ~/.claude-sentinel/finding_states.yaml 处置状态到 d.states。
+// 文件不存在 → (nil,nil) 安全降级(applyFindingState 见 nil 直接 return)。
+// 加载错误 → 记 loadErr(不致命,作 load-error finding 暴露)。
+// 旧 baseline.json/suppressions.yaml 经 main.go 迁移触发重命名为 .legacy,
+// 本检测器不再读它们(迁移逻辑在 findingstate.MigrateFromLegacy,一次性)。
+func (d *RulesDetector) loadStates() {
+	statesPath := filepath.Join(d.home, ".claude-sentinel", "finding_states.yaml")
+	s, err := findingstate.Load(statesPath)
+	if err != nil {
 		d.loadErrs = append(d.loadErrs, ruleengine.RuleLoadError{
 			Source: "findingstate", Reason: fmt.Sprintf("load finding_states: %v", err),
 		})
-	} else {
-		d.states = s
+		return
 	}
-
-	return d
+	d.states = s
 }
 
 func (d *RulesDetector) ID() string                       { return "rules" }
@@ -106,11 +110,13 @@ func (d *RulesDetector) Available() bool                  { return true }
 func (d *RulesDetector) Reason() string                   { return "" }
 
 // Meta 返回检测器能力元数据(UI 展示用,纯静态描述)。
-// Rules 摘要来自 baseRules(内置 + 全局);项目规则是动态的、按资产来源项目变化,不入 Meta。
+// Rules 摘要实时从 db 读(builtin + custom,无项目规则——项目规则按资产来源项目动态变化,
+// 不入 Meta)。db==nil 时读不到规则,返回空 Rules(临时态,Task 10 注入真 db 后正常)。
 func (d *RulesDetector) Meta() DetectorMeta {
-	rules := make([]RuleInfo, 0, len(d.baseRules))
-	for _, r := range d.baseRules {
-		ri := RuleInfo{
+	rules, _, _ := ruleengine.LoadDetectRules(d.db, nil)
+	ri := make([]RuleInfo, 0, len(rules))
+	for _, r := range rules {
+		info := RuleInfo{
 			ID:            r.ID,
 			Severity:      r.Severity,
 			AssetType:     r.AssetType,
@@ -125,37 +131,36 @@ func (d *RulesDetector) Meta() DetectorMeta {
 			ProjectPath:   r.ProjectPath,
 		}
 		if r.Paths != nil {
-			ri.Paths = &PathFilterInfo{Include: r.Paths.Include, Exclude: r.Paths.Exclude}
+			info.Paths = &PathFilterInfo{Include: r.Paths.Include, Exclude: r.Paths.Exclude}
 		}
-		rules = append(rules, ri)
+		ri = append(ri, info)
 	}
 	return DetectorMeta{
 		ID:      d.ID(),
 		Name:    "声明式规则引擎",
 		Enabled: d.Enabled(),
 		Engines: []EngineInfo{{Name: "声明式规则引擎", Kind: "embedded", Enabled: d.Enabled(), Available: true}},
-		Rules:   rules,
+		Rules:   ri,
 		Covers:  nil, // 与 Covers() 一致:nil = 全资产类型(内部路由)
 	}
 }
 
 // Scan 对一批资产跑全部匹配规则。
 func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) ([]Finding, error) {
-	// 构造时已加载 builtin + global 规则(d.baseRules)与处置状态;Scan 只需叠加项目规则。
-	// 项目规则:从 ~/.claude.json 读已知项目(权威源),加载各项目 ~/.sentinel/rules/。
-	// Scan 收 []Asset 无法直接拿 inventory,故用 ListProjects() 重建项目集。
-	// 项目规则带 ProjectPath 标记(求值时按 SourcePath 隔离,只对该项目资产生效)。
-	projectRules, projectErrs := d.loadProjectRules()
+	// 每次扫描从 db 实时读规则(热重载:API 改规则后下次扫描即时生效)。
+	// LoadDetectRules 内部:读 db(builtin+custom,SQL 层过滤 enabled=false)→ 叠加项目级
+	// .sentinel/rules 文件规则(带 ProjectPath)→ Merge + Validate。返回已合并校验的 rules。
+	//
+	// 项目规则加载语义与原 LoadForScan 完全一致:从 ~/.claude.json 读已知项目(权威源),
+	// 各项目 LoadDir(.sentinel/rules)、设 ProjectPath、Merge 作第二层。Scan 收 []Asset 无法
+	// 直接拿 inventory,故用 ListProjects() 重建项目集传给 LoadDetectRules。
+	projects, _ := d.loadProjects()
+	allRules, _, loadErrs := ruleengine.LoadDetectRules(d.db, projects)
 
-	// 合并 builtin + global(已 Validate) + project,再 Validate 一次(项目规则可能未编译正则)。
-	// Validate 幂等:对已 Validate 的 builtin/global 重跑只会重填 regexes 缓存,不报错。
-	allRules, validateErrs := ruleengine.Validate(ruleengine.Merge(d.baseRules, projectRules))
-
-	// 加载错误:构造时的 d.loadErrs(builtin + global + finding_states)
-	// + 本次项目规则加载错误 + 合并后 Validate 错误。
-	loadErrs := append([]ruleengine.RuleLoadError{}, d.loadErrs...) // 复制,不污染构造时快照
-	loadErrs = append(loadErrs, projectErrs...)
-	loadErrs = append(loadErrs, validateErrs...)
+	// 加载错误:构造时的 d.loadErrs(combos + finding_states)
+	// + 本次 LoadDetectRules 的错误(db 读 + 项目规则 + Validate)。
+	combinedErrs := append([]ruleengine.RuleLoadError{}, d.loadErrs...) // 复制,不污染构造时快照
+	combinedErrs = append(combinedErrs, loadErrs...)
 
 	var out []Finding
 	for _, a := range assets {
@@ -299,8 +304,8 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 	// 跨资产组合规则第二遍(Task 9):同 agent 资产集内,所有 requires 同时命中(AND)
 	// → 1 条 Finding 挂到 primary(首个 require 命中的资产)。
 	//
-	// allComboRules 来源:d.baseComboRules(builtin + global,NewRulesDetector 构造时
-	// 已 ValidateCombo 预编译)。项目 combo 暂不接(loadProjectRules 丢弃项目 combo,保持
+	// allComboRules 来源:d.baseComboRules(builtin combos,NewRulesDetector 构造时
+	// 已 ValidateCombo 预编译)。项目 combo 暂不接(LoadDetectRules 丢弃项目 combo,保持
 	// "项目规则只单资产"语义,后续任务扩展)。
 	//
 	// 求值见 comboMatches:每个 require 用 CompiledRule()(ValidateCombo 预编译的 Rule,
@@ -315,7 +320,7 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 	// Severity=Info(系数 0.0)→ ComputeHealth 不为其扣分(见 TestRulesDetectorLoadErrorNotInHealth)。
 	// 这是 spec 决策 #12「load-error Finding 不进健康分」的落地:旧 brief 用 SeverityMedium,
 	// 但 Medium 系数 1.5 会让合成 AssetID 以 w=1.0 兜底权重扣分,破坏该决策,故改 Info。
-	for _, e := range loadErrs {
+	for _, e := range combinedErrs {
 		f := Finding{
 			DetectorID:  d.ID(),
 			RuleID:      "rules.load-error",
@@ -333,27 +338,13 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 	return out, nil
 }
 
-// loadProjectRules 加载所有已知项目的 ~/.sentinel/rules/ 规则,设置 ProjectPath 标记。
-// 项目列表来自 ~/.claude.json(ListProjects);文件缺失/损坏 → 空列表(安全降级)。
-func (d *RulesDetector) loadProjectRules() ([]ruleengine.Rule, []ruleengine.RuleLoadError) {
+// loadProjects 返回已知项目列表(来自 ~/.claude.json ListProjects),供 LoadDetectRules
+// 叠加各项目 .sentinel/rules 文件规则。文件缺失/损坏 → 空列表(安全降级,不报错)。
+// LoadDetectRules 内部对每个项目 LoadDir + 设 ProjectPath + Merge,语义与原 loadProjectRules
+// 一致(只是把 LoadDir/Merge 下沉进 LoadDetectRules,Scan 不再自己 Merge)。
+func (d *RulesDetector) loadProjects() ([]configengine.Project, error) {
 	eng := configengine.NewEngine(d.home, "")
-	projects, err := eng.ListProjects()
-	if err != nil {
-		return nil, nil
-	}
-	var allRules []ruleengine.Rule
-	var errs []ruleengine.RuleLoadError
-	for _, p := range projects {
-		dir := filepath.Join(p.Path, ".sentinel", "rules")
-		// 项目 combo 暂不接(_ 丢弃):保持"项目规则只单资产"语义,Task 8 范畴不扩。
-		prules, _, perrs := ruleengine.LoadDir(dir, "project")
-		errs = append(errs, perrs...)
-		for i := range prules {
-			prules[i].ProjectPath = p.Path
-		}
-		allRules = append(allRules, prules...)
-	}
-	return allRules, errs
+	return eng.ListProjects()
 }
 
 // pathInProject 判断 assetPath 是否在 projectPath 目录下(项目规则隔离)。
@@ -416,12 +407,6 @@ func ruleAppliesToAsset(r ruleengine.Rule, assetType configengine.AssetType) boo
 		return true
 	}
 	return false
-}
-
-// rulesForTest 仅供测试:暴露 baseRules 供测试算 fingerprint(规则结构稳定)。
-// 非导出方法,不进公开 API。
-func (d *RulesDetector) rulesForTest() []ruleengine.Rule {
-	return d.baseRules
 }
 
 // commandTextFromAsset 从资产提取命令文本 + 字段名(语义解析器输入)。

@@ -106,7 +106,7 @@ func hasRuleID(fs []Finding, id string) bool {
 //   - findings 带 Severity(非空)。
 func TestRulesDetectorScan(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := rulesFixtureAssets()
 	findings, err := d.Scan(context.Background(), assets)
 	if err != nil {
@@ -139,7 +139,7 @@ func TestRulesDetectorScan(t *testing.T) {
 // TestRulesDetectorCoversNil:Covers() 返回 nil(orchestrator 传全部资产,内部路由)。
 func TestRulesDetectorCoversNil(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	if d.Covers() != nil {
 		t.Fatalf("Covers must be nil, got %v", d.Covers())
 	}
@@ -148,7 +148,7 @@ func TestRulesDetectorCoversNil(t *testing.T) {
 // TestRulesDetectorMeta:Meta 基本信息(ID/Name/Engines/Rules/Covers)。
 func TestRulesDetectorMeta(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	m := d.Meta()
 	if m.ID != "rules" {
 		t.Errorf("Meta ID = %q, want rules", m.ID)
@@ -160,7 +160,7 @@ func TestRulesDetectorMeta(t *testing.T) {
 		t.Errorf("Engines = %+v", m.Engines)
 	}
 	// 15 baseline (Task 10 +2:mcp-http-cleartext/managed-mcp-present) + 46 injection + 6 skill + 12 destructive.git + 26 destructive.filesystem (Task 5) + 112 destructive.database (Task 6) + 21 destructive.containers + 18 destructive.package_managers (Task 7) = 256 条内置规则
-	// (combo.yaml 6 条不计入 Meta().Rules,遍历 baseRules 不含 combo)
+	// (combo.yaml 6 条不计入 Meta().Rules,Meta 从 db 读规则不含 combo)
 	if len(m.Rules) != 257 {
 		t.Errorf("Rules 数 = %d, want 257 (15 baseline + 46 injection + 6 skill + 12 destructive.git + 26 destructive.filesystem + 112 destructive.database + 21 destructive.containers + 18 destructive.package_managers + 1 test.intercept-probe)", len(m.Rules))
 	}
@@ -185,7 +185,7 @@ func TestRulesDetectorLoadErrorNotInHealth(t *testing.T) {
 	home := newRulesHome(t)
 
 	// (1) 干净 home:无 load-error
-	cleanD := NewRulesDetector(home, nil)
+	cleanD := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{
 		{ID: "clean-1", Type: configengine.AssetSettings, Name: "settings",
 			Fields: map[string]any{"raw": json.RawMessage(`{"model":"opus"}`)}},
@@ -207,7 +207,7 @@ func TestRulesDetectorLoadErrorNotInHealth(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(globalDir, "bad.yaml"), []byte(badYaml), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	badD := NewRulesDetector(home, nil)
+	badD := NewRulesDetector(home, nil, nil)
 	badFindings, err := badD.Scan(context.Background(), assets)
 	if err != nil {
 		t.Fatal(err)
@@ -295,7 +295,7 @@ func TestRulesDetectorProjectRuleScoped(t *testing.T) {
 		Fields:     map[string]any{"allow": []any{"Bash(DANGER)"}},
 	}
 
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	fs, err := d.Scan(context.Background(), []configengine.Asset{assetA, assetB})
 	if err != nil {
 		t.Fatal(err)
@@ -355,7 +355,7 @@ func TestRulesFindingLocationsPropagated(t *testing.T) {
 		Content: "safe line\ndanger: rm -rf /\nend",
 	}}
 
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	out, err := d.Scan(context.Background(), assets)
 	if err != nil {
 		t.Fatalf("Scan: %v", err)
@@ -395,7 +395,7 @@ func TestRulesFindingLocationsPropagated(t *testing.T) {
 // 注意:本测试用 hook 资产 + Fields["command"],与 destructive 规则的 asset_type=hook 对齐。
 func TestRulesDetector_SemanticNoFalsePositive(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:   "hook-commit",
 		Type: configengine.AssetHook,
@@ -429,7 +429,7 @@ func TestRulesDetector_SemanticNoFalsePositive(t *testing.T) {
 // 而非首条域规则 sed-exec-unverified 的 high)。修前 bug:用首条域规则做载体 → high(失真)。
 func TestRulesDetector_SemanticCatchesSplitFlags(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:   "hook-rm-split",
 		Type: configengine.AssetHook,
@@ -472,7 +472,7 @@ func TestRulesDetector_SemanticCatchesSplitFlags(t *testing.T) {
 // 而非首条 git 域规则 checkout-discard 的 high)。修前 bug:用首条域规则做载体 → high(失真)。
 func TestRulesDetector_SemanticDenyGitResetHard(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:   "hook-reset",
 		Type: configengine.AssetHook,
@@ -505,7 +505,7 @@ func TestRulesDetector_SemanticDenyGitResetHard(t *testing.T) {
 // `snow sql --query 'DROP TABLE x'` 含破坏性 SQL keyword,语义 Deny 应产 finding。
 func TestRulesDetector_SemanticSnowflakeDropTable(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:   "hook-snow",
 		Type: configengine.AssetHook,
@@ -537,7 +537,7 @@ func TestRulesDetector_SemanticSnowflakeDropTable(t *testing.T) {
 // 但语义层不应介入(不构造 semantic finding,不抑制正则)。
 func TestRulesDetector_SemanticPermissionsSkipped(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:   "perm-rm",
 		Type: configengine.AssetPermissions,
@@ -563,7 +563,7 @@ func TestRulesDetector_SemanticPermissionsSkipped(t *testing.T) {
 // docker rm -f x 应被 destructive.containers.docker.rm-force 正则规则命中。
 func TestRulesDetector_SemanticNoRegressionOnContainers(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:   "hook-docker",
 		Type: configengine.AssetHook,
@@ -604,7 +604,7 @@ func TestRulesDetector_SemanticNoRegressionOnContainers(t *testing.T) {
 // 这是回归守卫:若有人误改路由回严格 r.AssetType==a.Type,本测试会红。
 func TestRulesDetector_DestructiveCoversCommandAssets(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 
 	cases := []struct {
 		name  string
@@ -708,7 +708,7 @@ func TestRulesDetector_DestructiveCoversCommandAssets(t *testing.T) {
 // AssetHook with command="rm -rf /" 仍触发 destructive.filesystem.* (语义 Deny 兜底)。
 func TestRulesDetector_DestructiveHookStillCovered(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	assets := []configengine.Asset{{
 		ID:   "hook-rm",
 		Type: configengine.AssetHook,
@@ -743,7 +743,7 @@ func TestRulesDetector_DestructiveHookStillCovered(t *testing.T) {
 // 反证:AssetScript with content="ignore above instructions" — injection.tm1 应命中。
 func TestRulesDetector_StrictRoutingForNonDestructive(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 
 	// AssetHook 带注入特征文本:injection.tm1 asset_type=script,严格路由不评估 hook。
 	hookAssets := []configengine.Asset{{
@@ -794,7 +794,7 @@ func TestRulesDetector_StrictRoutingForNonDestructive(t *testing.T) {
 // TestCodexBaselineRulesDangerFullAccess 验证 sandbox_mode="danger-full-access" 命中 critical 规则。
 func TestCodexBaselineRulesDangerFullAccess(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	// config.toml 文本作为 settings 资产的 raw(规则按 field: raw 全文本匹配)
 	tomlText := `model = "gpt-5-codex"
 sandbox_mode = "danger-full-access"
@@ -820,7 +820,7 @@ approval_policy = "on-failure"
 // TestCodexBaselineRulesApprovalNever 验证 approval_policy="never" 命中 high 规则。
 func TestCodexBaselineRulesApprovalNever(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	tomlText := `model = "gpt-5-codex"
 approval_policy = "never"
 `
@@ -845,7 +845,7 @@ approval_policy = "never"
 // 不含 Codex TOML 串,两条 Codex 规则都不应误报。
 func TestCodexBaselineRulesNoFalsePositiveOnClaude(t *testing.T) {
 	home := newRulesHome(t)
-	d := NewRulesDetector(home, nil)
+	d := NewRulesDetector(home, nil, nil)
 	// Claude settings.json 的 raw 不含这些串,不应误报
 	a := configengine.Asset{
 		Type:       configengine.AssetSettings,
@@ -893,7 +893,7 @@ func matchNodeFromYAML(t *testing.T, yamlStr string) ruleengine.MatchNode {
 func newRulesDetectorWithCombos(t *testing.T, combos []ruleengine.ComboRule) *RulesDetector {
 	t.Helper()
 	home := t.TempDir()
-	d := NewRulesDetector(home, nil) // nil cfg → 全启用默认
+	d := NewRulesDetector(home, nil, nil) // nil cfg → 全启用默认
 	valid, errs := ruleengine.ValidateCombo(combos)
 	if len(errs) != 0 {
 		t.Fatalf("ValidateCombo errs: %v", errs)
@@ -1014,7 +1014,7 @@ func TestStructuredSkipDangerousRule(t *testing.T) {
 		Name:       "settings",
 		Fields:     map[string]any{"skip_dangerous": true},
 	}
-	d := NewRulesDetector(t.TempDir(), nil)
+	d := NewRulesDetector(t.TempDir(), nil, nil)
 	findings, err := d.Scan(context.Background(), []configengine.Asset{a})
 	if err != nil {
 		t.Fatal(err)
@@ -1050,7 +1050,7 @@ func TestStructuredCodexDangerFullAccess(t *testing.T) {
 		Name:       "config",
 		Fields:     map[string]any{"sandbox_mode": "danger-full-access"},
 	}
-	d := NewRulesDetector(t.TempDir(), nil)
+	d := NewRulesDetector(t.TempDir(), nil, nil)
 	findings, err := d.Scan(context.Background(), []configengine.Asset{a})
 	if err != nil {
 		t.Fatal(err)
@@ -1070,7 +1070,7 @@ func TestMCPHttpCleartextRule(t *testing.T) {
 		Name:       "remote",
 		Fields:     map[string]any{"url": "http://evil.com/api"},
 	}
-	d := NewRulesDetector(t.TempDir(), nil)
+	d := NewRulesDetector(t.TempDir(), nil, nil)
 	findings, err := d.Scan(context.Background(), []configengine.Asset{a})
 	if err != nil {
 		t.Fatal(err)
@@ -1090,7 +1090,7 @@ func TestManagedMCPPresentInfoRule(t *testing.T) {
 		Name:       "m",
 		Fields:     map[string]any{"managed": true},
 	}
-	d := NewRulesDetector(t.TempDir(), nil)
+	d := NewRulesDetector(t.TempDir(), nil, nil)
 	findings, err := d.Scan(context.Background(), []configengine.Asset{a})
 	if err != nil {
 		t.Fatal(err)
@@ -1121,7 +1121,7 @@ func newTestDetector(t *testing.T, rulesYAML string) *RulesDetector {
 	if err := os.WriteFile(filepath.Join(rulesDir, "test.yaml"), []byte(rulesYAML), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return NewRulesDetector(home, nil)
+	return NewRulesDetector(home, nil, nil)
 }
 
 // testAsset 构造一个指定类型 + content 的 Asset(测试专用)。

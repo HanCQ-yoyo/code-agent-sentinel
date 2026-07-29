@@ -73,7 +73,7 @@ func runScanCmd(cmd *cobra.Command, cfgPath, detectorsFlag, agentFlag string) er
 		}
 	}
 	r := security.NewRegistry()
-	r.Register(security.NewRulesDetector(home, cfg.Detectors))
+	r.Register(security.NewRulesDetector(home, cfg.Detectors, nil)) // db 临时 nil,Task 10 注入真 db
 	r.Register(security.NewSecretDetector(cfg.Detectors))
 	r.Register(security.NewDependencyDetector(cfg.Detectors))
 	orch := &security.Orchestrator{Registry: r}

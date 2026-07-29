@@ -49,7 +49,7 @@ func TestDetectorMeta(t *testing.T) {
 		wantRules   int
 		wantCovers  int
 	}{
-		{"rules", NewRulesDetector(tmpHome, nil), "声明式规则引擎", 1, 257, 0},
+		{"rules", NewRulesDetector(tmpHome, nil, nil), "声明式规则引擎", 1, 257, 0},
 		{"secret", NewSecretDetector(nil), "密钥检测", 1, 0, 0},
 		{"dep", NewDependencyDetector(nil), "依赖检测", 2, 0, 4},
 	}
@@ -104,7 +104,7 @@ func TestDetectorMeta(t *testing.T) {
 func TestRuleSyntaxContent(t *testing.T) {
 	// baseline.wildcard-bash 的 syntax 应含 value "Bash(*)"(op=contains 的可读语法含 value)。
 	tmpHome := t.TempDir()
-	rd := NewRulesDetector(tmpHome, nil)
+	rd := NewRulesDetector(tmpHome, nil, nil)
 	m := rd.Meta()
 	var got string
 	for _, r := range m.Rules {

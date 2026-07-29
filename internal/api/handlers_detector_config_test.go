@@ -24,7 +24,7 @@ func newConfigTestServer(t *testing.T) (*Server, string) {
 	cfg.EnsureDetectors()
 	eng := configengine.NewEngine(dir, "")
 	r := security.NewRegistry()
-	r.Register(security.NewRulesDetector(dir, cfg.Detectors))
+	r.Register(security.NewRulesDetector(dir, cfg.Detectors, nil)) // db 临时 nil,Task 12 给真 test db
 	r.Register(security.NewSecretDetector(cfg.Detectors))
 	r.Register(security.NewDependencyDetector(cfg.Detectors))
 	orch := &security.Orchestrator{Registry: r}
