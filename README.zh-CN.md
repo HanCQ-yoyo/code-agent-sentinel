@@ -9,6 +9,7 @@
 - **资产发现与解析**:扫描 `~/.claude/` 与项目 `.claude/`,覆盖 settings、permissions、hooks、MCP servers、skills、commands、agents、plugins、CLAUDE.md/memory、keybindings、scripts、**credential**(凭据文件 `auth.json`/`.env`/`*.pem` 等,不暴露内容)等 12 类资产。支持多种 code agent:**Claude Code**(`~/.claude/`)与 **OpenAI Codex CLI**(`~/.codex/config.toml`、`AGENTS.md`、`prompts/`、`hooks.json`)。`sentinel setup` 自动探测已安装 agent;看板支持多 agent 聚合、各自独立扫描。
 - **发现补齐与跨资产组合规则**:Claude L1-L5——`managed-mcp.json`(企业模式提示)、全局 `.mcp.json`、项目 `hooks/` 目录、项目 `keybindings.json`、`skip_dangerous_mode_permission_prompt` 字段;Codex C2/C3——项目级 `.codex/config.toml` + `[hooks.state]` 建模;Codex C4/L6——`auth.json` 凭据 + 项目根敏感文件。**6 条跨资产组合规则**(skip-perm+Bash(*) / Codex danger+never / 凭据外发等)经统一规则引擎新增 `ComboRule` 第二遍求值。Codex 项目级发现改读 sentinel 的 `known_projects` 清单(独立于 `~/.claude.json`)。
 - **安全检测**:统一规则引擎(256 条内置规则 + 6 条跨资产组合规则)+ 提示注入扫描(含反混淆)+ 密钥扫描(gitleaks)+ 依赖漏洞(govulncheck / npm-audit)。子进程缺失时优雅降级。
+- **规则可配置化(sqlite 存储)**:检测/拦截两域规则统一存于单个 sqlite db(`~/.claude-sentinel/sentinel.db`,WAL 模式,`0o600`)——三表:`rules` / `overrides`(启停覆盖,JOIN 派生 `enabled`)/ `combos`。内置规则启动时从 embed 同步进 db(旧 `~/.claude-sentinel/rules/*.yaml` 自动迁入)。自定义规则可经设置页(`RuleDrawer`)与对称的 `/api/{detect|intercept}-rules` CRUD + `/validate` 端点新建 / 编辑 / 从内置 fork / 启停 / 删除;内置规则只读(POST 覆盖 builtin id → 409)。`RulesDetector` 扫描时实时读 db(热重载,无需重启);`sentinel guard` 从 db 读拦截规则,db 故障 fail-open 回退内置。文件路径与 db 路径规则求值等价性已验证(按 asset_type)。
 - **统一处置生命周期**:塌缩旧 `baseline.json` + `suppressions.yaml` 为单一 `finding_states.yaml` overlay(`findingstate` 包:Status / Priority / Note / Category / ContributingRuleIDs)。`sentinel baseline --create` 批量接受全部当前未处置 finding;`--prune` 打印清理报告。旧文件自动迁移(重命名 `.legacy`,不删除)。已接受 finding 不再拉低健康分。
 - **健康分**:`Score = 100 × (1 − Σ(R(asset)·w(asset)) / (Rmax · Σ w(asset)))`,Rmax=10,0–100 五档,可解释 / 单调 / 可还原。
 - **配置编辑**:原子写入 + 自动备份与迁移(`internal/editor`);configengine 保持只读。
@@ -98,9 +99,9 @@ discovery:
 | `sentinel` | 启动本地 SOC 看板 server(默认)。Flags:`--config`、`--bind`、`--port`、`--no-browser`、`--i-know-its-risky`、`--home`、`--token`、`--claude-dir`。 |
 | `sentinel scan` | 一次性扫描(发现 → 扫描 → 写历史),不启 server;`--detectors=rules,secret` 限定运行的检测器。 |
 | `sentinel guard` | 运行时拦截 hook(由 Claude Code `PreToolUse` 调用)。读 stdin JSON,评估 Bash 命令,向 stdout 写 deny/allow 决策。永远 `exit 0`(fail-open)。Flags:`--config`、`--deadline`、`--debug`。通常由 `sentinel setup` 自动注册。 |
-| `sentinel uninstall` | 清理 `~/.claude-sentinel/`(历史、备份、finding_states、规则)。**不**碰 `~/.claude` 与二进制。`--yes` 跳过确认;`--keep-config` 保留 `config.yaml`。 |
+| `sentinel uninstall` | 清理 `~/.claude-sentinel/`(历史、备份、finding_states、规则 db)。**不**碰 `~/.claude` 与二进制。`--yes` 跳过确认;`--keep-config` 保留 `config.yaml`。 |
 | `sentinel baseline` | `--create` 批量接受当前全部未处置 finding 写入 `finding_states.yaml`;`--prune` 打印不复现指纹的清理报告。 |
-| `sentinel rules` | `list` 打印 id/severity/source/valid;`validate [file]` 校验规则文件(无参 = 内置 + 全局)。 |
+| `sentinel rules` | `list` 打印 id/severity/source/valid(读 sqlite db);`validate [file]` 校验规则文件(无参 = 内置 + 全局)。规则新建/编辑/启停/fork/删除经设置页 + `/api/{detect|intercept}-rules`。 |
 
 ## 安全模型
 

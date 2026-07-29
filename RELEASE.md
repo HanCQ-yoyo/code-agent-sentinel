@@ -12,6 +12,25 @@
 
 ---
 
+## 规则可配置化 + sqlite 存储迁移
+
+- **合入日期**:2026-07-29(规则可配置化分支 `feat/rule-configurable-sqlite`)
+- **合入 SHA**:`796bc3d`(main,fast-forward,25 commits,17 任务 SDD 全 review clean)
+
+### 升级
+
+- **规则存储迁 sqlite(WAL + 双域)**:`internal/security/ruleengine/storage.go` 用 sqlite(WAL 模式,文件 `~/.claude-sentinel/sentinel.db`,运行时强制 `0o600`)存检测/拦截两域规则。三表:`rules`(规则正文,`match_json`/`paths_json` 等以 JSON 文本列往返)/`overrides`(启停覆盖,JOIN 派生 `enabled`)/`combos`(跨资产组合规则)。`MatchNode` 导出 `Raw()`/`NewMatchNode()` 供持久层 map 往返,与 YAML 加载路径同构。文件路径与 db 路径规则等价性有专项测试(9 个 asset_type)。
+- **启动迁移旧规则文件 + 双域 builtin 同步**:`main.go` 启动注入 db;`migrate.go` 把旧 `~/.claude-sentinel/rules/*.yaml` 旧文件规则迁入 db(对侧域标签修正 + 重命名语义);`SyncBuiltin` 把 embed 内置规则同步进两域 db(覆盖 builtin 行 + 报告孤儿 override 供审计)。
+- **规则 CRUD + 启停 + fork + validate(检测/拦截对称)**:API 两域对称 16 端点(`/api/{detect|intercept}-rules` CRUD + `/:id/enabled` 启停 + `/:id/fork` builtin→custom + `/validate` 不落库校验)。`POST` 拒绝覆盖 builtin id(409,闭合"内置只读"绕过:UpsertRule ON CONFLICT 本可静默改 builtin 的 match/source)。`dtoToRule` 直接构造 `ruleengine.Rule` 经 `NewMatchNode(dto.Match)` + `Validate`(与 YAML 加载同路径,保等价)。
+- **运行时热重载 + fail-open**:`RulesDetector` 持 db 引用,扫描时实时读 db(规则改动无需重启,修 Finding #5 旧文件缓存);`guard` 守卫读 db 拦截规则,db 故障 fail-open 回退 builtin(4 种故障子情况全覆盖:dbPath 空/Open 失败/List 失败/表空,corrupt db 经 Ping 失败不 panic)。combos 构造时预编译不热重载。
+- **前端规则管理 + 域切换**:`RuleDTO` 统一类型(两域共用,`domain` 标识来源域);`store` 规则 actions(`fetchDetectRules`/`fetchInterceptRules`/`saveRule`/`toggleRule`/`forkRule`/`deleteRule`/`validateRuleDraft`);`RulesTable` 操作列(启停/来源筛选);`RuleDrawer` view/edit/create 三态 + builtin fork + 防抖实时校验(Monaco YAML 编辑器);`Settings` 域切换(检测/拦截两域同表单)。e2e 覆盖启停/域切换核心路径。
+
+### 修复
+
+- 无(新能力分支,基于 main@857cdfe 增量;既有 Stage R3 问题已在 R3 版本条目记录)。
+
+---
+
 ## 运行时拦截增强(Stage R3:span 感知 + I1 闭合 + Mode + allowlist + Codex 适配)
 
 - **合入日期**:2026-07-29(Stage R3 运行时拦截增强分支 `feat/dcg-stage-r3-runtime-enhance`)
