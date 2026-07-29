@@ -74,8 +74,9 @@ func NewRulesDetector(home string, cfg *config.DetectorsConfig, db *storage.DB) 
 	// combos:构造时从 db 读 + ValidateCombo 预编译。
 	// 规则在 Scan 时重读 db,但 combos 预编译昂贵且 custom combo 不支持,故构造时读一次。
 	// 项目级 combos 不接(与 LoadForScan 同语义,保持"项目规则只单资产")。传 nil projects
-	// → LoadDetectRules 只读 db 的 builtin combos,不读项目 combo(本就丢弃)。
-	_, combos, errs := ruleengine.LoadDetectRules(db, nil)
+	// → loadRulesForScan 只读 db 的 builtin combos(或 db nil 时回退 LoadForScan 只取 builtin+global
+	// combos),不读项目 combo(本就丢弃)。
+	_, combos, errs := d.loadRulesForScan(nil)
 	validCombos, comboErrs := ruleengine.ValidateCombo(combos)
 	d.baseComboRules = validCombos
 	d.loadErrs = append(d.loadErrs, errs...)
@@ -103,6 +104,35 @@ func (d *RulesDetector) loadStates() {
 	d.states = s
 }
 
+// loadRulesForScan 返回 (rules, combos, errs),统一三处规则加载点的 db-nil fail-open 回退。
+//
+//   - d.db 非 nil(生产 + Task 8 db-path 测试):读 sqlite 实时规则(热重载,API 改规则后下次
+//     扫描即时生效)—— LoadDetectRules(db, projects) 读 builtin+custom(SQL 层过滤
+//     enabled=false)+ 叠加项目级 .sentinel/rules 文件规则 + Merge + Validate。
+//   - d.db == nil(临时态:main.go 未注入真 db / 旧测试传 nil):回退 legacy 文件路径
+//     LoadForScan(home, inv),保持迁移前既有行为(builtin embed + ~/.claude-sentinel/rules
+//     全局文件规则 + 各项目 .sentinel/rules 项目规则)。这样 storage 未就绪时不静默关闭
+//     检测,既有测试不改即通过。
+//
+// 此回退镜像 guard 的 fail-open 模式(Task 9):storage 不可用不得静默禁用检测;
+// 对检测器而言,nil db 即"storage 不可用"的情形。
+//
+// projects 语义:传 nil = 只读 builtin(+global 文件)规则(无项目规则,与 nil-db 下
+// LoadForScan(home, nil) 一致);传非 nil = 同时加载这些项目的 .sentinel/rules。
+func (d *RulesDetector) loadRulesForScan(projects []configengine.Project) (rules []ruleengine.Rule, combos []ruleengine.ComboRule, errs []ruleengine.RuleLoadError) {
+	if d.db == nil {
+		// 临时 nil db(main.go 未注入 / 旧测试):回退文件路径,保持既有行为。
+		// LoadForScan(home, inv) = builtin embed + ~/.claude-sentinel/rules 全局文件规则;
+		// inv.Projects 非空时还加载各项目 .sentinel/rules(与 db 路径项目规则加载语义一致)。
+		inv := &configengine.Inventory{}
+		if projects != nil {
+			inv.Projects = projects
+		}
+		return ruleengine.LoadForScan(d.home, inv)
+	}
+	return ruleengine.LoadDetectRules(d.db, projects)
+}
+
 func (d *RulesDetector) ID() string                       { return "rules" }
 func (d *RulesDetector) Covers() []configengine.AssetType { return nil } // 见类型注释
 func (d *RulesDetector) Enabled() bool                    { return d.cfg.RulesEnabled() }
@@ -111,9 +141,9 @@ func (d *RulesDetector) Reason() string                   { return "" }
 
 // Meta 返回检测器能力元数据(UI 展示用,纯静态描述)。
 // Rules 摘要实时从 db 读(builtin + custom,无项目规则——项目规则按资产来源项目动态变化,
-// 不入 Meta)。db==nil 时读不到规则,返回空 Rules(临时态,Task 10 注入真 db 后正常)。
+// 不入 Meta)。db==nil 时回退 LoadForScan 读 builtin+global 文件规则(临时态,Task 10 注入真 db 后正常)。
 func (d *RulesDetector) Meta() DetectorMeta {
-	rules, _, _ := ruleengine.LoadDetectRules(d.db, nil)
+	rules, _, _ := d.loadRulesForScan(nil)
 	ri := make([]RuleInfo, 0, len(rules))
 	for _, r := range rules {
 		info := RuleInfo{
@@ -155,7 +185,7 @@ func (d *RulesDetector) Scan(ctx context.Context, assets []configengine.Asset) (
 	// 各项目 LoadDir(.sentinel/rules)、设 ProjectPath、Merge 作第二层。Scan 收 []Asset 无法
 	// 直接拿 inventory,故用 ListProjects() 重建项目集传给 LoadDetectRules。
 	projects, _ := d.loadProjects()
-	allRules, _, loadErrs := ruleengine.LoadDetectRules(d.db, projects)
+	allRules, _, loadErrs := d.loadRulesForScan(projects)
 
 	// 加载错误:构造时的 d.loadErrs(combos + finding_states)
 	// + 本次 LoadDetectRules 的错误(db 读 + 项目规则 + Validate)。
