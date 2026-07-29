@@ -28,6 +28,7 @@ import (
 	"code-agent-sentinel/internal/scheduler"
 	"code-agent-sentinel/internal/security"
 	"code-agent-sentinel/internal/security/findingstate"
+	"code-agent-sentinel/internal/storage"
 )
 
 func main() {
@@ -201,8 +202,59 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 			eng.DisabledAssetTypes = append(eng.DisabledAssetTypes, configengine.AssetType(s))
 		}
 	}
+
+	// Task 10:启动 sqlite 规则库。打开 ~/.claude-sentinel/sentinel.db → 建表 →
+	// (首次)迁移旧 rules/*.yaml 为 custom 行 + 重命名 .legacy → 同步 builtin 两域
+	// (detect + intercept)→ 注入 RulesDetector 与 Server。
+	//
+	// db-Open-failure 策略(fail-open):Open/迁移失败时 db=nil 继续启动,不阻断 server。
+	// RulesDetector 的 nil-db 回退(loadRulesForScan 走 LoadForScan 文件路径)与 guard 的
+	// fail-open(回退 LoadBuiltin)都能在 db 不可用时维持检测能力,故 db 故障不致服务不可用。
+	// 与 guard 铁律一致:存储故障不致检测失效、不误 deny。
+	dbPath := filepath.Join(home, ".claude-sentinel", "sentinel.db")
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
+		// 目录创建失败通常是权限/磁盘问题,日志都写不进去,直接报错退出。
+		return fmt.Errorf("create db dir: %w", err)
+	}
+	db, dbErr := storage.Open(dbPath)
+	if dbErr != nil {
+		// fail-open:db 打不开不阻断启动,检测器/guard 回退文件路径。
+		fmt.Fprintf(os.Stderr, "警告:打开规则库 %s 失败,检测器回退文件规则: %v\n", dbPath, dbErr)
+		db = nil
+	}
+	if db != nil {
+		defer db.Close()
+		initialized, initErr := storage.SchemaInitialized(db)
+		if initErr != nil {
+			fmt.Fprintf(os.Stderr, "警告:检查规则库 schema 失败,跳过迁移: %v\n", initErr)
+		}
+		if !initialized {
+			if migErr := storage.RunMigrations(db); migErr != nil {
+				// 建表失败:db 不可用,回退 nil-db(检测器/guard fail-open)。
+				fmt.Fprintf(os.Stderr, "警告:规则库建表失败,检测器回退文件规则: %v\n", migErr)
+				db.Close()
+				db = nil
+			} else {
+				// 首次建表:迁移旧 ~/.claude-sentinel/rules/*.yaml 为 custom 行(两域)+ 重命名 .legacy。
+				// 仅在首次(未初始化)时跑,避免每次启动都扫旧目录(.legacy 文件已不在 *.yaml 通配)。
+				migrateLegacyRulesFiles(home, db)
+			}
+		}
+		// 安全要求(Task 1 约束):db 文件可能含规则定义,0644 默认权限过宽,强制 0o600。
+		// 目录已由上方 MkdirAll(0o700)收紧。Open/RunMigrations 会创建/触碰文件,此处统一收紧。
+		if db != nil {
+			if cerr := os.Chmod(dbPath, 0o600); cerr != nil {
+				fmt.Fprintf(os.Stderr, "警告:收紧 db 文件权限失败: %v\n", cerr)
+			}
+		}
+		// 同步 builtin 两域(embed → source=builtin 行)。每次启动都跑(SyncBuiltin 幂等):
+		// 引擎版本升级后新增/修改的 builtin 规则会被刷新进 db,被删的 builtin 行会被清掉
+		// (custom 行与 overrides 不动)。detect 域带 combos,intercept 域 combos 传 nil
+		// (运行时拦截当前不消费 combo 规则)。
+		syncBuiltinRules(db)
+	}
 	r := security.NewRegistry()
-	r.Register(security.NewRulesDetector(home, cfg.Detectors, nil)) // db 临时 nil,Task 10 注入真 db
+	r.Register(security.NewRulesDetector(home, cfg.Detectors, db)) // Task 10:注入真 db(替换 Task 8 的临时 nil)
 	r.Register(security.NewSecretDetector(cfg.Detectors))
 	r.Register(security.NewDependencyDetector(cfg.Detectors))
 	orch := &security.Orchestrator{Registry: r}
@@ -251,6 +303,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	srv.ConfigPath = cfgPath
 	srv.Intercept = istore
 	srv.Allowlist = allowlist
+	srv.DB = db // Task 10:注入规则库(API 侧规则配置 CRUD 用,Task 12 将改入参)
 	// 多任务调度:每 agent 一个 Scheduler,Manager 增量同步。
 	// makeRun 按 agentID 闭包 srv.Runner.RunScan(内部 EngineFor 按 agentID 池化选 Engine)。
 	mgr := scheduler.NewManager(func(agentID string) func(context.Context) error {

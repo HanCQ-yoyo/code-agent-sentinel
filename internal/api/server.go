@@ -18,6 +18,7 @@ import (
 	"code-agent-sentinel/internal/scan"
 	"code-agent-sentinel/internal/scheduler"
 	"code-agent-sentinel/internal/security"
+	"code-agent-sentinel/internal/storage"
 )
 
 type Server struct {
@@ -34,6 +35,9 @@ type Server struct {
 	Editor          *editor.Editor
 	Runner          ScanRunner         // HTTP/scheduler/CLI 共用的扫描路径(接口可注入 spy 测试)
 	ScheduleManager *scheduler.Manager // 多任务调度管理器(/api/schedules CRUD + /api/scheduler deprecated 转发)
+	// Task 10:规则库句柄(API 侧规则配置 CRUD 将用,Task 12 把它并入 NewServer 入参)。
+	// 当前由 main.go 构造 Server 后赋值;nil 表示 db 不可用(检测器/guard 已 fail-open)。
+	DB *storage.DB
 }
 
 // ScanRunner 抽象 *scan.Runner 的公共方法面,让 Server.Runner 可在测试中替换为 spy。
