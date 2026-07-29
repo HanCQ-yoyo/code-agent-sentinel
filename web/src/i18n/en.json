@@ -252,6 +252,37 @@
     "validationOk": "Validation passed",
     "yamlParseError": "YAML parse failed, please check syntax"
   },
+  "ruleForm": {
+    "basicSection": "Basic",
+    "advancedSection": "Advanced",
+    "matchTreeTitle": "Match",
+    "addCondition": "Add condition",
+    "addGroup": "Add group",
+    "convertToAnd": "Convert to AND",
+    "convertToOr": "Convert to OR",
+    "convertToNot": "Wrap in NOT",
+    "unwrapToLeaf": "Unwrap to condition",
+    "deleteNode": "Delete",
+    "moveUp": "Move up",
+    "moveDown": "Move down",
+    "fieldLabel": "Field",
+    "opLabel": "Op",
+    "valueLabel": "Value",
+    "fieldPlaceholder": "field name",
+    "valuePlaceholder": "value",
+    "regexPlaceholder": "regex",
+    "dotallHint": "`.` matches newline (?s), controlled by Dotall in Advanced",
+    "anyAssetType": "Any type",
+    "unsupportedMatch": "This rule's match structure uses constructs the editor doesn't support (e.g. special eval modes); switched to read-only",
+    "unsupportedMatchHint": "Saves fine; edit that structure elsewhere if needed",
+    "emptyMatch": "Match is empty, add a field",
+    "opGroup": {
+      "existence": "Existence",
+      "set": "Set",
+      "text": "Text",
+      "regex": "Regex"
+    }
+  },
   "ruleTable": {
     "colRuleId": "Rule ID",
     "colRuleName": "Rule Name",
