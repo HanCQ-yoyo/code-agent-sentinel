@@ -302,6 +302,7 @@
     "unsupportedMatch": "此规则的匹配结构含本编辑器不支持的写法(如特殊求值模式),已切只读",
     "unsupportedMatchHint": "可正常保存;如需编辑该结构请改用其他方式",
     "emptyMatch": "匹配条件为空,请添加字段",
+    "addMetadata": "添加元数据",
     "opGroup": {
       "existence": "存在性",
       "set": "集合",

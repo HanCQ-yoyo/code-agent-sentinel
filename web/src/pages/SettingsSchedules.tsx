@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Table, Button, Switch, Input, Modal, Select, Popconfirm, Empty, Card, Space, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
+import { DeleteOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
 import type { ScheduleStatus } from '../types'
@@ -97,7 +98,7 @@ export function SettingsSchedules() {
           cancelText={t('common.cancel')}
           onConfirm={() => deleteSchedule(record.agent_id)}
         >
-          <Button danger size="small">{t('common.delete')}</Button>
+          <Button type="text" danger size="small" icon={<DeleteOutlined />} aria-label={t('common.delete')} />
         </Popconfirm>
       ),
     },

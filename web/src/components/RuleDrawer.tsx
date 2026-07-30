@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { Drawer, Descriptions, Typography, Badge as AntBadge, Button, Space, Modal, Input, Alert, message, Form, Select, Switch, Collapse } from 'antd'
-import { PlusOutlined, DeleteOutlined } from '@ant-design/icons'
+import { PlusOutlined, DeleteOutlined, ForkOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import type { RuleDTO, RuleDomain, Severity } from '../types'
 import { useStore } from '../store'
@@ -229,7 +229,7 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
       extra={
         <Space>
           {canFork ? (
-            <Button onClick={() => setForkOpen(true)}>{t('rulesManage.fork')}</Button>
+            <Button icon={<ForkOutlined />} onClick={() => setForkOpen(true)}>{t('rulesManage.fork')}</Button>
           ) : null}
           {isEditing ? (
             <>
@@ -311,7 +311,7 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
           {rule.source === 'builtin' ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <AntBadge status="warning" text={t('rulesManage.builtinReadonly')} />
-              <Button onClick={() => setForkOpen(true)}>{t('rulesManage.fork')}</Button>
+              <Button icon={<ForkOutlined />} onClick={() => setForkOpen(true)}>{t('rulesManage.fork')}</Button>
             </div>
           ) : null}
         </div>
@@ -425,7 +425,7 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
                       </Space>
                     ))}
                     {!isBuiltinEdit && <Button type="dashed" icon={<PlusOutlined />} size="small"
-                      onClick={() => setDraft({ ...draft, metadata: [...draft.metadata, { key: '', value: '' }] })}>+</Button>}
+                      onClick={() => setDraft({ ...draft, metadata: [...draft.metadata, { key: '', value: '' }] })}>{t('ruleForm.addMetadata')}</Button>}
                   </Form.Item>
                 </>
               ),

@@ -161,7 +161,7 @@ export default function Intercept() {
             cancelText={t('common.cancel')}
             onConfirm={() => onDelete(r.id)}
           >
-            <Button danger size="small" icon={<DeleteOutlined />} />
+            <Button type="text" danger size="small" icon={<DeleteOutlined />} aria-label={t('intercept.delete')} />
           </Popconfirm>
         </Space>
       ),

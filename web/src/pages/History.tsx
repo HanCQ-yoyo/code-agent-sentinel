@@ -174,7 +174,7 @@ export default function History() {
     { title: t('history.colBatch'), dataIndex: 'batch_id', width: 110, render: (bid?: string) => bid ? <Tag style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--cat-1)', color: 'var(--badge-text)', border: 'none' }}>{bid.slice(-8)}</Tag> : '-' },
     { title: t('history.colAction'), width: 110, render: (_: unknown, h: ScanSummary) => (
       <Popconfirm title={t('history.confirmDelete')} okText={t('history.delete')} okButtonProps={{ danger: true }} cancelText={t('common.cancel')} onConfirm={() => deleteHistory(h.id)}>
-        <Button danger size="small" icon={<DeleteOutlined />}>{t('history.delete')}</Button>
+        <Button type="text" danger size="small" icon={<DeleteOutlined />} aria-label={t('history.delete')} />
       </Popconfirm>
     ) },
   ]

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Modal, Radio, Select, Checkbox, Typography, Table, Tag, Button, notification } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
+import { ArrowRightOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useStore } from '../store'
@@ -73,7 +74,7 @@ export function RescanModal({ open, onClose, initialScope }: Props) {
         description: desc,
         duration: 0, // 持久,直到用户关闭/点击跳转(引导型,不自动消失)
         btn: batch ? (
-          <Button type="primary" size="small" onClick={() => { notification.destroy(); nav(`/history?batch=${encodeURIComponent(batch)}`) }}>
+          <Button type="primary" size="small" icon={<ArrowRightOutlined />} onClick={() => { notification.destroy(); nav(`/history?batch=${encodeURIComponent(batch)}`) }}>
             {t('rescan.viewHistory')}
           </Button>
         ) : undefined,

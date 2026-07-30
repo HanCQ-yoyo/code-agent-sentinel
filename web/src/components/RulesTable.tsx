@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect, type HTMLAttributes } from 'react'
 import { Table, Segmented, Empty, Typography, Card, Tooltip, Tag, Space, Switch, Button, Popconfirm } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
+import { EditOutlined, ForkOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import type { Severity, RuleDTO, RuleDomain } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
@@ -128,16 +129,16 @@ export function RulesTable({ domain, onEdit, onFork }: RulesTableProps) {
           />
           {r.source === 'custom' ? (
             <>
-              <Button size="small" onClick={() => onEdit?.(r)}>{t('rulesManage.edit')}</Button>
+              <Button type="text" size="small" icon={<EditOutlined />} aria-label={t('rulesManage.edit')} onClick={() => onEdit?.(r)} />
               <Popconfirm
                 title={t('rulesManage.confirmDelete')}
                 onConfirm={() => { void deleteRule(domain, r.id) }}
               >
-                <Button size="small" danger>{t('rulesManage.delete')}</Button>
+                <Button type="text" danger size="small" icon={<DeleteOutlined />} aria-label={t('rulesManage.delete')} />
               </Popconfirm>
             </>
           ) : (
-            <Button size="small" onClick={() => onFork?.(r)}>{t('rulesManage.fork')}</Button>
+            <Button type="text" size="small" icon={<ForkOutlined />} aria-label={t('rulesManage.fork')} onClick={() => onFork?.(r)} />
           )}
         </Space>
       ),

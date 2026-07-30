@@ -83,7 +83,7 @@ export function SettingsAllowlist() {
                   cancelText={t('common.cancel')}
                   onConfirm={() => remove(cmd)}
                 >
-                  <Button danger icon={<DeleteOutlined />} />
+                  <Button type="text" danger size="small" icon={<DeleteOutlined />} aria-label={t('common.delete')} />
                 </Popconfirm>,
               ]}
             >

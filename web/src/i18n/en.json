@@ -302,6 +302,7 @@
     "unsupportedMatch": "This rule's match structure uses constructs the editor doesn't support (e.g. special eval modes); switched to read-only",
     "unsupportedMatchHint": "Saves fine; edit that structure elsewhere if needed",
     "emptyMatch": "Match is empty, add a field",
+    "addMetadata": "Add metadata",
     "opGroup": {
       "existence": "Existence",
       "set": "Set",
