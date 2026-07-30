@@ -15,7 +15,7 @@
 ## 产品打磨(8 区域 UI/UX + 后端读路径修复)
 
 - **合入日期**:2026-07-30(分支 `feat/product-polish`)
-- **合入 SHA**:`1b35a7e`(main,merge commit,25 commits,23 任务 SDD + 整支 review 0 Critical/0 Important,可修 Minor 已修)
+- **合入 SHA**:`7bfae60`(main,merge commit,25 commits,23 任务 SDD + 整支 review 0 Critical/0 Important,可修 Minor 已修)
 
 ### 升级
 
