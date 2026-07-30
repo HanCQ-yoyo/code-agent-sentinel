@@ -9,15 +9,24 @@ import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { ContentArea } from './ContentArea'
 import { relativeClaudePath } from '../lib/path'
 import { formatDateTime } from '../lib/format'
-import { SEVERITY_LABEL_KEY, STATUS_COLOR, PRIORITY_COLOR, severityToPrio } from '../lib/severity'
+import { SEVERITY_LABEL_KEY, severityToPrio } from '../lib/severity'
 import { detectorNameById, ruleNameById } from '../lib/i18n-names'
 
-// antd 预设 Tag 色的十六进制(项目无 --antd-<color> token,用 hex 保证暗色对比)。
-// STATUS_COLOR/PRIORITY_COLOR 存的是 antd Tag 色名(red/blue/...),CheckableTag 选中态
-// 用 inline style 设背景色,但 var(--antd-<color>) token 在本项目 CSS 不存在,故回退到 hex。
-const TAG_HEX: Record<string, string> = {
-  red: '#f5222d', orange: '#fa8c16', gold: '#faad14', blue: '#1677ff',
-  green: '#52c41d', purple: '#722ed1', default: 'var(--bg-border)',
+// 处置状态 → 背景色 token 映射(替代旧 TAG_HEX 的 antd 原色 hex,统一到 OKLCH 体系)。
+// 状态语义:open=中性、in_progress=cat-1 蓝、resolved=sev-low 绿、false_positive=cat-5 紫、accepted=cat-3 黄。
+const STATUS_BG: Record<string, string> = {
+  open: 'var(--color-rule-2)',
+  in_progress: 'var(--cat-1)',
+  resolved: 'var(--sev-low-solid)',
+  false_positive: 'var(--cat-5)',
+  accepted: 'var(--cat-3)',
+}
+// 优先级 → 背景色 token:P0 红(critical-solid)→ P3 蓝(cat-1),复用 severity/category 实色。
+const PRIO_BG: Record<string, string> = {
+  P0: 'var(--sev-critical-solid)',
+  P1: 'var(--sev-high-solid)',
+  P2: 'var(--sev-medium-solid)',
+  P3: 'var(--cat-1)',
 }
 
 interface FindingDrawerProps {
@@ -105,7 +114,7 @@ function AssetSection({ assetId, locations, agentId }: { assetId: string, locati
 //   - 旧 addSuppression/generateBaseline(Task 11/12 已删)
 //   - setFindingState/resetFindingState:统一处置生命周期,后端 /api/finding-state POST/DELETE
 // severityToPrio 从 lib/severity 导入(消除与 FindingTable 的重复 helper)。
-// CheckableTag 选中态用 TAG_HEX[<色名>] 取 hex 背景(项目无 --antd-<color> token,见文件顶部说明)。
+// CheckableTag 选中态用 STATUS_BG/PRIO_BG token 映射取 OKLCH 实色背景(统一到项目 token 体系)。
 export function DispositionModal({ finding, open, onClose }: { finding: Finding; open: boolean; onClose: () => void }) {
   const { t } = useTranslation()
   const [status, setStatus] = useState(finding.status ?? 'open')
@@ -139,7 +148,7 @@ export function DispositionModal({ finding, open, onClose }: { finding: Finding;
           <div style={{ marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {['open', 'in_progress', 'resolved', 'false_positive', 'accepted'].map((s) => (
               <Tag.CheckableTag key={s} checked={status === s} onChange={() => setStatus(s)}
-                style={status === s ? { background: TAG_HEX[STATUS_COLOR[s] ?? 'default'] ?? 'var(--bg-border)', borderColor: 'transparent', color: '#fff' } : {}}>
+                style={status === s ? { background: STATUS_BG[s] ?? 'var(--color-rule-2)', borderColor: 'transparent', color: 'var(--badge-text)' } : {}}>
                 {t(`findingTable.status.${s}`)}
               </Tag.CheckableTag>
             ))}
@@ -150,7 +159,7 @@ export function DispositionModal({ finding, open, onClose }: { finding: Finding;
           <div style={{ marginTop: 4, display: 'flex', gap: 8 }}>
             {['P0', 'P1', 'P2', 'P3'].map((p) => (
               <Tag.CheckableTag key={p} checked={priority === p} onChange={() => setPriority(p)}
-                style={priority === p ? { background: TAG_HEX[PRIORITY_COLOR[p] ?? 'default'] ?? 'var(--bg-border)', borderColor: 'transparent', color: '#fff' } : {}}>
+                style={priority === p ? { background: PRIO_BG[p] ?? 'var(--color-rule-2)', borderColor: 'transparent', color: 'var(--badge-text)' } : {}}>
                 {p}
               </Tag.CheckableTag>
             ))}
@@ -199,7 +208,7 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
           <Descriptions
             title={t('findingDrawer.infoTitle')}
             size="small"
-            column={1}
+            column={2}
             bordered
             labelStyle={{ width: 120, minWidth: 120, whiteSpace: 'nowrap' }}
             contentStyle={{ wordBreak: 'break-all' }}
@@ -214,7 +223,7 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
             <Descriptions.Item label={t('findingDrawer.ruleId')}>
               <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 14 }}>{finding.rule_id}</Typography.Text>
             </Descriptions.Item>
-            <Descriptions.Item label={t('findingDrawer.ruleSyntax')}>
+            <Descriptions.Item label={t('findingDrawer.ruleSyntax')} span={2}>
               {/* 规则语法用纯代码格式(monospace 等宽、无标签背景框),字体放大到 14 便于阅读;长语法换行不撑破布局。 */}
               <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, wordBreak: 'break-all', color: 'var(--text)' }}>
                 {findSyntax(detectors, finding.detector_id, finding.rule_id) ?? '--'}
@@ -225,15 +234,15 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
                 {startedAt ? formatDateTime(startedAt) : '--'}
               </span>
             </Descriptions.Item>
-            <Descriptions.Item label={t('findingDrawer.evidence')}>
+            <Descriptions.Item label={t('findingDrawer.evidence')} span={2}>
               <Typography.Paragraph style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 12 }} ellipsis={{ rows: 3, expandable: true, symbol: t('common.expand') }}>
                 {finding.evidence || t('common.none')}
               </Typography.Paragraph>
             </Descriptions.Item>
-            <Descriptions.Item label={t('findingDrawer.remediation')}>{finding.remediation || t('common.none')}</Descriptions.Item>
+            <Descriptions.Item label={t('findingDrawer.remediation')} span={2}>{finding.remediation || t('common.none')}</Descriptions.Item>
             {/* 抑制状态显示段(保留):suppressed=true 表示已被 baseline/inline 豁免;Task 11 后 applyFindingState
                 也把 Suppression 设为 "state"。仍展示来源 + reason,DispositionPanel 在下方负责改写。 */}
-            <Descriptions.Item label={t('findingDrawer.supprStatus')}>
+            <Descriptions.Item label={t('findingDrawer.supprStatus')} span={2}>
               {finding.suppressed ? (
                 <Tag style={{ marginInlineEnd: 0, borderColor: 'var(--bg-border)', background: 'var(--surface-2)', color: 'var(--text-muted)' }}>
                   {t('findingDrawer.suppressedTag')} · {finding.suppression ?? '--'}{finding.reason ? ` · ${finding.reason}` : ''}
@@ -244,11 +253,11 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
             </Descriptions.Item>
             {/* Task 9:处置状态只读摘要(status≠open 显示带色 Tag,否则 secondary 文案)+ 优先级 Tag。
                 改写入口在上方「立即处置」按钮(DispositionModal),此处仅展示当前值。 */}
-            <Descriptions.Item label={t('findingDrawer.disposition')}>
+            <Descriptions.Item label={t('findingDrawer.disposition')} span={2}>
               {finding.status && finding.status !== 'open' ? (
-                <Tag color={STATUS_COLOR[finding.status] ?? 'default'}>{t(`findingTable.status.${finding.status}`)}</Tag>
+                <Tag style={{ background: STATUS_BG[finding.status] ?? 'var(--color-rule-2)', color: 'var(--badge-text)', border: 'none' }}>{t(`findingTable.status.${finding.status}`)}</Tag>
               ) : <Typography.Text type="secondary">{t('findingTable.status.open')}</Typography.Text>}
-              {finding.priority ? <Tag color={PRIORITY_COLOR[finding.priority] ?? 'default'} style={{ marginLeft: 6 }}>{finding.priority}</Tag> : null}
+              {finding.priority ? <Tag style={{ marginLeft: 6, background: PRIO_BG[finding.priority] ?? 'var(--color-rule-2)', color: 'var(--badge-text)', border: 'none' }}>{finding.priority}</Tag> : null}
             </Descriptions.Item>
           </Descriptions>
 
