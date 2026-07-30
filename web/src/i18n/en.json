@@ -161,7 +161,7 @@
     "defaultBinary": "default: {{name}}",
     "saveConfig": "Save config",
     "noRules": "No rules",
-    "rulesConfig": "Rules config",
+    "rulesConfig": "Scan Config",
     "agentsTab": "Code Agents",
     "agentsReadonlyHint": "Enabled code agents",
     "agentsReadonlyDesc": "To change, run `sentinel setup` and restart sentinel",
