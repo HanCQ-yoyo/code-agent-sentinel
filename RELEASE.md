@@ -12,6 +12,35 @@
 
 ---
 
+## 产品打磨(8 区域 UI/UX + 后端读路径修复)
+
+- **合入日期**:2026-07-30(分支 `feat/product-polish`)
+- **合入 SHA**:`52b09a0`(main,25 commits,23 任务 SDD + 整支 review 0 Critical/0 Important,可修 Minor 已修)
+
+### 升级
+
+- **术语统一**:UI 全量「检测→扫描」改名(保留「检测器」名词——指 detector 实体)。涉及导航、tab、按钮、列表表头、空态等,与既有「扫描任务」「扫描配置」命名一致。
+- **安全检查按钮配色**:TopBar 与资产详情的安全检查按钮在暗色主题改 default 描边(非实色 primary),与页面其他操作按钮视觉层级对齐。
+- **Dashboard 打磨**:检测器关停态圆点改 token 灰 + 描边(暗色可见);风险趋势图 hover 圆点显浮层(时间 + 分数),命中区放大。
+- **风险管理列表重排**:8 列布局(名称 / 资产 / 级别 / Agent / 风险类型 / 处置状态 / 扫描时间 / 操作);资产列加资产类型 Tag + 完整路径 tooltip;处置状态 / 优先级配色统一;优先级筛选加宽;平铺聚合移左,聚合行内可点直达。
+- **风险详情处置弹框化**:风险详情的处置从抽屉内联改弹框(Modal),加「立即处置」按钮态 + 状态 / 优先级配色;列表操作列可触发处置弹框。修处置后列表不更新的 bug——`/api/findings` 读路径 apply finding-state 并附 `started_at` / `source_path`(见修复节)。
+- **检测任务视图打磨**:列表删除按钮加文字(暗色可见);详情页仅显当前 agent 健康分卡 + 顶部兄弟快捷入口上移。
+- **拦截记录页打磨**:页面改名「拦截记录」+ 字号对齐其他页;列表去耗时列、加处置列(处置弹框 + 加拦截名单 / 放行名单,各带确认);详情抽屉加宽 + 表单化 + 时间上移 + 规则背景分组。
+- **设置页打磨**:规则配置 tab 改名「扫描配置」;拦截配置 + 放行清单合并为一个 tab + 子 tab(拦截规则 / 白名单);拦截总开关 + 确认流程 + 高级弹框(安全模式 / 白名单开关 / 评估预算 / 命令长度上限,即现有 GuardConfig 字段的 UI 暴露);白名单子 tab 顶部展示启停状态。
+
+### 修复
+
+- **处置后风险列表不更新**:`/api/findings` 原读路径不 apply finding-state,处置一条 finding 后列表不立即反映新状态(需重扫)。修:`handlers_health.go` 在读路径调用 `ApplyFindingStateBatch` 重算 `suppressed`,并附 `started_at` / `source_path`(由 `Finding` 新增 `StartedAt` / `SourcePath` 字段携带)。Task 13 补 `/api/findings` 聚合路径(`?agent=all`)的 apply state 断言,闭合单路径覆盖缺口。
+- **DispositionModal 防空指纹 finding**:列表 / 抽屉两处处置弹框入口对 finding 加 `fingerprint` 守卫(对齐 Drawer 路径),防空指纹 finding 写状态。
+- **SettingsGuard 死代码**:拦截配置子 tab 的 `RuleDrawer` 原挂在 Tabs 内,antd Tabs 卸载非活动 pane 致抽屉不挂载;提升到页面级后 `SettingsGuard` 残留死代码,删除(字段已搬进设置页高级弹框)。
+
+### 已知限制
+
+- 术语改名仅 UI 层;后端包名 / 字段 / 日志仍用「检测」(detector / detect 等 Go 标识符不变),不影响 API 契约。
+- 既有 `e2e.spec.ts` 的「项目 tab 右键置顶」测试在 main 上即 flaky(L1 agent tab 占 `.nth(0)` 致 `.nth(1)` 错位到全局 tab),本分支改按项目名文本定位项目 tab 缓解,非本分支引入。
+
+---
+
 ## 规则结构化表单 + match 树编辑器
 
 - **合入日期**:2026-07-29(分支 `feat/rule-form-match-tree`)
