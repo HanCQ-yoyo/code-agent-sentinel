@@ -206,6 +206,8 @@
     "allowlistEmpty": "No allowlist entries",
     "add": "Add",
     "allowlistDup": "Already in allowlist",
+    "allowlistOn": "Allowlist enabled",
+    "allowlistOff": "Allowlist disabled",
     "saved": "Guard config saved"
   },
   "findingDrawer": {

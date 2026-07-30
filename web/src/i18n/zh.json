@@ -206,6 +206,8 @@
     "allowlistEmpty": "暂无放行条目",
     "add": "添加",
     "allowlistDup": "已在清单中",
+    "allowlistOn": "白名单已启用",
+    "allowlistOff": "白名单已停用",
     "saved": "拦截配置已保存"
   },
   "findingDrawer": {
