@@ -44,7 +44,8 @@ test.beforeEach(async ({ page }) => {
 async function gotoRulesConfig(page: import('@playwright/test').Page) {
   await page.goto(`/#token=${TOKEN}`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('menuitem', { name: /设置/i }).click()
-  await page.getByRole('tab', { name: /规则配置|Rules config/ }).click()
+  // Task 17:tab 由「规则配置」改名「扫描配置」(settings.rulesConfig i18n)。
+  await page.getByRole('tab', { name: /扫描配置|Scan Config/ }).click()
 }
 
 test('create 新建单叶子规则保存后列表出现', async ({ page }) => {
