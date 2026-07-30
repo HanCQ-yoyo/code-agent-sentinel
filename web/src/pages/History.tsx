@@ -94,7 +94,7 @@ export default function History() {
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <Link to="/history"><Button type="link" icon={<ArrowLeftOutlined />}>{t('history.backToList')}</Button></Link>
-        <Typography.Title level={5} style={{ color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>
+        <Typography.Title level={5} style={{ color: 'var(--color-ink)', fontFamily: 'var(--font-mono)' }}>
           {detail.id} · {formatDateTime(detail.started_at)}
           {isBatch ? <Tag style={{ marginLeft: 8, background: 'var(--cat-1)', color: 'var(--badge-text)', border: 'none' }}>{t('history.batchTag', { id: detail.batch_id!.slice(-8) })}</Tag> : null}
         </Typography.Title>

@@ -208,7 +208,7 @@ export default function Intercept() {
             </Form.Item>
             {/* 命令独立行(文字多,独占) */}
             <Form.Item label={t('intercept.command')}>
-              <pre style={{ background: 'var(--surface-2)', padding: 8, borderRadius: 4, fontSize: 12, fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}>
+              <pre style={{ background: 'var(--color-surface)', padding: 8, borderRadius: 4, fontSize: 12, fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}>
                 {detail.command}
               </pre>
             </Form.Item>
@@ -233,7 +233,7 @@ export default function Intercept() {
             {/* 命中片段(命令级背景,独立行) */}
             {detail.matched_span ? (
               <Form.Item label={t('intercept.matchedSpan')}>
-                <pre style={{ background: 'var(--surface-2)', padding: 8, borderRadius: 4, fontSize: 12, fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}>
+                <pre style={{ background: 'var(--color-surface)', padding: 8, borderRadius: 4, fontSize: 12, fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}>
                   {detail.matched_span}
                 </pre>
               </Form.Item>

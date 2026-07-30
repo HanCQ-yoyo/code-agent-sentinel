@@ -32,7 +32,7 @@ export function MonacoBlock({ code, className, theme }: { code: string; classNam
           <MonacoViewer value={code} language={language} theme={theme} height={height} />
         </Suspense>
       ) : (
-        <pre style={{ margin: 0, height: '100%', padding: 12, background: 'var(--surface-2)', overflow: 'auto', fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>{code}</pre>
+        <pre style={{ margin: 0, height: '100%', padding: 12, background: 'var(--color-surface)', overflow: 'auto', fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>{code}</pre>
       )}
     </div>
   )

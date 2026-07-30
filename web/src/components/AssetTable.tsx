@@ -109,8 +109,8 @@ export function AssetTable({ assets, findings = [], onSelect, favorites, onToggl
       width: 84,
       render: (_: unknown, a: Asset) => {
         const tag = assetTag(a, dirTagsDefaults, dirTagsOverrides)
-        if (!tag) return <span style={{ color: 'var(--text-dim)' }}>—</span>
-        const color = tag === 'config' ? 'var(--accent)' : 'var(--text-dim)'
+        if (!tag) return <span style={{ color: 'var(--color-dim)' }}>—</span>
+        const color = tag === 'config' ? 'var(--color-accent)' : 'var(--color-dim)'
         return (
           <span style={{ fontSize: 11, padding: '0 6px', borderRadius: 8, border: `1px solid ${color}`, color, fontFamily: 'var(--font-sans)' }}>
             {tag === 'config' ? t('assetTable.tagConfig') : t('assetTable.tagRuntime')}
@@ -128,7 +128,7 @@ export function AssetTable({ assets, findings = [], onSelect, favorites, onToggl
         return count > 0 ? (
           <Badge tone={`sev-${maxSev(findings, a.id)}` as BadgeTone}>{count}</Badge>
         ) : (
-          <Tag style={{ borderStyle: 'dashed', color: 'var(--text-dim)', background: 'transparent' }}>{t('assetTable.noRisk')}</Tag>
+          <Tag style={{ borderStyle: 'dashed', color: 'var(--color-dim)', background: 'transparent' }}>{t('assetTable.noRisk')}</Tag>
         )
       },
     },
@@ -136,7 +136,7 @@ export function AssetTable({ assets, findings = [], onSelect, favorites, onToggl
       title: t('assetTable.colPath'),
       dataIndex: 'source_path',
       render: (p: string) => (
-        <Typography.Text style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--text-dim)' }} title={p}>
+        <Typography.Text style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-dim)' }} title={p}>
           {relativeClaudePath(p)}
         </Typography.Text>
       ),

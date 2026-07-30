@@ -425,14 +425,14 @@ export default function Assets() {
             </Typography.Text>
             <Typography.Text type="secondary">{t('assets.currentTagLabel')}: {tagEdit.current ? (tagEdit.current === 'config' ? t('assets.tagConfig') : t('assets.tagRuntime')) : t('assets.noTagDefault')}</Typography.Text>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-              <Card size="small" hoverable onClick={() => applyTagEdit(tagEdit.relPath, 'config')} style={{ cursor: 'pointer', borderColor: 'var(--accent)', flex: 1, minWidth: 90, textAlign: 'center' }}>
-                <span style={{ color: 'var(--accent)', fontWeight: 500 }}>{t('assets.tagConfig')}</span>
+              <Card size="small" hoverable onClick={() => applyTagEdit(tagEdit.relPath, 'config')} style={{ cursor: 'pointer', borderColor: 'var(--color-accent)', flex: 1, minWidth: 90, textAlign: 'center' }}>
+                <span style={{ color: 'var(--color-accent)', fontWeight: 500 }}>{t('assets.tagConfig')}</span>
               </Card>
               <Card size="small" hoverable onClick={() => applyTagEdit(tagEdit.relPath, 'runtime')} style={{ cursor: 'pointer', flex: 1, minWidth: 90, textAlign: 'center' }}>
-                <span style={{ color: 'var(--text-dim)', fontWeight: 500 }}>{t('assets.tagRuntime')}</span>
+                <span style={{ color: 'var(--color-dim)', fontWeight: 500 }}>{t('assets.tagRuntime')}</span>
               </Card>
               <Card size="small" hoverable onClick={() => applyTagEdit(tagEdit.relPath, 'reset')} style={{ cursor: 'pointer', flex: 1, minWidth: 90, textAlign: 'center' }}>
-                <span style={{ color: 'var(--text-muted)', fontWeight: 500 }}>{t('assets.resetTag')}</span>
+                <span style={{ color: 'var(--color-muted)', fontWeight: 500 }}>{t('assets.resetTag')}</span>
               </Card>
             </div>
             <Typography.Text type="secondary" style={{ fontSize: 12 }}>

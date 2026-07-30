@@ -88,7 +88,7 @@ export function AssetTree({ tree, assets, findings = [], onSelect, onOpenRaw, ro
   // 标签徽标颜色:config=accent, runtime=中性灰。
   const tagBadge = (tag: DirTag | undefined, relPath: string) => {
     if (!tag) return null
-    const color = tag === 'config' ? 'var(--accent)' : 'var(--text-dim)'
+    const color = tag === 'config' ? 'var(--color-accent)' : 'var(--color-dim)'
     return (
       <span
         title={t('assetTree.tagEditTip', { tag })}
@@ -116,7 +116,7 @@ export function AssetTree({ tree, assets, findings = [], onSelect, onOpenRaw, ro
     const tag = nodeTag(n, dirTagsDefaults, dirTagsOverrides)
 
     const title = isSynthetic ? (
-      <span style={{ color: 'var(--text-dim)', fontStyle: 'italic', fontFamily: 'var(--font-mono)' }}>{n.name}</span>
+      <span style={{ color: 'var(--color-dim)', fontStyle: 'italic', fontFamily: 'var(--font-mono)' }}>{n.name}</span>
     ) : (
       <span style={{ fontFamily: 'var(--font-mono)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
         {scopeColor && <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: 2, background: scopeColor }} />}
@@ -173,7 +173,7 @@ export function AssetTree({ tree, assets, findings = [], onSelect, onOpenRaw, ro
         </span>
       ) : (
         // 无资产文件:仍显示标签,可点击打开原始内容。
-        <span style={{ fontFamily: 'var(--font-mono)', display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--text-muted)' }}>
+        <span style={{ fontFamily: 'var(--font-mono)', display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--color-muted)' }}>
           <span>{n.name}</span>
           {tagBadge(tag, n.path)}
         </span>
@@ -190,7 +190,7 @@ export function AssetTree({ tree, assets, findings = [], onSelect, onOpenRaw, ro
 
   if (treeData.length === 0) {
     // 标签筛选下整树不命中:显示空提示(不渲染 Tree,避免 antd 空状态样式问题)。
-    return <div style={{ padding: 24, color: 'var(--text-dim)', textAlign: 'center' }}>{t('assetTree.noMatch')}</div>
+    return <div style={{ padding: 24, color: 'var(--color-dim)', textAlign: 'center' }}>{t('assetTree.noMatch')}</div>
   }
 
   return (

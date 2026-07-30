@@ -59,7 +59,7 @@ export function RawFilePanel({ path }: { path: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
       <div>
-        <h2 data-testid="raw-file-name" style={{ color: 'var(--text)', margin: '0 0 4px', fontFamily: 'var(--font-mono)', fontSize: 18 }}>{data.name}</h2>
+        <h2 data-testid="raw-file-name" style={{ color: 'var(--color-ink)', margin: '0 0 4px', fontFamily: 'var(--font-mono)', fontSize: 18 }}>{data.name}</h2>
         <Typography.Text type="secondary" style={{ fontSize: 12 }}>
           {t('rawFile.subtitle')}
         </Typography.Text>

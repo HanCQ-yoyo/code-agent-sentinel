@@ -225,7 +225,7 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
             </Descriptions.Item>
             <Descriptions.Item label={t('findingDrawer.ruleSyntax')} span={2}>
               {/* 规则语法用纯代码格式(monospace 等宽、无标签背景框),字体放大到 14 便于阅读;长语法换行不撑破布局。 */}
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, wordBreak: 'break-all', color: 'var(--text)' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, wordBreak: 'break-all', color: 'var(--color-ink)' }}>
                 {findSyntax(detectors, finding.detector_id, finding.rule_id) ?? '--'}
               </span>
             </Descriptions.Item>
@@ -244,7 +244,7 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
                 也把 Suppression 设为 "state"。仍展示来源 + reason,DispositionPanel 在下方负责改写。 */}
             <Descriptions.Item label={t('findingDrawer.supprStatus')} span={2}>
               {finding.suppressed ? (
-                <Tag style={{ marginInlineEnd: 0, borderColor: 'var(--bg-border)', background: 'var(--surface-2)', color: 'var(--text-muted)' }}>
+                <Tag style={{ marginInlineEnd: 0, borderColor: 'var(--color-rule)', background: 'var(--color-surface)', color: 'var(--color-muted)' }}>
                   {t('findingDrawer.suppressedTag')} · {finding.suppression ?? '--'}{finding.reason ? ` · ${finding.reason}` : ''}
                 </Tag>
               ) : (

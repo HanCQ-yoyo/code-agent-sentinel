@@ -137,21 +137,6 @@
   --warn-bg: oklch(75% 0.150 75 / 0.22);
 }
 
-/* 兼容旧 token 名别名 —— 组件迁移过渡期:旧 --bg / --text 等名映射到新 --color-*,
-   避免一次性改 50+ 处内联 style。新代码应直接用 --color-* / --fs-*。 */
-:root {
-  --bg: var(--color-paper);
-  --bg-card: var(--color-paper-2);
-  --surface-2: var(--color-surface);
-  --bg-border: var(--color-rule);
-  --hairline-strong: var(--color-rule-2);
-  --text: var(--color-ink);
-  --text-muted: var(--color-muted);
-  --text-dim: var(--color-dim);
-  --accent: var(--color-accent);
-  --brand-soft: var(--color-accent-soft);
-}
-
 body {
   background: var(--color-paper);
   color: var(--color-ink);

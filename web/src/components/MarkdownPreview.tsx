@@ -20,7 +20,7 @@ export function MarkdownPreview({ content }: { content: string }) {
         fontFamily: 'var(--font-sans)',
         fontSize: 14,
         lineHeight: 1.7,
-        color: 'var(--text)',
+        color: 'var(--color-ink)',
       }}
     >
       <ReactMarkdown
@@ -37,7 +37,7 @@ export function MarkdownPreview({ content }: { content: string }) {
               return <MonacoBlock code={codeText} className={className} theme={theme} />
             }
             // 兜底:无法提取文本(罕见),回退 styled pre
-            return <pre style={{ margin: '8px 0', padding: 12, background: 'var(--surface-2)', borderRadius: 6, overflow: 'auto', fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>{children}</pre>
+            return <pre style={{ margin: '8px 0', padding: 12, background: 'var(--color-surface)', borderRadius: 6, overflow: 'auto', fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>{children}</pre>
           },
           // code:react-markdown v10 围栏块走 pre>code(本 override 仅渲染 code 元素本身,
           // 块外壳与 Monaco 由 pre override 接管)。此处 code 总被 pre 包裹 → 渲染纯文本 code。
@@ -51,7 +51,7 @@ export function MarkdownPreview({ content }: { content: string }) {
             // 无 className:行内 code(围栏无标签块的 code 已被 pre override 经 extractText 提取,
             // 不会走到这里渲染 inline;此处仅 true inline)
             return (
-              <code style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9em', background: 'var(--surface-2)', padding: '1px 4px', borderRadius: 3 }} {...props}>
+              <code style={{ fontFamily: 'var(--font-mono)', fontSize: '0.9em', background: 'var(--color-surface)', padding: '1px 4px', borderRadius: 3 }} {...props}>
                 {children}
               </code>
             )
@@ -61,13 +61,13 @@ export function MarkdownPreview({ content }: { content: string }) {
             return <table style={{ borderCollapse: 'collapse', width: '100%', margin: '8px 0' }}>{children}</table>
           },
           th({ children }: any) {
-            return <th style={{ border: '1px solid var(--bg-border)', padding: '6px 10px', textAlign: 'left' }}>{children}</th>
+            return <th style={{ border: '1px solid var(--color-rule)', padding: '6px 10px', textAlign: 'left' }}>{children}</th>
           },
           td({ children }: any) {
-            return <td style={{ border: '1px solid var(--bg-border)', padding: '6px 10px' }}>{children}</td>
+            return <td style={{ border: '1px solid var(--color-rule)', padding: '6px 10px' }}>{children}</td>
           },
           a({ children, href, title }: any) {
-            return <a href={href} title={title} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--accent)' }}>{children}</a>
+            return <a href={href} title={title} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--color-accent)' }}>{children}</a>
           },
         }}
       >

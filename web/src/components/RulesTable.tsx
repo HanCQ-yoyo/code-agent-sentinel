@@ -17,7 +17,7 @@ function SevSegLabel({ text, count, sev }: { text: string; count: number; sev?: 
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
       <span
         className="sev-seg-dot"
-        style={{ width: 8, height: 8, borderRadius: '50%', background: sev ? SEVERITY_DOT[sev] : 'var(--accent)' }}
+        style={{ width: 8, height: 8, borderRadius: '50%', background: sev ? SEVERITY_DOT[sev] : 'var(--color-accent)' }}
       />
       <span>{text}</span>
       <span className="sev-seg-count" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{count}</span>
