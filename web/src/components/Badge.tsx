@@ -52,16 +52,16 @@ export function Badge({ tone, children }: { tone: BadgeTone; children: ReactNode
   if (tone in scopeColor) {
     // scope:左色块边框 + 中性面
     return (
-      <Tag style={{ ...base, background: 'var(--bg-card)', color: 'var(--text)', borderLeft: `3px solid ${scopeColor[tone]}`, borderWidth: '1px 1px 1px 3px', borderLeftColor: scopeColor[tone], borderColor: 'var(--bg-border)' }}>
+      <Tag style={{ ...base, background: 'var(--color-paper-2)', color: 'var(--color-ink)', borderLeft: `3px solid ${scopeColor[tone]}`, borderWidth: '1px 1px 1px 3px', borderLeftColor: scopeColor[tone], borderColor: 'var(--color-rule)' }}>
         {children}
       </Tag>
     )
   }
 
   if (tone === 'accent') {
-    return <Tag style={{ ...base, color: 'var(--accent)', borderColor: 'var(--accent)', background: 'transparent' }}>{children}</Tag>
+    return <Tag style={{ ...base, color: 'var(--color-accent)', borderColor: 'var(--color-accent)', background: 'transparent' }}>{children}</Tag>
   }
 
   // neutral
-  return <Tag style={{ ...base, color: 'var(--text-muted)', borderColor: 'var(--bg-border)', background: 'transparent' }}>{children}</Tag>
+  return <Tag style={{ ...base, color: 'var(--color-muted)', borderColor: 'var(--color-rule)', background: 'transparent' }}>{children}</Tag>
 }
