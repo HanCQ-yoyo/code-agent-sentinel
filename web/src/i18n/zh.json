@@ -212,7 +212,9 @@
     "save": "保存",
     "resetToOpen": "重置为未处置",
     "saved": "已保存处置",
-    "reset": "已重置为未处置"
+    "reset": "已重置为未处置",
+    "disposeNow": "立即处置",
+    "disposed": "已处置"
   },
   "ruleDrawer": {
     "title": "规则详情",
@@ -483,6 +485,9 @@
     "colDetector": "检测器",
     "colRule": "规则",
     "colScanTime": "扫描时间",
+    "colCategory": "风险类型",
+    "colStatus": "处置状态",
+    "colAction": "操作",
     "all": "全部",
     "active": "活跃",
     "suppressed": "已抑制",

@@ -212,7 +212,9 @@
     "save": "Save",
     "resetToOpen": "Reset to Open",
     "saved": "Disposition saved",
-    "reset": "Reset to open"
+    "reset": "Reset to open",
+    "disposeNow": "Dispose Now",
+    "disposed": "Disposed"
   },
   "ruleDrawer": {
     "title": "Rule Details",
@@ -483,6 +485,9 @@
     "colDetector": "Detector",
     "colRule": "Rule",
     "colScanTime": "Scan Time",
+    "colCategory": "Risk Type",
+    "colStatus": "Status",
+    "colAction": "Action",
     "all": "All",
     "active": "Active",
     "suppressed": "Suppressed",
