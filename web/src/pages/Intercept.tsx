@@ -81,7 +81,7 @@ export default function Intercept() {
       dataIndex: 'command',
       ellipsis: { showTitle: false },
       render: (v: string) => (
-        <Tooltip title={v}><Typography.Text code style={{ fontSize: 11 }}>{v}</Typography.Text></Tooltip>
+        <Tooltip title={v}><Typography.Text code style={{ fontSize: 12 }}>{v}</Typography.Text></Tooltip>
       ),
     },
     {
@@ -90,7 +90,7 @@ export default function Intercept() {
       width: 160,
       ellipsis: true,
       render: (v?: string) => v ? (
-        <Typography.Text code style={{ fontSize: 11 }}>{v}</Typography.Text>
+        <Typography.Text code style={{ fontSize: 12 }}>{v}</Typography.Text>
       ) : <Typography.Text type="secondary">—</Typography.Text>,
     },
     {
@@ -135,7 +135,7 @@ export default function Intercept() {
         rowKey="id"
         columns={columns}
         dataSource={intercept}
-        size="middle"
+        size="small"
         pagination={{ defaultPageSize: 20, showSizeChanger: true, pageSizeOptions: ['10', '20', '50', '100'], showTotal: (total) => t('history.totalCount', { count: total }), size: 'small' }}
         onRow={(r) => ({ onClick: () => openDetail(r.id), style: { cursor: 'pointer' } })}
         locale={{ emptyText: <Empty description={t('intercept.empty')} /> }}

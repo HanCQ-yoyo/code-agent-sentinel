@@ -1,5 +1,5 @@
 {
-  "nav": { "dashboard": "仪表盘", "assets": "资产发现", "findings": "风险管理", "history": "扫描任务", "intercept": "拦截", "settings": "系统设置" },
+  "nav": { "dashboard": "仪表盘", "assets": "资产发现", "findings": "风险管理", "history": "扫描任务", "intercept": "拦截记录", "settings": "系统设置" },
   "topbar": { "rescan": "安全扫描", "scanning": "扫描中…", "language": "语言", "theme": "主题", "leafAsset": "资产详情", "leafScan": "扫描详情", "dark": "深", "light": "浅" },
   "rescan": {
     "title": "安全扫描配置",
@@ -120,7 +120,7 @@
     "batchSiblings": "批次内其他 Agent"
   },
   "intercept": {
-    "title": "拦截日志",
+    "title": "拦截记录",
     "time": "时间",
     "outcome": "决策",
     "command": "命令",
