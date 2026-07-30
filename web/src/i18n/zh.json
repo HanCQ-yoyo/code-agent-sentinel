@@ -138,7 +138,16 @@
     "tool": "工具",
     "delete": "删除",
     "confirmDelete": "确认删除此拦截记录?",
-    "empty": "暂无拦截记录"
+    "empty": "暂无拦截记录",
+    "colAction": "操作",
+    "dispose": "处置",
+    "disposeTitle": "处置拦截记录",
+    "addToBlocklist": "加入拦截名单",
+    "addToAllowlist": "加入放行名单",
+    "confirmAddBlocklist": "确认以此命令新建拦截规则?",
+    "confirmAddAllowlist": "确认将此命令加入放行名单?",
+    "addedToBlocklist": "已加入拦截名单",
+    "addedToAllowlist": "已加入放行名单"
   },
   "settings": {
     "binaryPath": "二进制路径",

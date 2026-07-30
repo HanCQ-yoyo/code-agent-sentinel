@@ -138,7 +138,16 @@
     "tool": "Tool",
     "delete": "Delete",
     "confirmDelete": "Delete this intercept record?",
-    "empty": "No intercept records"
+    "empty": "No intercept records",
+    "colAction": "Action",
+    "dispose": "Dispose",
+    "disposeTitle": "Dispose Intercept Record",
+    "addToBlocklist": "Add to Blocklist",
+    "addToAllowlist": "Add to Allowlist",
+    "confirmAddBlocklist": "Create an intercept rule for this command?",
+    "confirmAddAllowlist": "Add this command to the allowlist?",
+    "addedToBlocklist": "Added to blocklist",
+    "addedToAllowlist": "Added to allowlist"
   },
   "settings": {
     "binaryPath": "Binary path",
