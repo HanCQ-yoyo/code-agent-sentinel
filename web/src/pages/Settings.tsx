@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { Card, Tabs, Switch, Input, Button, Segmented } from 'antd'
+import { Card, Tabs, Switch, Input, Button, Segmented, Modal, InputNumber, Radio, Form, Space, Typography, Popconfirm, message } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
-import type { DetectorMeta, DetectorsConfig, RuleDTO, RuleDomain } from '../types'
+import type { DetectorMeta, DetectorsConfig, RuleDTO, RuleDomain, GuardConfig } from '../types'
 import { RulesTable } from '../components/RulesTable'
 import { RuleDrawer } from '../components/RuleDrawer'
 import { DetectorPanel } from '../components/DetectorPanel'
@@ -62,13 +62,22 @@ function DetectorConfigControls({ d, draft, setDraft }: { d: DetectorMeta; draft
 
 export default function Settings() {
   const { t } = useTranslation()
-  const { detectors, fetchDetectors, detectorConfig, fetchDetectorConfig, saveDetectorConfig } = useStore()
+  const { detectors, fetchDetectors, detectorConfig, fetchDetectorConfig, saveDetectorConfig, guardConfig, fetchGuardConfig, saveGuardConfig } = useStore()
   const [filter, setFilter] = useState<string | undefined>(undefined)
   const [draft, setDraft] = useState<DetectorsConfig | null>(null)
   const [saving, setSaving] = useState(false)
   useEffect(() => { fetchDetectors() }, [fetchDetectors])
   useEffect(() => { fetchDetectorConfig() }, [fetchDetectorConfig])
   useEffect(() => { if (detectorConfig) setDraft(detectorConfig) }, [detectorConfig])
+
+  // Task 19:拦截总开关 + 高级弹框 state。
+  // guardConfig 由 fetchGuardConfig 拉全量 6 键;advForm 为弹框编辑快照(含 enabled/policy,
+  // 不暴露但随 form 回传,满足后端 PUT 顶层键校验)。patchAdv 局部更新弹框字段。
+  useEffect(() => { fetchGuardConfig() }, [fetchGuardConfig])
+  const [advOpen, setAdvOpen] = useState(false)
+  const [advForm, setAdvForm] = useState<GuardConfig | null>(null)
+  useEffect(() => { setAdvForm(guardConfig) }, [guardConfig])
+  const patchAdv = (p: Partial<GuardConfig>) => setAdvForm((prev) => prev ? { ...prev, ...p } : prev)
 
   const selected = filter ? detectors.find((d) => d.id === filter) : undefined
 
@@ -144,10 +153,30 @@ export default function Settings() {
 
   // Task 18:拦截配置 tab:合并原「拦截配置」(SettingsGuard)+「放行清单」(SettingsAllowlist)两个顶层 tab。
   // 子 tab 上方放拦截总开关 + 高级按钮(Task 19)。两个子 tab:拦截规则(复用 RulesTable domain=intercept)/ 白名单(SettingsAllowlist)。
-  // Task 19 注:总开关 + 高级弹框插在子 Tabs 上方,本任务先搭子 tab 结构,总开关在 Task 19 加。
-  // SettingsGuard(5 字段全量 form)原在 guard tab,合并后被移除——Task 19 把它的字段搬进高级弹框(故 import 暂留)。
+  // Task 19:总开关直接操作(带 Popconfirm 二次确认),高级按钮开弹框配 4 字段(mode/allowlist_enabled/deadline_ms/max_command_bytes)。
+  //   enabled 字段即总开关本身,policy 随 advForm 回传不暴露。SettingsGuard(5 字段全量 form)合并后不再渲染——
+  //   字段搬进高级弹框(故 import 暂留,Task 21 删文件)。
   const interceptConfig = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {/* 总开关 + 高级按钮:总开关直接操作(带确认),高级按钮开弹框配 4 字段。 */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+        <Space align="center">
+          <Popconfirm
+            title={guardConfig?.enabled ? t('guard.confirmDisable', { defaultValue: '确认关闭运行时拦截?' }) : t('guard.confirmEnable', { defaultValue: '确认开启运行时拦截?' })}
+            okText={t('common.save')}
+            cancelText={t('common.cancel')}
+            onConfirm={async () => {
+              if (!guardConfig) return
+              await saveGuardConfig({ ...guardConfig, enabled: !guardConfig.enabled })
+            }}
+          >
+            <Switch checked={guardConfig?.enabled ?? false} />
+          </Popconfirm>
+          <Typography.Text>{t('guard.enabled')}</Typography.Text>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('guard.enabledHint')}</Typography.Text>
+        </Space>
+        <Button onClick={() => setAdvOpen(true)}>{t('settings.advanced', { defaultValue: '高级' })}</Button>
+      </div>
       <Tabs
         items={[
           { key: 'intercept-rules', label: t('settings.subRules'), children: (
@@ -188,6 +217,43 @@ export default function Settings() {
         onSaved={handleSaved}
         onForked={handleForked}
       />
+      {/* Task 19:高级弹框(Mode/allowlist_enabled/deadline_ms/max_command_bytes 4 字段;enabled 即总开关)。
+          页面级挂载(同 RuleDrawer):避免 tab pane 卸载影响 Modal Form 状态。
+          saveGuardConfig(advForm) 全量回传 6 键(advForm 从 guardConfig 快照,含 enabled/policy)。 */}
+      <Modal
+        open={advOpen}
+        title={t('settings.advanced', { defaultValue: '高级' })}
+        onCancel={() => setAdvOpen(false)}
+        onOk={async () => {
+          if (!advForm) return
+          await saveGuardConfig(advForm)
+          setAdvOpen(false)
+        }}
+        destroyOnClose
+      >
+        {advForm ? (
+          <Form layout="vertical">
+            <Form.Item label={t('guard.mode')}>
+              <Radio.Group value={advForm.mode} onChange={(e) => patchAdv({ mode: e.target.value })}>
+                <Radio value="strict">{t('guard.modeStrict')}</Radio>
+                <Radio value="lenient">{t('guard.modeLenient')}</Radio>
+              </Radio.Group>
+            </Form.Item>
+            <Form.Item label={t('guard.allowlistEnabled')}>
+              <Space align="center">
+                <Switch checked={advForm.allowlist_enabled} onChange={(v) => patchAdv({ allowlist_enabled: v })} />
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('guard.allowlistEnabledHint')}</Typography.Text>
+              </Space>
+            </Form.Item>
+            <Form.Item label={t('guard.deadlineMs')}>
+              <InputNumber min={0} value={advForm.deadline_ms} onChange={(v) => patchAdv({ deadline_ms: typeof v === 'number' ? v : 0 })} style={{ width: 200 }} />
+            </Form.Item>
+            <Form.Item label={t('guard.maxCommandBytes')}>
+              <InputNumber min={0} value={advForm.max_command_bytes} onChange={(v) => patchAdv({ max_command_bytes: typeof v === 'number' ? v : 0 })} style={{ width: 200 }} />
+            </Form.Item>
+          </Form>
+        ) : null}
+      </Modal>
     </div>
   )
 }

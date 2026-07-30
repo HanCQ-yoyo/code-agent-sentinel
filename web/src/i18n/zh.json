@@ -184,12 +184,15 @@
     "allowlistTab": "放行清单",
     "interceptConfigTab": "拦截配置",
     "subRules": "拦截规则",
-    "subAllowlist": "白名单"
+    "subAllowlist": "白名单",
+    "advanced": "高级"
   },
   "guard": {
     "title": "拦截配置",
     "enabled": "总开关",
     "enabledHint": "运行时拦截主开关",
+    "confirmEnable": "确认开启运行时拦截?",
+    "confirmDisable": "确认关闭运行时拦截?",
     "mode": "安全模式",
     "modeStrict": "严格(不确定时拦截)",
     "modeLenient": "宽松(不确定时询问)",

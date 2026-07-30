@@ -184,12 +184,15 @@
     "allowlistTab": "Allowlist",
     "interceptConfigTab": "Intercept Config",
     "subRules": "Intercept Rules",
-    "subAllowlist": "Allowlist"
+    "subAllowlist": "Allowlist",
+    "advanced": "Advanced"
   },
   "guard": {
     "title": "Guard Config",
     "enabled": "Enabled",
     "enabledHint": "Master switch for runtime interception",
+    "confirmEnable": "Enable runtime interception?",
+    "confirmDisable": "Disable runtime interception?",
     "mode": "Security Mode",
     "modeStrict": "Strict (deny on uncertainty)",
     "modeLenient": "Lenient (ask on uncertainty)",
