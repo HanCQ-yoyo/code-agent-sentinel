@@ -86,9 +86,9 @@ export default function History() {
     if (err) return <Alert type="error" message={t('common.loadFailed')} description={err} showIcon style={{ margin: 16 }} />
     if (!detail) return <Spin style={{ display: 'block', margin: '40px auto' }} />
     // Task 16:详情改 per-agent —— 不再合并 sibling findings。
-    // 健康分圆圈:batch 模式仍展示每 agent 一张(让用户看到批次全貌);Findings/SeverityChart 只用当前 detail。
-    // batchSiblings 保留 fetch,但仅用于下方轻量链接行(跳转到 sibling 详情,不再合并展示)。
-    const batchRecords: ScanRecord[] = batchSiblings.length > 0 ? [detail, ...batchSiblings] : [detail]
+    // 健康分圆圈:主区只显当前 agent(batch 兄弟收成下方快捷入口,不再渲染健康分卡)。
+    // Findings/SeverityChart 只用当前 detail;batchSiblings 仅用于上方轻量链接行。
+    const batchRecords: ScanRecord[] = [detail]
     const isBatch = !!detail.batch_id && batchSiblings.length > 0
     const detailFindings = detail.findings ?? []
     return (
@@ -99,20 +99,9 @@ export default function History() {
           {isBatch ? <Tag style={{ marginLeft: 8 }} color="blue">{t('history.batchTag', { id: detail.batch_id!.slice(-8) })}</Tag> : null}
         </Typography.Title>
         {batchLoading ? <Spin size="small" style={{ display: 'block', margin: '8px auto' }} /> : null}
-        {/* 健康分圆圈行:batch 模式每 agent 一张;单记录模式一张。卡标题即 agent 身份
-            (design.md #1+#8:固定宽度不拉满,去掉外层「环卡+标签」div)。 */}
-        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'stretch' }}>
-          {batchRecords.map((r) => {
-            const aid = r.agent_id ?? ''
-            const m = agentMetaById(aid)
-            return (
-              <HealthScoreCard key={r.id} h={r.health_score} agentId={aid} agentName={m.label} />
-            )
-          })}
-        </div>
         {/* Task 16:批次内其他 agent 的轻量链接行(不再合并 findings)。
             isBatch && batchSiblings.length > 0 时展示,每条 sibling 一个 Link 跳转到其详情页。
-            圆圈行已含 detail 自身,这里只列 siblings(避免重复 detail)。 */}
+            移到健康分卡行之前(更显眼,符合「快捷入口」语义)。圆圈行只含 detail 自身,这里只列 siblings。 */}
         {isBatch && batchSiblings.length > 0 && (
           <Card size="small">
             <div className="asset-section-title" style={{ marginBottom: 8 }}>{t('history.batchSiblings')}</div>
@@ -129,6 +118,17 @@ export default function History() {
             </div>
           </Card>
         )}
+        {/* 健康分圆圈行:主区只显当前 agent(卡标题即 agent 身份)。
+            (design.md #1+#8:固定宽度不拉满,去掉外层「环卡+标签」div)。 */}
+        <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'stretch' }}>
+          {batchRecords.map((r) => {
+            const aid = r.agent_id ?? ''
+            const m = agentMetaById(aid)
+            return (
+              <HealthScoreCard key={r.id} h={r.health_score} agentId={aid} agentName={m.label} />
+            )
+          })}
+        </div>
         {/* SeverityChart:只用当前 detail 的 findings(per-agent,不跨 agent 合并)。
             右侧信息卡说明当前 agent 身份(batch 模式)或单记录提示。 */}
         <Row gutter={16} align="stretch">
@@ -137,7 +137,7 @@ export default function History() {
             <Card style={{ width: '100%' }} size="small">
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>
                 {isBatch
-                  ? t('history.batchAgentsCount', { count: batchRecords.length })
+                  ? t('history.batchAgentsCount', { count: batchSiblings.length + 1 })
                   : t('history.singleAgentHint')}
               </Typography.Text>
             </Card>
@@ -172,9 +172,9 @@ export default function History() {
     },
     // Task 12:Batch 列 — 显示 batch_id 末 8 位(同次重扫共享);无 batch_id(旧/单 agent 扫描)显示 '-'。
     { title: t('history.colBatch'), dataIndex: 'batch_id', width: 110, render: (bid?: string) => bid ? <Tag color="blue" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{bid.slice(-8)}</Tag> : '-' },
-    { title: t('history.colAction'), width: 80, render: (_: unknown, h: ScanSummary) => (
+    { title: t('history.colAction'), width: 110, render: (_: unknown, h: ScanSummary) => (
       <Popconfirm title={t('history.confirmDelete')} okText={t('history.delete')} okButtonProps={{ danger: true }} cancelText={t('common.cancel')} onConfirm={() => deleteHistory(h.id)}>
-        <Button danger size="small" icon={<DeleteOutlined />} aria-label={t('history.delete')} />
+        <Button danger size="small" icon={<DeleteOutlined />}>{t('history.delete')}</Button>
       </Popconfirm>
     ) },
   ]
