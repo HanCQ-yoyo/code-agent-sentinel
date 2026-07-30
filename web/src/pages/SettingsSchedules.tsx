@@ -106,7 +106,10 @@ export function SettingsSchedules() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <Card size="small" style={{ marginBottom: 4 }}>
+      {/* Task 7:添加按钮并入总开关 Card extra,消除独占行下压表格。 */}
+      <Card size="small" style={{ marginBottom: 4 }} extra={
+        <Button type="primary" size="small" onClick={openModal} disabled={availableAgents.length === 0}>{t('settings.addSchedule')}</Button>
+      }>
         <Space direction="vertical" size={4} style={{ width: '100%' }}>
           <Space>
             <Switch size="small" checked={scanEnabled} onChange={(v) => saveScanToggle(v, scanInterval)} />
@@ -135,11 +138,6 @@ export function SettingsSchedules() {
           </Text>
         </Space>
       </Card>
-      <div>
-        <Button type="primary" size="small" onClick={openModal} disabled={availableAgents.length === 0}>
-          {t('settings.addSchedule')}
-        </Button>
-      </div>
       {/* design.md #2:表格统一加 Card 外框(与 Assets/Findings/History 一致,SettingsAgents 同改)。 */}
       <Card>
         {schedules.length === 0 ? (

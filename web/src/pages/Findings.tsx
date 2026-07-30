@@ -21,8 +21,8 @@ export default function Findings() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {error ? <Alert type="error" message={t('common.loadFailed')} description={error} showIcon /> : null}
-      {/* Task 12:多 agent 筛选器(空=全选聚合,与 Dashboard 一致)。 */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+      {/* Task 7:AgentMultiSelect 始终渲染(空态也要能切 agent 拉取),用 .filter-toolbar 共享样式非裸独占行。 */}
+      <div className="filter-toolbar">
         <AgentMultiSelect value={selectedAgents} onChange={setSelectedAgents} />
       </div>
       {findings.length === 0 ? <Empty description={t('findings.notScannedHint')} /> : (
@@ -30,9 +30,6 @@ export default function Findings() {
           findings={findings}
           detectors={detectors}
           onSelect={setSelected}
-          // 守卫:子进程检测器(gitleaks/govulncheck/npm-audit)的 finding 无 fingerprint,
-          // 不能写处置状态(会触发 setFindingState(undefined, ...) 致 POST/DELETE /api/finding-state/undefined)。
-          // 此处与 FindingDrawer 的 {finding.fingerprint ? <DispositionModal/> : ...} 守卫对齐。
           onDispose={(f) => { if (f.fingerprint) setDisposeFinding(f) }}
         />
       )}

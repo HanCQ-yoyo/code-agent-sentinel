@@ -11,7 +11,8 @@ import { SettingsAgents } from './SettingsAgents'
 import { SettingsSchedules } from './SettingsSchedules'
 
 // 检测器配置控件:启用开关 + 二进制路径(rules 仅开关;secret 单二进制;dep 每引擎一行)。
-function DetectorConfigControls({ d, draft, setDraft }: { d: DetectorMeta; draft: DetectorsConfig | null; setDraft: (c: DetectorsConfig) => void }) {
+// Task 7:保存配置按钮并入本卡右下(透传 saving + onSave),消除独占行下压表格。
+function DetectorConfigControls({ d, draft, setDraft, saving, onSave }: { d: DetectorMeta; draft: DetectorsConfig | null; setDraft: (c: DetectorsConfig) => void; saving: boolean; onSave: () => void }) {
   const { t } = useTranslation()
   if (!draft) return null
   const patch = (p: Partial<DetectorsConfig>) => setDraft({ ...draft, ...p })
@@ -54,6 +55,10 @@ function DetectorConfigControls({ d, draft, setDraft }: { d: DetectorMeta; draft
             })}
           </>
         ) : null}
+      </div>
+      {/* Task 7:保存配置按钮并入卡内右下(原独占 div 下压表格)。 */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 8 }}>
+        <Button type="primary" size="small" loading={saving} onClick={onSave}>{t('settings.saveConfig')}</Button>
       </div>
     </Card>
   )
@@ -116,18 +121,13 @@ export default function Settings() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       <DetectorPanel detectors={detectors} selectedId={filter} onSelect={setFilter} />
       {selected ? (
-        <>
-          <DetectorConfigControls d={selected} draft={draft} setDraft={setDraft} />
-          <div>
-            <Button type="primary" size="small" loading={saving} onClick={async () => {
-              if (!draft) return
-              setSaving(true)
-              const ok = await saveDetectorConfig(draft)
-              setSaving(false)
-              if (!ok) { /* error 已由 wrap 写入 store.error */ }
-            }}>{t('settings.saveConfig')}</Button>
-          </div>
-        </>
+        <DetectorConfigControls d={selected} draft={draft} setDraft={setDraft} saving={saving} onSave={async () => {
+          if (!draft) return
+          setSaving(true)
+          const ok = await saveDetectorConfig(draft)
+          setSaving(false)
+          if (!ok) { /* error 已由 wrap 写入 store.error */ }
+        }} />
       ) : null}
       {/* Task 17:域切换 Segmented(detect/intercept)+ 新建规则按钮。
           RulesTable 按 ruleDomain 拉对应域规则;切换域时 RulesTable 内部 useEffect 重拉。
