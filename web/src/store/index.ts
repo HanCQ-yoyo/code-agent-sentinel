@@ -17,7 +17,7 @@ interface State {
   // fetchInterceptDetail 拉单条(返回值交组件本地 state 渲染抽屉,不入 store);deleteIntercept 删单条。
   intercept: InterceptRecord[]
   // Stage R3 Task 12:Guard 配置 + 放行清单(GET/PUT /api/guard/{config,allowlist})。
-  // guardConfig 初始 null(SettingsGuard 挂载时 fetch;null → 组件返回 null 不渲染)。
+  // guardConfig 初始 null(设置页拦截配置 tab/高级弹框 fetch;null → 组件返回 null 不渲染)。
   // allowlist 初始 [](SettingsAllowlist 挂载时 fetch)。PUT 均要求全量(见 types.ts 注释)。
   guardConfig: GuardConfig | null
   allowlist: string[]
@@ -91,7 +91,7 @@ interface State {
   fetchInterceptDetail: (id: string) => Promise<InterceptRecord | undefined>
   deleteIntercept: (id: string) => Promise<void>
   // Stage R3 Task 12:Guard 配置 + 放行清单 CRUD。API 内联(项目约定:复用 apiGet/apiPut + wrap,
-  // 不建独立 *Api.ts)。PUT /api/guard/config 要求全量 6 键(见 types.ts 注释)——SettingsGuard
+  // 不建独立 *Api.ts)。PUT /api/guard/config 要求全量 6 键(见 types.ts 注释)——设置页高级弹框
   // fetch 全量后原地编辑、整体保存,保证不丢字段。saveGuardConfig 返回 boolean(与 saveDetectorConfig
   // 一致),供组件判定是否关闭 saving 状态(实际错误已由 wrap 写入 store.error)。
   fetchGuardConfig: () => Promise<void>

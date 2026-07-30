@@ -1,12 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Card, Tabs, Switch, Input, Button, Segmented, Modal, InputNumber, Radio, Form, Space, Typography, Popconfirm, message } from 'antd'
+import { Card, Tabs, Switch, Input, Button, Segmented, Modal, InputNumber, Radio, Form, Space, Typography, Popconfirm } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
 import type { DetectorMeta, DetectorsConfig, RuleDTO, RuleDomain, GuardConfig } from '../types'
 import { RulesTable } from '../components/RulesTable'
 import { RuleDrawer } from '../components/RuleDrawer'
 import { DetectorPanel } from '../components/DetectorPanel'
-import { SettingsGuard } from '../components/SettingsGuard'
 import { SettingsAllowlist } from '../components/SettingsAllowlist'
 import { SettingsAgents } from './SettingsAgents'
 import { SettingsSchedules } from './SettingsSchedules'
@@ -151,11 +150,10 @@ export default function Settings() {
     </div>
   )
 
-  // Task 18:拦截配置 tab:合并原「拦截配置」(SettingsGuard)+「放行清单」(SettingsAllowlist)两个顶层 tab。
+  // Task 18:拦截配置 tab:合并原「拦截配置」+「放行清单」两个顶层 tab。
   // 子 tab 上方放拦截总开关 + 高级按钮(Task 19)。两个子 tab:拦截规则(复用 RulesTable domain=intercept)/ 白名单(SettingsAllowlist)。
   // Task 19:总开关直接操作(带 Popconfirm 二次确认),高级按钮开弹框配 4 字段(mode/allowlist_enabled/deadline_ms/max_command_bytes)。
-  //   enabled 字段即总开关本身,policy 随 advForm 回传不暴露。SettingsGuard(5 字段全量 form)合并后不再渲染——
-  //   字段搬进高级弹框(故 import 暂留,Task 21 删文件)。
+  //   enabled 字段即总开关本身,policy 随 advForm 回传不暴露。原 5 字段全量 form 已搬进高级弹框(Task 21 删旧组件)。
   const interceptConfig = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
       {/* 总开关 + 高级按钮:总开关直接操作(带确认),高级按钮开弹框配 4 字段。 */}
