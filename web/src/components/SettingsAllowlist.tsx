@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Card, Input, Button, List, Space, Popconfirm, Typography, message, Empty } from 'antd'
+import { Card, Input, Button, List, Space, Popconfirm, Typography, message, Empty, Tag } from 'antd'
 import { PlusOutlined, DeleteOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
@@ -13,12 +13,15 @@ import { useStore } from '../store'
 // 仅当 guard.allowlist_enabled=true 时管线 ⑦ 才生效(开关在「拦截配置」tab)。
 export function SettingsAllowlist() {
   const { t } = useTranslation()
-  const { allowlist, fetchAllowlist, saveAllowlist } = useStore()
+  const { allowlist, fetchAllowlist, saveAllowlist, guardConfig } = useStore()
+  // 保证直达白名单子 tab 时 guardConfig 已加载(Settings 页拦截配置 tab 也会 fetch,重复 fetch 幂等)。
+  const fetchGuardConfig = useStore((s) => s.fetchGuardConfig)
   const [input, setInput] = useState('')
   const [list, setList] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
 
   useEffect(() => { fetchAllowlist() }, [fetchAllowlist])
+  useEffect(() => { fetchGuardConfig() }, [fetchGuardConfig])
   // store.allowlist → 本地 list(只在 store 变化时同步,避免覆盖用户正在编辑的值)。
   useEffect(() => { setList(allowlist) }, [allowlist])
 
@@ -46,6 +49,13 @@ export function SettingsAllowlist() {
       title={t('guard.allowlistTitle')}
       extra={<Button type="primary" loading={saving} onClick={onSave}>{t('common.save')}</Button>}
     >
+      {/* 白名单启停状态:读 guardConfig.allowlist_enabled(开关在拦截配置 tab 高级弹框)。
+          true=启用(绿 Tag)/ false=停用(灰 Tag)。只读展示,不改开关(避免与本组件保存逻辑耦合)。 */}
+      <div style={{ marginBottom: 8 }}>
+        <Tag color={guardConfig?.allowlist_enabled ? 'green' : 'default'}>
+          {guardConfig?.allowlist_enabled ? t('guard.allowlistOn', { defaultValue: '白名单已启用' }) : t('guard.allowlistOff', { defaultValue: '白名单已停用' })}
+        </Tag>
+      </div>
       <Typography.Text type="secondary">{t('guard.allowlistHint')}</Typography.Text>
       <Space.Compact style={{ width: '100%', margin: '12px 0' }}>
         <Input

@@ -126,7 +126,7 @@ test('dashboard 带 token 认证后扫描并返回数据依赖结果', async ({ 
   await expect(page.getByTestId('brand')).toBeVisible()
 
   // 触发扫描
-  await page.getByRole('button', { name: /安全检测|Security Scan|扫描/ }).click()
+  await page.getByRole('button', { name: /安全扫描|Security Scan|扫描/ }).click()
 
   // 主要断言(数据依赖):健康分值在扫描前为 "--"(未扫描态),
   // 扫描成功后变为具体数值。fixture 含 Bash(*) 基线 finding → 分数 < 100,
@@ -139,7 +139,7 @@ test('dashboard 带 token 认证后扫描并返回数据依赖结果', async ({ 
 // 说明:本 e2e 通过 --token 标志使用已知 token(见 playwright.config.ts webServer.command),
 // 无需从 server stdout 提取。sentinel 由 Playwright webServer 自动启动(reuseExistingServer=true)。
 
-test('导航后安全检测不丢 token(问题 3 回归)', async ({ page }) => {
+test('导航后安全扫描不丢 token(问题 3 回归)', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
   await expect(page.getByTestId('brand')).toBeVisible()
 
@@ -149,8 +149,8 @@ test('导航后安全检测不丢 token(问题 3 回归)', async ({ page }) => {
   // 再导航回 /dashboard
   await page.getByRole('menuitem', { name: /dashboard/i }).click()
 
-  // 安全检测 —— 旧行为会 401,修复后应成功
-  await page.getByRole('button', { name: /安全检测|Security Scan|扫描/ }).click()
+  // 安全扫描 —— 旧行为会 401,修复后应成功
+  await page.getByRole('button', { name: /安全扫描|Security Scan|扫描/ }).click()
   const score = page.getByTestId('health-score-value')
   await expect(score).not.toHaveText('--', { timeout: 15000 })
   // 确认无 401 错误显示
@@ -181,7 +181,7 @@ test('主题切换并持久化', async ({ page }) => {
 
 test('看板扫描后显示健康分与严重度分布', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
-  await page.getByRole('button', { name: /安全检测|Security Scan|扫描/ }).click()
+  await page.getByRole('button', { name: /安全扫描|Security Scan|扫描/ }).click()
   await expect(page.getByTestId('health-score-value')).not.toHaveText('--', { timeout: 15000 })
   // 4 个严重度行(critical/high/medium/low)均渲染出 severity-{s} testid
   await expect(
@@ -237,9 +237,9 @@ test('资产详情页显示字段与 hash', async ({ page }) => {
 
 test('发现页扫描后展示 finding 行', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
-  // Task 15:TopBar「安全检测」打开 RescanModal(非直接扫描),需在 modal 内点「开始检测」触发。
-  await page.getByRole('button', { name: /安全检测|Security Scan|扫描/ }).click()
-  await page.locator('.ant-modal').filter({ hasText: '安全检测配置' }).getByRole('button', { name: '开始检测' }).click()
+  // Task 15:TopBar「安全扫描」打开 RescanModal(非直接扫描),需在 modal 内点「开始扫描」触发。
+  await page.getByRole('button', { name: /安全扫描|Security Scan|扫描/ }).click()
+  await page.locator('.ant-modal').filter({ hasText: '安全扫描配置' }).getByRole('button', { name: '开始扫描' }).click()
   await page.getByRole('menuitem', { name: /风险管理/ }).click()
   // fixture 含 Bash(*) → 至少一条 finding
   await expect(page.locator('[data-testid="finding-row"]').first()).toBeVisible({ timeout: 15000 })
@@ -299,16 +299,16 @@ test('settings 资产详情显示原文件文本(非 fields 包装泄漏)', asyn
 test('设置页合并视图渲染检测器与规则', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
   await page.getByRole('menuitem', { name: /设置/i }).click()
-  // Settings 的 Tabs 顺序为 agents → schedules → detectors-rules(规则配置),默认激活首个 agents。
-  // 本测试针对「规则配置」tab,需显式点击切过去(detector-chips 只在该 tab 渲染)。
-  await page.getByRole('tab', { name: /规则配置|Rules config/ }).click()
-  // 合并后「规则配置」Tab 直接渲染:检测器胶囊行 + 规则列表。
+  // Settings 的 Tabs 顺序为 agents → schedules → detectors-rules(扫描配置),默认激活首个 agents。
+  // 本测试针对「扫描配置」tab,需显式点击切过去(detector-chips 只在该 tab 渲染)。
+  await page.getByRole('tab', { name: /扫描配置|Scan Config/ }).click()
+  // 合并后「扫描配置」Tab 直接渲染:检测器胶囊行 + 规则列表。
   // detector-chips=胶囊行容器;规则表渲染出 ant-table-row 即证明规则已加载。
   // (SevSegLabel 的「全部」文案与计数分属两个 span,textContent 为「全部63」无空格,
   //  故不按 /全部 \d+/ 断言,改以规则行可见为准。)
   await expect(page.getByTestId('detector-chips')).toBeVisible({ timeout: 10000 })
   // 规则表行:SettingsAgents(Code Agents)也有 .ant-table-row,但它在非激活 tab 内(hidden)。
-  // 先 filter({ visible: true }) 再 .first(),只取「规则配置」tab 内可见的规则行(证明规则已加载)。
+  // 先 filter({ visible: true }) 再 .first(),只取「扫描配置」tab 内可见的规则行(证明规则已加载)。
   await expect(page.locator('.ant-table-row').filter({ visible: true }).first()).toBeVisible({ timeout: 10000 })
   // 点一个检测器胶囊 → 该检测器规则数胶囊可见(快捷筛选)
   await page.getByTestId('detector-chip').first().click()
@@ -433,7 +433,7 @@ test('语言切换:中→英后侧栏与按钮变英文', async ({ page }) => {
   // 侧栏导航变英文
   await expect(page.getByRole('menuitem', { name: 'Dashboard' })).toBeVisible()
   await expect(page.getByRole('menuitem', { name: 'Assets' })).toBeVisible()
-  // 安全检测按钮变英文
+  // 安全扫描按钮变英文
   await expect(page.getByRole('button', { name: 'Security Scan' })).toBeVisible()
   // 切回中文(此时当前是 English,ArrowDown 循环回中文,或 ArrowUp)
   await langSelect.click()
@@ -451,8 +451,11 @@ test('项目 tab 右键置顶 + 颜色 + 刷新保留', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
   // 项目 tab 只在资产页渲染,需先导航过去。
   await page.getByRole('menuitem', { name: /资产/i }).click()
-  // 第 0 个 tab 是「全局」;第 1 个是首个项目 tab(beforeAll 登记的 myproj)。
-  const projTab = page.locator('.ant-tabs-tab').nth(1)
+  // Assets 页有两级 tab:L1(每个 scanEnabledAgent 一个,如「Claude Code」)+ L2(全局 + 各项目)。
+  // 不能用 .ant-tabs-tab.nth(1) 定位首个项目 tab——L1 agent tab 占据了 .nth(0),会把 L2「全局」
+  // tab 错位成 .nth(1)(参见 main 上既有的 flaky:右键点错 tab 不弹项目 Dropdown)。
+  // 改按项目名「myproj」文本精确定位项目 tab(项目名 = filepath.Base,唯一)。
+  const projTab = page.locator('.ant-tabs-tab').filter({ hasText: /^myproj$/ }).first()
   await expect(projTab).toBeVisible({ timeout: 10000 })
   // 右键触发 Dropdown contextMenu(Task 17:trigger=['contextMenu'] 包裹 label span)。
   await projTab.click({ button: 'right' })
@@ -462,26 +465,29 @@ test('项目 tab 右键置顶 + 颜色 + 刷新保留', async ({ page }) => {
   await expect(pinItem).toBeVisible({ timeout: 5000 })
   await pinItem.click()
   // 置顶后该 tab 应移到全局之后(最左项目位)+ 置顶标记(Task 17:projectTabLabel 给置顶 span 打 data-pinned)。
-  await expect(page.locator('.ant-tabs-tab').nth(1).locator('[data-pinned="true"]')).toBeVisible({ timeout: 10000 })
+  await expect(page.locator('.ant-tabs-tab').filter({ hasText: /^myproj$/ }).locator('[data-pinned="true"]')).toBeVisible({ timeout: 10000 })
   // 刷新后保留(后端持久化到 ~/.claude-sentinel/config.yaml)。
   await page.reload()
-  await expect(page.locator('.ant-tabs-tab').nth(1).locator('[data-pinned="true"]')).toBeVisible({ timeout: 10000 })
+  await expect(page.locator('.ant-tabs-tab').filter({ hasText: /^myproj$/ }).locator('[data-pinned="true"]')).toBeVisible({ timeout: 10000 })
 })
 
 test('finding 命中位置高亮(源码视图自动激活)', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
-  // Task 15:TopBar「安全检测」打开 RescanModal,需在 modal 内点「开始检测」触发扫描。
-  await page.getByRole('button', { name: /安全检测|Security Scan|扫描/ }).click()
-  await page.locator('.ant-modal').filter({ hasText: /安全检测配置|Security Scan Config/ }).getByRole('button', { name: /开始检测|Start Scan/ }).click()
+  // Task 15:TopBar「安全扫描」打开 RescanModal,需在 modal 内点「开始扫描」触发扫描。
+  await page.getByRole('button', { name: /安全扫描|Security Scan|扫描/ }).click()
+  await page.locator('.ant-modal').filter({ hasText: /安全扫描配置|Security Scan Config/ }).getByRole('button', { name: /开始扫描|Start Scan/ }).click()
   // finding 行只在风险管理页渲染,需导航过去(参考既有「发现页扫描后展示 finding 行」用例)。
   await page.getByRole('menuitem', { name: /风险管理/ }).click()
   // 等待 finding 行渲染(fixture 含 Bash(*) baseline + injection.hidden-instruction.memory)。
   await expect(page.locator('[data-testid="finding-row"]').first()).toBeVisible({ timeout: 15000 })
   // 风险 3:不能盲点 .first()——finding 行序非确定(SEVERITY_ORDER 排序后同级别按原序),
   // Bash(*) baseline finding 无 locations,若它排在 row 0 则 .hit-line 永远不渲染 → flaky。
-  // 解法:按 rule_id 文本筛选(FindingTable 规则列把 f.rule_id 渲染为可见 <Typography.Text code>)。
-  // injection.hidden-instruction.memory 是唯一携带 locations 的 finding(baseline finding 无 locations)。
-  const injectionRow = page.locator('[data-testid="finding-row"]').filter({ hasText: 'injection.hidden-instruction.memory' }).first()
+  // 解法:按资产名「CLAUDE.md」筛选定位 injection 行——injection.hidden-instruction.memory 命中的
+  // 是 memory 资产 CLAUDE.md(beforeAll 注入 ignore above instructions),baseline Bash(*) 命中的是
+  // permissions 资产,两者资产名不同,CLAUDE.md 唯一标识 injection 行。
+  // (Task 8 把风险列表重排为 8 列,移除了原渲染 f.rule_id 的「规则」列,旧版按 rule_id 文本筛选失效,
+  //  改用资产名列的 asset_name 文本——该列 Task 8 保留且渲染 f.asset_name 为可见 span。)
+  const injectionRow = page.locator('[data-testid="finding-row"]').filter({ hasText: 'CLAUDE.md' }).first()
   await injectionRow.click()
   // AssetSection 内 Monaco 源码视图应激活(ContentArea:highlights 非空时默认 source 视图,避免预览挡住高亮)。
   await expect(page.locator('.finding-drawer .monaco-editor')).toBeVisible({ timeout: 15000 })
@@ -491,9 +497,9 @@ test('finding 命中位置高亮(源码视图自动激活)', async ({ page }) =>
 
 test('风险信息表格 label 列定宽', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
-  // Task 15:TopBar「安全检测」打开 RescanModal,需在 modal 内点「开始检测」触发扫描。
-  await page.getByRole('button', { name: /安全检测|Security Scan|扫描/ }).click()
-  await page.locator('.ant-modal').filter({ hasText: /安全检测配置|Security Scan Config/ }).getByRole('button', { name: /开始检测|Start Scan/ }).click()
+  // Task 15:TopBar「安全扫描」打开 RescanModal,需在 modal 内点「开始扫描」触发扫描。
+  await page.getByRole('button', { name: /安全扫描|Security Scan|扫描/ }).click()
+  await page.locator('.ant-modal').filter({ hasText: /安全扫描配置|Security Scan Config/ }).getByRole('button', { name: /开始扫描|Start Scan/ }).click()
   // finding 行只在风险管理页渲染,需导航过去。
   await page.getByRole('menuitem', { name: /风险管理/ }).click()
   await expect(page.locator('[data-testid="finding-row"]').first()).toBeVisible({ timeout: 15000 })
@@ -520,7 +526,7 @@ test('[默认英文] 无 localStorage 时 fallbackLng=en', async ({ page }) => {
   // 侧栏导航为英文(Dashboard / Assets),证明默认英文生效(而非旧的中文默认)。
   await expect(page.getByRole('menuitem', { name: 'Dashboard' })).toBeVisible()
   await expect(page.getByRole('menuitem', { name: 'Assets' })).toBeVisible()
-  // 安全检测按钮为英文 Security Scan
+  // 安全扫描按钮为英文 Security Scan
   await expect(page.getByRole('button', { name: 'Security Scan' })).toBeVisible()
 })
 
@@ -565,9 +571,9 @@ test('分页每页条数可改且不被重置', async ({ page }) => {
 // 基础信息下方出现 asset-risk-list,含 风险名称/级别/检测器/规则 4 列表头。
 test('资产风险列显示数量且详情抽屉含风险列表', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
-  // Task 15:TopBar「安全检测」打开 RescanModal,需在 modal 内点「开始检测」触发扫描。
-  await page.getByRole('button', { name: /安全检测|Security Scan|扫描/ }).click()
-  await page.locator('.ant-modal').filter({ hasText: '安全检测配置' }).getByRole('button', { name: '开始检测' }).click()
+  // Task 15:TopBar「安全扫描」打开 RescanModal,需在 modal 内点「开始扫描」触发扫描。
+  await page.getByRole('button', { name: /安全扫描|Security Scan|扫描/ }).click()
+  await page.locator('.ant-modal').filter({ hasText: '安全扫描配置' }).getByRole('button', { name: '开始扫描' }).click()
   await page.getByRole('menuitem', { name: /资产/i }).click()
   await expect(page.locator('[data-testid="asset-row"]').first()).toBeVisible({ timeout: 15000 })
   // 全局 settings.json 含 Bash(*) baseline finding → 该资产行风险列显示数字徽标(>0)。
@@ -608,7 +614,7 @@ test.skip('切 agent 后 Dashboard 数据变化(单 agent fixture 跳过)', asyn
 test('扫描总开关切换后 UI 反映状态', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
   await page.getByRole('menuitem', { name: /设置/i }).click()
-  // Settings 的 Tabs 顺序:agents → schedules → detectors-rules(规则配置)。
+  // Settings 的 Tabs 顺序:agents → schedules → detectors-rules(扫描配置)。
   // 默认激活首个 agents tab,需显式点「定时扫描」切过去(总开关 Card 只在该 tab 渲染)。
   await page.getByRole('tab', { name: /定时扫描/ }).click()
   // 总开关 Card:Switch + 「允许定时扫描」文案(SettingsSchedules L111-112)。
@@ -624,14 +630,14 @@ test('扫描总开关切换后 UI 反映状态', async ({ page }) => {
   await expect(masterSwitch).not.toBeChecked({ timeout: 10000 })
 })
 
-// Pillar 3(RescanModal):点 TopBar「安全检测」→ modal 弹出 → 选 project scope →
+// Pillar 3(RescanModal):点 TopBar「安全扫描」→ modal 弹出 → 选 project scope →
 // 断言项目 Select 出现 → 取消关闭(不实际跑扫描,避免慢/flaky)。
 test('RescanModal 打开并切换 project scope 显示项目选择', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
-  // TopBar「安全检测」按钮(Task 15:onClick → openRescan → RescanModal open=true)。
-  await page.getByRole('button', { name: /安全检测|Security Scan|扫描/ }).click()
-  // Modal 标题 rescan.title = 「安全检测配置」(中文 fixture)。
-  const modal = page.locator('.ant-modal').filter({ hasText: '安全检测配置' })
+  // TopBar「安全扫描」按钮(Task 15:onClick → openRescan → RescanModal open=true)。
+  await page.getByRole('button', { name: /安全扫描|Security Scan|扫描/ }).click()
+  // Modal 标题 rescan.title = 「安全扫描配置」(中文 fixture)。
+  const modal = page.locator('.ant-modal').filter({ hasText: '安全扫描配置' })
   await expect(modal).toBeVisible({ timeout: 10000 })
   // 选「项目级」scope:antd Radio 渲染 <label><input type=radio><span>项目级</span></label>,
   // getByRole('radio',{name:'项目级'}) 靠可见文本匹配。点击后 scopeType='project'。
@@ -653,9 +659,9 @@ test('RescanModal 打开并切换 project scope 显示项目选择', async ({ pa
 // 纯文本断言(不截图——多模态不支持,见 CLAUDE.md)。中文 fixture(beforeEach 注入 zh)。
 test('拦截日志页展示 deny 记录并打开详情抽屉', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
-  // 侧栏 nav.intercept = 「拦截」(zh.json L2),antd Menu item role="menuitem"。
-  // 用部分匹配 /拦截/(同既有 /资产/i 模式);「拦截」唯一出现在侧栏,不会误匹配。
-  await page.getByRole('menuitem', { name: /拦截/ }).click()
+  // 侧栏 nav.intercept = 「拦截记录」(zh.json L2,Task 14 改名),antd Menu item role="menuitem"。
+  // 用精确匹配 /拦截记录/(Task 14 改名后,「拦截」也会匹配「拦截配置」tab 等,改精确匹配侧栏 nav)。
+  await page.getByRole('menuitem', { name: /拦截记录/ }).click()
   await expect(page).toHaveURL(/\/intercept/)
   // 列表渲染:InterceptRecord 的 command 列(Typography.Text code 渲染原始命令)。
   // beforeAll 预写的 deny 记录 command="rm -rf /",文本应出现在表格中。
@@ -680,7 +686,7 @@ test('拦截日志页展示 deny 记录并打开详情抽屉', async ({ page }) 
 // 纯文本断言(不截图)。中文 fixture(beforeEach 注入 zh)。
 test('拦截日志页 confidence 列与 matched_span 详情(Stage R3)', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
-  await page.getByRole('menuitem', { name: /拦截/ }).click()
+  await page.getByRole('menuitem', { name: /拦截记录/ }).click()
   await expect(page).toHaveURL(/\/intercept/)
   // 链式命令记录(command="git commit -m \"x\" && rm -rf /")应在列表中可见。
   // 用 includes 匹配(Typography.Text code 渲染整条命令,含引号/&&);.first() 防多行匹配歧义。
@@ -702,25 +708,36 @@ test('拦截日志页 confidence 列与 matched_span 详情(Stage R3)', async ({
   await expect(page.locator('.ant-drawer-content').locator('.ant-tag').filter({ hasText: 'high' }).first()).toBeVisible({ timeout: 10000 })
 })
 
-// Stage R3(Task 13):Settings → 拦截配置 tab → GuardConfig 编辑面板。
-// 断言 Mode 单选(严格/宽松)可见,验证前端 SettingsGuard 组件(Task 12)已挂载到 Settings 页。
+// Stage R3(Task 13):Settings → 拦截配置 tab → 总开关 + 高级弹框(Mode/放行清单启用)。
+// Task 19 把 Mode/放行清单启用等 4 字段搬进「高级」弹框(原 SettingsGuard Card 已删,Task 21),
+// 拦截配置 tab 上只剩总开关(Popconfirm Switch)+ 高级按钮 + 子 tab(拦截规则/白名单)。
+// 本测试:点拦截配置 tab → 断言总开关可见 → 点「高级」开弹框 → 弹框内断言安全模式/严格/宽松/放行清单启用。
 // 不实际切换保存(避免污染 guard config 影响其他测试),仅断言 UI 渲染。
 test('Settings 拦截配置面板展示 Mode 单选(Stage R3)', async ({ page }) => {
   await page.goto('/#token=e2e-test-token-123')
   await page.getByRole('menuitem', { name: /设置/i }).click()
-  // Settings Tabs 顺序:agents → schedules → detectors-rules → guard → allowlist。
-  // 默认激活首个 agents tab,需显式点「拦截配置」切过去(SettingsGuard 只在该 tab 渲染)。
+  // Settings Tabs 顺序:agents → schedules → detectors-rules(扫描配置)→ intercept-config(拦截配置)。
+  // Task 18 合并原 guard + allowlist 两个 tab 为「拦截配置」一个 tab(子 tab 拆拦截规则/白名单)。
+  // 默认激活首个 agents tab,需显式点「拦截配置」切过去(总开关 + 高级按钮只在该 tab 渲染)。
   await page.getByRole('tab', { name: /拦截配置/ }).click()
-  // SettingsGuard Card:title = t('guard.title') = 「拦截配置」(zh.json L171)。
-  // Card 内 Form.Item label = t('guard.mode') = 「安全模式」(zh.json L174)。
-  await expect(page.getByText('安全模式', { exact: true })).toBeVisible({ timeout: 10000 })
+  // 总开关(guard.enabled)直接在 tab 上:Popconfirm 包裹的 Switch + t('guard.enabled') = 「总开关」文案。
+  await expect(page.getByText('总开关', { exact: true })).toBeVisible({ timeout: 10000 })
+  // 点「高级」按钮开弹框(Task 19:4 字段 mode/allowlist_enabled/deadline_ms/max_command_bytes 搬进弹框)。
+  // t('settings.advanced') = 「高级」,antd v5 对两字 CJK 文案在按钮内插空格 → 实际渲染「高 级」
+  // (同既有 /取\s*消/ 模式),用正则 /高\s*级/ 匹配(兼容带/不带空格)。Modal 渲染到 body,故用 .ant-modal 限定后续断言范围。
+  await page.getByRole('button', { name: /高\s*级/ }).click()
+  // 用弹框标题 t('settings.advanced') = 「高级」过滤锁定本弹框(同既有 RescanModal 用「安全扫描配置」标题过滤的模式,
+  // 避免裸 .ant-modal 在多 modal 场景误匹配——antd 默认不预渲染关闭态 modal,但显式过滤更稳)。
+  const modal = page.locator('.ant-modal').filter({ hasText: /高\s*级/ })
+  await expect(modal).toBeVisible({ timeout: 10000 })
+  // 弹框内 Form.Item label = t('guard.mode') = 「安全模式」(zh.json L196)。
+  await expect(modal.getByText('安全模式', { exact: true })).toBeVisible({ timeout: 10000 })
   // Mode Radio.Group:两个 Radio(strict/lenient),label 分别为
   // t('guard.modeStrict') = 「严格(不确定时拦截)」/ t('guard.modeLenient') = 「宽松(不确定时询问)」。
   // antd Radio 渲染 <label class="ant-radio-wrapper">+ <input type=radio> + <span>文本</span>。
-  await expect(page.getByRole('radio', { name: /严格/ })).toBeVisible({ timeout: 10000 })
-  await expect(page.getByRole('radio', { name: /宽松/ })).toBeVisible({ timeout: 10000 })
-  // 总开关 + 放行清单启用开关也应可见(验证完整面板渲染,非仅 Mode)。
-  await expect(page.getByText('总开关', { exact: true })).toBeVisible({ timeout: 5000 })
-  await expect(page.getByText('放行清单启用', { exact: true })).toBeVisible({ timeout: 5000 })
+  await expect(modal.getByRole('radio', { name: /严格/ })).toBeVisible({ timeout: 10000 })
+  await expect(modal.getByRole('radio', { name: /宽松/ })).toBeVisible({ timeout: 10000 })
+  // 放行清单启用开关也在弹框内(Form.Item label = t('guard.allowlistEnabled') = 「放行清单启用」)。
+  await expect(modal.getByText('放行清单启用', { exact: true })).toBeVisible({ timeout: 5000 })
 })
 

@@ -23,3 +23,24 @@ export const SEVERITY_DOT: Record<Severity, string> = {
   low: 'var(--sev-low)',
   info: 'var(--sev-info)',
 }
+
+// 处置状态配色(antd Tag 色):用于风险列表处置状态列 + 处置弹框状态选择。
+export const STATUS_COLOR: Record<string, string> = {
+  open: 'default',
+  in_progress: 'blue',
+  resolved: 'green',
+  false_positive: 'purple',
+  accepted: 'gold',
+}
+
+// 优先级配色(antd Tag 色):P0 红 → P3 蓝。
+export const PRIORITY_COLOR: Record<string, string> = {
+  P0: 'red',
+  P1: 'orange',
+  P2: 'gold',
+  P3: 'blue',
+}
+
+// severity → 优先级派生(从 FindingTable/FindingDrawer 提取,消除重复)。
+export const severityToPrio = (s: Severity): string =>
+  ({ critical: 'P0', high: 'P1', medium: 'P2', low: 'P3', info: 'P3' } as Record<Severity, string>)[s]

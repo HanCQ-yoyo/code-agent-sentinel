@@ -1,20 +1,15 @@
 import { useState, type HTMLAttributes } from 'react'
-import { Card, Table, Segmented, Typography, Empty, Tooltip, Tag, Select, Space } from 'antd'
+import { Card, Table, Segmented, Typography, Empty, Tooltip, Tag, Select, Space, Button } from 'antd'
 import { useTranslation } from 'react-i18next'
 import type { ColumnsType } from 'antd/es/table'
 import type { Finding, Severity, DetectorMeta } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
-import { SEVERITY_ORDER, SEVERITY_LABEL_KEY, SEVERITY_DOT } from '../lib/severity'
+import { SEVERITY_ORDER, SEVERITY_LABEL_KEY, SEVERITY_DOT, STATUS_COLOR, PRIORITY_COLOR, severityToPrio } from '../lib/severity'
 import { formatDateTime } from '../lib/format'
-import { detectorNameById, ruleNameById } from '../lib/i18n-names'
+import { ruleNameById } from '../lib/i18n-names'
 import { agentMetaById } from '../lib/agents'
 import { AgentIcon } from './AgentIcon'
 import { ASSET_TYPE_META } from '../lib/assetTypes'
-
-// Severity → 优先级回退(无显式 priority 时按严重度派生)。info 归 P3(与 low 同档,均不影响健康分)。
-const severityToPrio = (s: Severity): string =>
-  ({ critical: 'P0', high: 'P1', medium: 'P2', low: 'P3', info: 'P3' } as Record<Severity, string>)[s]
-
 
 // 筛选标签内的色点颜色(复用 sev token);「全部」用 accent。
 // 级别筛选标签:左侧色点 + 文本 + 计数。色点颜色对应级别,选中时整块填该级别色(见 .sev-seg CSS),
@@ -43,12 +38,16 @@ interface FindingTableProps {
   // 整次扫描起始时间(同一次扫描所有行共享)。可选:无 scan 时间时不显示该列内容。
   startedAt?: string
   // 检测器元数据,供按 detector_id 查中文名;无则显示 detector_id。
+  // 注:Task 8 删除了 colDetector 列,此 prop 在本组件内不再使用,但接口保留(调用方仍传,
+  // Findings/History 未必同步改;保持兼容,避免破坏调用方)。Task 9 接手 Findings 页时统一清理。
   detectors?: DetectorMeta[]
   // 行点击 → 打开详情抽屉。
   onSelect?: (f: Finding) => void
+  // 操作列「立即处置」按钮 → 父组件打开处置弹框(Task 9 接手)。可选:未传则按钮不触发(留空回调)。
+  onDispose?: (f: Finding) => void
 }
 
-export function FindingTable({ findings, startedAt, detectors, onSelect }: FindingTableProps) {
+export function FindingTable({ findings, startedAt, detectors, onSelect, onDispose }: FindingTableProps) {
   const { t } = useTranslation()
   const [filter, setFilter] = useState<Severity | 'all'>('all')
   const [supprFilter, setSupprFilter] = useState<SupprFilter>('all')
@@ -81,9 +80,6 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
   const cats = [...new Set(findings.map((f) => f.category).filter(Boolean))] as string[]
   const types = [...new Set(findings.map((f) => f.asset_type).filter(Boolean))] as string[]
 
-  // detector_id → 双语名(先查 i18n detectors.<id>,回退 detector.name,再回退 id)。
-  const detName = (id: string): string => detectorNameById(detectors ?? [], id)
-
   const columns: ColumnsType<Finding> = [
     {
       // 风险名称:不设固定宽度,作为弹性主列占据剩余空间并省略;资产列加宽(280)后这里相应收窄,
@@ -115,12 +111,19 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
       },
     },
     {
-      // 资产:文件名 + 类型两词,加宽到 280(预留给资产列);长名省略,Tooltip 兜底。
-      title: t('findingTable.colAsset'), width: 280, ellipsis: true, render: (_: unknown, f: Finding) => (
-        <Tooltip title={`${f.asset_name} ${f.asset_type}`}>
-          <span>{f.asset_name} <Typography.Text type="secondary" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{f.asset_type}</Typography.Text></span>
-        </Tooltip>
-      ),
+      title: t('findingTable.colAsset'), width: 280, ellipsis: true, render: (_: unknown, f: Finding) => {
+        const meta = ASSET_TYPE_META.find((m) => m.type === f.asset_type)
+        return (
+          <Tooltip title={f.source_path ?? f.asset_name}>
+            <span>
+              {f.asset_name}{' '}
+              <Tag style={{ marginInlineEnd: 0, fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
+                {meta ? t(meta.labelKey) : f.asset_type}
+              </Tag>
+            </span>
+          </Tooltip>
+        )
+      },
     },
     { title: t('findingTable.colSeverity'), width: 80, render: (_: unknown, f: Finding) => <SevBadge tone={`sev-${f.severity}` as BadgeTone}>{t(SEVERITY_LABEL_KEY[f.severity])}</SevBadge> },
     {
@@ -134,27 +137,40 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
       },
     },
     {
-      title: t('findingTable.colDetector'), width: 120, render: (_: unknown, f: Finding) => (
-        <Typography.Text style={{ fontSize: 12 }}>{detName(f.detector_id)}</Typography.Text>
+      title: t('findingTable.colCategory', { defaultValue: '风险类型' }), width: 120, render: (_: unknown, f: Finding) => (
+        <Typography.Text style={{ fontSize: 12 }}>{f.category ? t(`category.${f.category}`, { defaultValue: f.category }) : '-'}</Typography.Text>
       ),
     },
     {
-      // 规则列加宽 1 倍(160→320),容纳完整 rule_id mono 文本,不再截断;字体放大到 13 便于阅读。
-      title: t('findingTable.colRule'), width: 320, render: (_: unknown, f: Finding) => (
-        <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 13 }}>{f.rule_id}</Typography.Text>
+      title: t('findingTable.colStatus', { defaultValue: '处置状态' }), width: 110, render: (_: unknown, f: Finding) => (
+        f.status && f.status !== 'open' ? (
+          <Tag color={STATUS_COLOR[f.status] ?? 'default'} style={{ fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
+            {t(`findingTable.status.${f.status}`, { defaultValue: f.status })}
+          </Tag>
+        ) : <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('findingTable.status.open')}</Typography.Text>
       ),
     },
     {
-      title: t('findingTable.colScanTime'), width: 150, render: () => (
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{startedAt ? formatDateTime(startedAt) : '--'}</span>
+      title: t('findingTable.colScanTime'), width: 150, render: (_: unknown, f: Finding) => (
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{(f.started_at ?? startedAt) ? formatDateTime(f.started_at ?? startedAt!) : '--'}</span>
+      ),
+    },
+    {
+      title: t('findingTable.colAction', { defaultValue: '操作' }), width: 110, render: (_: unknown, f: Finding) => (
+        <Button size="small" onClick={(e) => { e.stopPropagation(); onDispose?.(f) }}>
+          {f.status && f.status !== 'open' ? t('findingDrawer.disposed', { defaultValue: '已处置' }) : t('findingDrawer.disposeNow', { defaultValue: '立即处置' })}
+        </Button>
       ),
     },
   ]
 
   // filter-toolbar 抽成共享 JSX:平铺视图和按规则聚合视图共用同一套筛选(避免重复)。
-  // 包含:sev Segmented、抑制状态 Segmented、Category/Status/Priority/Type 4 个 Select、视图开关 Segmented。
+  // 包含:视图开关 Segmented(最前,主切换)、sev Segmented、抑制状态 Segmented、Category/Status/Priority/Type 4 个 Select。
   const filterToolbar = (
     <div className="filter-toolbar">
+      {/* Task 14:平铺 / 按规则聚合 双视图开关(移至最前,主切换入口)。 */}
+      <Segmented size="small" value={view} onChange={(v) => setView(v as View)}
+        options={[{ value: 'flat', label: t('findingTable.viewFlat') }, { value: 'byRule', label: t('findingTable.viewByRule') }]} />
       <Segmented
         className="sev-seg"
         value={filter}
@@ -184,17 +200,14 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
           options={[{ value: 'all', label: t('findingTable.catAll') }, ...cats.map((c) => ({ value: c, label: t(`category.${c}`, { defaultValue: c }) }))]} />
         <Select size="small" value={statusFilter} onChange={setStatusFilter} style={{ width: 110 }}
           options={['all', 'open', 'in_progress', 'resolved', 'false_positive', 'accepted'].map((s) => ({ value: s, label: s === 'all' ? t('findingTable.statusAll') : t(`findingTable.status.${s}`) }))} />
-        <Select size="small" value={prioFilter} onChange={setPrioFilter} style={{ width: 80 }}
-          options={['all', 'P0', 'P1', 'P2', 'P3'].map((p) => ({ value: p, label: p === 'all' ? t('findingTable.prioAll') : p }))} />
+        <Select size="small" value={prioFilter} onChange={setPrioFilter} style={{ width: 120 }}
+          options={['all', 'P0', 'P1', 'P2', 'P3'].map((p) => ({ value: p, label: p === 'all' ? t('findingTable.prioAll') : <Tag color={PRIORITY_COLOR[p]} style={{ marginInlineEnd: 0, fontSize: 10, padding: '0 5px' }}>{p}</Tag> }))} />
         <Select size="small" value={typeFilter} onChange={setTypeFilter} style={{ width: 130 }}
           options={[{ value: 'all', label: t('findingTable.typeAll') }, ...types.map((ty) => {
             const meta = ASSET_TYPE_META.find((m) => m.type === ty)
             return { value: ty, label: meta ? t(meta.labelKey) : ty }
           })]} />
       </Space>
-      {/* Task 14:平铺 / 按规则聚合 双视图开关。 */}
-      <Segmented size="small" value={view} onChange={(v) => setView(v as View)}
-        options={[{ value: 'flat', label: t('findingTable.viewFlat') }, { value: 'byRule', label: t('findingTable.viewByRule') }]} />
     </div>
   )
 
@@ -238,7 +251,8 @@ export function FindingTable({ findings, startedAt, detectors, onSelect }: Findi
           ]}
           expandable={{
             expandedRowRender: ([, fs]: [string, Finding[]]) => (
-              <Table<Finding> rowKey={(_, i) => String(i)} dataSource={fs} pagination={false} size="small" columns={columns} />
+              <Table<Finding> rowKey={(_, i) => String(i)} dataSource={fs} pagination={false} size="small" columns={columns}
+                onRow={(f) => ({ onClick: () => onSelect?.(f), style: { cursor: onSelect ? 'pointer' : 'default' } })} />
             ),
           }}
         />

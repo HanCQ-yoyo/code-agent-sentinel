@@ -16,6 +16,22 @@ function statusBadge(d: DetectorMeta): 'default' | 'success' | 'error' {
   return d.available ? 'success' : 'error' // 可用 / 不可用
 }
 
+// 关停态(default)圆点:antd default 灰在暗色下对比低 → 自定义 dot 用 token 灰 + 描边。
+// success/error 态保留 antd Badge 状态色(本就高对比)。
+function DetectorDot({ status }: { status: 'success' | 'error' | 'default' | 'processing' | 'warning' }) {
+  if (status === 'default') {
+    return (
+      <span
+        style={{
+          display: 'inline-block', width: 6, height: 6, borderRadius: '50%',
+          background: 'var(--text-muted)', border: '1px solid var(--bg-border)',
+        }}
+      />
+    )
+  }
+  return <AntBadge status={status} />
+}
+
 // 共享只读检测器面板:chips + 选中详情条。设置页(配置控件叠加在外)与 Dashboard 共用。
 // 三态:已禁用(default 灰)/不可用(error)/可用(success)。
 export function DetectorPanel({ detectors, selectedId, onSelect }: { detectors: DetectorMeta[]; selectedId?: string; onSelect?: (id: string | undefined) => void }) {
@@ -32,7 +48,7 @@ export function DetectorPanel({ detectors, selectedId, onSelect }: { detectors: 
         {detectors.map((d) => (
           <button key={d.id} type="button" onClick={() => onSelect?.(selectedId === d.id ? undefined : d.id)} aria-pressed={selectedId === d.id} data-testid="detector-chip"
             style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 12px', borderRadius: 16, cursor: 'pointer', fontSize: 13, background: selectedId === d.id ? 'var(--brand-soft)' : 'var(--bg-card)', border: `1px solid ${selectedId === d.id ? 'var(--accent)' : 'var(--bg-border)'}`, color: 'var(--text)' }}>
-            <AntBadge status={statusBadge(d)} />
+            <DetectorDot status={statusBadge(d)} />
             <span>{detectorName(d)}</span>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-muted)' }}>{ruleCountLabel(d, t)}</span>
           </button>
@@ -44,7 +60,8 @@ export function DetectorPanel({ detectors, selectedId, onSelect }: { detectors: 
             <div>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('detector.status')}</Typography.Text>
               <div style={{ marginTop: 4 }}>
-                <AntBadge status={statusBadge(selected)} text={!selected.enabled ? t('detector.statusDisabled') : selected.available ? t('detector.statusAvailable') : t('detector.statusUnavailable')} />
+                <DetectorDot status={statusBadge(selected)} />
+                <span style={{ marginLeft: 8 }}>{!selected.enabled ? t('detector.statusDisabled') : selected.available ? t('detector.statusAvailable') : t('detector.statusUnavailable')}</span>
                 {!selected.enabled ? null : !selected.available && selected.reason ? <Typography.Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>{selected.reason}</Typography.Text> : null}
               </div>
             </div>
@@ -53,7 +70,7 @@ export function DetectorPanel({ detectors, selectedId, onSelect }: { detectors: 
               <div style={{ marginTop: 4 }}>
                 {(selected.engines ?? []).map((e) => (
                   <div key={e.name} style={{ fontSize: 13 }}>
-                    <AntBadge status={!e.enabled ? 'default' : e.available ? 'success' : 'error'} />
+                    <DetectorDot status={!e.enabled ? 'default' : e.available ? 'success' : 'error'} />
                     <span style={{ color: 'var(--text)', marginLeft: 4 }}>{e.name}</span>
                     <Typography.Text type="secondary" style={{ fontFamily: 'var(--font-mono)', fontSize: 11, marginLeft: 8 }}>{e.kind}</Typography.Text>
                     {e.enabled && !e.available && e.reason ? <Typography.Text type="secondary" style={{ fontSize: 11, marginLeft: 8 }}>{e.reason}</Typography.Text> : null}

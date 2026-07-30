@@ -24,11 +24,12 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
-// 导航到「规则配置」tab 的公共步骤:带 token 进首页 → 点设置菜单 → 点「规则配置」tab。
+// 导航到「扫描配置」tab 的公共步骤:带 token 进首页 → 点设置菜单 → 点「扫描配置」tab。
+// (Task 17:tab 由「规则配置」改名「扫描配置」,见 settings.rulesConfig i18n。)
 async function gotoRulesConfig(page: import('@playwright/test').Page) {
   await page.goto(`/#token=${TOKEN}`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('menuitem', { name: /设置/i }).click()
-  await page.getByRole('tab', { name: /规则配置|Rules config/ }).click()
+  await page.getByRole('tab', { name: /扫描配置|Scan Config/ }).click()
 }
 
 // 定位域切换 Segmented:它含「检测规则」/「拦截规则」文案(来源/级别筛选 Segmented 无此文案)。

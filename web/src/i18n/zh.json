@@ -1,8 +1,8 @@
 {
-  "nav": { "dashboard": "仪表盘", "assets": "资产发现", "findings": "风险管理", "history": "检测任务", "intercept": "拦截", "settings": "系统设置" },
-  "topbar": { "rescan": "安全检测", "scanning": "检测中…", "language": "语言", "theme": "主题", "leafAsset": "资产详情", "leafScan": "扫描详情", "dark": "深", "light": "浅" },
+  "nav": { "dashboard": "仪表盘", "assets": "资产发现", "findings": "风险管理", "history": "扫描任务", "intercept": "拦截记录", "settings": "系统设置" },
+  "topbar": { "rescan": "安全扫描", "scanning": "扫描中…", "language": "语言", "theme": "主题", "leafAsset": "资产详情", "leafScan": "扫描详情", "dark": "深", "light": "浅" },
   "rescan": {
-    "title": "安全检测配置",
+    "title": "安全扫描配置",
     "scope": "扫描范围",
     "scopeAll": "全部",
     "scopeUser": "用户级",
@@ -10,7 +10,7 @@
     "selectProject": "选择项目",
     "agent": "目标Agent",
     "detectors": "检测器",
-    "start": "开始检测",
+    "start": "开始扫描",
     "colName": "名称",
     "colID": "ID",
     "colStatus": "状态",
@@ -20,7 +20,7 @@
     "checkTitle": "安全检查",
     "checkHint": "仅对该资产运行所选检测器",
     "rescanThisProject": "重扫此项目",
-    "doneTitle": "安全检测完成",
+    "doneTitle": "安全扫描完成",
     "doneDesc": "已扫描 {{agents}} 个 Agent · 批次 {{batch}}",
     "doneDescWithError": "已扫描 {{agents}} 个 Agent(其中 {{failed}} 个失败)· 批次 {{batch}}",
     "viewHistory": "查看历史记录",
@@ -95,8 +95,8 @@
     "colFindings": "发现",
     "colRiskCount": "风险数量",
     "colDetectors": "检测器",
-    "colScope": "检测范围",
-    "colScopePath": "检测目标",
+    "colScope": "扫描范围",
+    "colScopePath": "扫描目标",
     "scope": {
       "global": "全局",
       "user": "用户级",
@@ -120,7 +120,7 @@
     "batchSiblings": "批次内其他 Agent"
   },
   "intercept": {
-    "title": "拦截日志",
+    "title": "拦截记录",
     "time": "时间",
     "outcome": "决策",
     "command": "命令",
@@ -138,14 +138,30 @@
     "tool": "工具",
     "delete": "删除",
     "confirmDelete": "确认删除此拦截记录?",
-    "empty": "暂无拦截记录"
+    "empty": "暂无拦截记录",
+    "colAction": "操作",
+    "dispose": "处置",
+    "disposeTitle": "处置拦截记录",
+    "addToBlocklist": "加入拦截名单",
+    "addToAllowlist": "加入放行名单",
+    "confirmAddBlocklist": "确认以此命令新建拦截规则?",
+    "confirmAddAllowlist": "确认将此命令加入放行名单?",
+    "addedToBlocklist": "已加入拦截名单",
+    "addedToAllowlist": "已加入放行名单",
+    "outcomeLabel": "决策",
+    "severityLabel": "严重度",
+    "confidenceLabel": "置信度",
+    "ruleBgTitle": "规则背景",
+    "packId": "规则包",
+    "envTitle": "执行环境",
+    "protocol": "协议"
   },
   "settings": {
     "binaryPath": "二进制路径",
     "defaultBinary": "默认 {{name}}",
     "saveConfig": "保存配置",
     "noRules": "暂无规则",
-    "rulesConfig": "规则配置",
+    "rulesConfig": "扫描配置",
     "agentsTab": "Code Agents",
     "agentsReadonlyHint": "已启用的 code agent",
     "agentsReadonlyDesc": "修改请运行 `sentinel setup` 并重启 sentinel",
@@ -165,12 +181,18 @@
     "scanDefaultInterval": "默认间隔(无任务时回退)",
     "scanToggleHint": "关闭后所有 agent 的定时任务暂停;当前 {{running}} 个 agent 在跑。单个 agent 启停/间隔见下表。",
     "guardTab": "拦截配置",
-    "allowlistTab": "放行清单"
+    "allowlistTab": "放行清单",
+    "interceptConfigTab": "拦截配置",
+    "subRules": "拦截规则",
+    "subAllowlist": "白名单",
+    "advanced": "高级"
   },
   "guard": {
     "title": "拦截配置",
     "enabled": "总开关",
     "enabledHint": "运行时拦截主开关",
+    "confirmEnable": "确认开启运行时拦截?",
+    "confirmDisable": "确认关闭运行时拦截?",
     "mode": "安全模式",
     "modeStrict": "严格(不确定时拦截)",
     "modeLenient": "宽松(不确定时询问)",
@@ -184,6 +206,8 @@
     "allowlistEmpty": "暂无放行条目",
     "add": "添加",
     "allowlistDup": "已在清单中",
+    "allowlistOn": "白名单已启用",
+    "allowlistOff": "白名单已停用",
     "saved": "拦截配置已保存"
   },
   "findingDrawer": {
@@ -212,7 +236,9 @@
     "save": "保存",
     "resetToOpen": "重置为未处置",
     "saved": "已保存处置",
-    "reset": "已重置为未处置"
+    "reset": "已重置为未处置",
+    "disposeNow": "立即处置",
+    "disposed": "已处置"
   },
   "ruleDrawer": {
     "title": "规则详情",
@@ -483,6 +509,9 @@
     "colDetector": "检测器",
     "colRule": "规则",
     "colScanTime": "扫描时间",
+    "colCategory": "风险类型",
+    "colStatus": "处置状态",
+    "colAction": "操作",
     "all": "全部",
     "active": "活跃",
     "suppressed": "已抑制",
@@ -521,7 +550,7 @@
     "cancel": "取消",
     "hashChanged": "文件已被外部修改(编辑期间)",
     "hashChangedDesc": "基准 hash 不符,保存可能覆盖他人改动。请重新加载资产后再编辑。",
-    "dangerous": "检测到危险变更",
+    "dangerous": "扫描到危险变更",
     "line": "(行 {{line}})",
     "noChange": "(无变更)"
   },

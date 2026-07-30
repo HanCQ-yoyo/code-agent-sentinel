@@ -1,5 +1,5 @@
 {
-  "nav": { "dashboard": "Dashboard", "assets": "Assets", "findings": "Findings", "history": "Scan Tasks", "intercept": "Intercept", "settings": "Settings" },
+  "nav": { "dashboard": "Dashboard", "assets": "Assets", "findings": "Findings", "history": "Scan Tasks", "intercept": "Intercept Log", "settings": "Settings" },
   "topbar": { "rescan": "Security Scan", "scanning": "Scanning…", "language": "Language", "theme": "Theme", "leafAsset": "Asset Details", "leafScan": "Scan Details", "dark": "Dark", "light": "Light" },
   "rescan": {
     "title": "Security Scan Config",
@@ -95,8 +95,8 @@
     "colFindings": "Findings",
     "colRiskCount": "Risk Count",
     "colDetectors": "Detectors",
-    "colScope": "Scope",
-    "colScopePath": "Target",
+    "colScope": "Scan Scope",
+    "colScopePath": "Scan Target",
     "scope": {
       "global": "Global",
       "user": "User",
@@ -138,14 +138,30 @@
     "tool": "Tool",
     "delete": "Delete",
     "confirmDelete": "Delete this intercept record?",
-    "empty": "No intercept records"
+    "empty": "No intercept records",
+    "colAction": "Action",
+    "dispose": "Dispose",
+    "disposeTitle": "Dispose Intercept Record",
+    "addToBlocklist": "Add to Blocklist",
+    "addToAllowlist": "Add to Allowlist",
+    "confirmAddBlocklist": "Create an intercept rule for this command?",
+    "confirmAddAllowlist": "Add this command to the allowlist?",
+    "addedToBlocklist": "Added to blocklist",
+    "addedToAllowlist": "Added to allowlist",
+    "outcomeLabel": "Decision",
+    "severityLabel": "Severity",
+    "confidenceLabel": "Confidence",
+    "ruleBgTitle": "Rule Context",
+    "packId": "Rule Pack",
+    "envTitle": "Execution Env",
+    "protocol": "Protocol"
   },
   "settings": {
     "binaryPath": "Binary path",
     "defaultBinary": "default: {{name}}",
     "saveConfig": "Save config",
     "noRules": "No rules",
-    "rulesConfig": "Rules config",
+    "rulesConfig": "Scan Config",
     "agentsTab": "Code Agents",
     "agentsReadonlyHint": "Enabled code agents",
     "agentsReadonlyDesc": "To change, run `sentinel setup` and restart sentinel",
@@ -165,12 +181,18 @@
     "scanDefaultInterval": "Default interval (fallback when no tasks)",
     "scanToggleHint": "When off, all agents' scheduled tasks pause; {{running}} agent(s) currently running. Per-agent enable/interval in the table below.",
     "guardTab": "Guard",
-    "allowlistTab": "Allowlist"
+    "allowlistTab": "Allowlist",
+    "interceptConfigTab": "Intercept Config",
+    "subRules": "Intercept Rules",
+    "subAllowlist": "Allowlist",
+    "advanced": "Advanced"
   },
   "guard": {
     "title": "Guard Config",
     "enabled": "Enabled",
     "enabledHint": "Master switch for runtime interception",
+    "confirmEnable": "Enable runtime interception?",
+    "confirmDisable": "Disable runtime interception?",
     "mode": "Security Mode",
     "modeStrict": "Strict (deny on uncertainty)",
     "modeLenient": "Lenient (ask on uncertainty)",
@@ -184,6 +206,8 @@
     "allowlistEmpty": "No allowlist entries",
     "add": "Add",
     "allowlistDup": "Already in allowlist",
+    "allowlistOn": "Allowlist enabled",
+    "allowlistOff": "Allowlist disabled",
     "saved": "Guard config saved"
   },
   "findingDrawer": {
@@ -212,7 +236,9 @@
     "save": "Save",
     "resetToOpen": "Reset to Open",
     "saved": "Disposition saved",
-    "reset": "Reset to open"
+    "reset": "Reset to open",
+    "disposeNow": "Dispose Now",
+    "disposed": "Disposed"
   },
   "ruleDrawer": {
     "title": "Rule Details",
@@ -483,6 +509,9 @@
     "colDetector": "Detector",
     "colRule": "Rule",
     "colScanTime": "Scan Time",
+    "colCategory": "Risk Type",
+    "colStatus": "Status",
+    "colAction": "Action",
     "all": "All",
     "active": "Active",
     "suppressed": "Suppressed",
@@ -521,7 +550,7 @@
     "cancel": "Cancel",
     "hashChanged": "File was modified externally (during edit)",
     "hashChangedDesc": "Base hash mismatch; saving may overwrite others' changes. Please reload the asset before editing.",
-    "dangerous": "Dangerous changes detected",
+    "dangerous": "Dangerous change detected",
     "line": "(line {{line}})",
     "noChange": "(no changes)"
   },

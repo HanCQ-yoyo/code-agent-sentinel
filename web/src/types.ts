@@ -16,6 +16,10 @@ export interface Finding {
   // Task 2:Finding 归属 agent(/api/findings 聚合模式下每条带 agent_id)。
   // 缺省(单 agent 视图/旧记录)→ 渲染为 '-'。
   agent_id?: string
+  // 扫描起始时间(后端读路径 attach,来自该 finding 所属最近 ScanRecord)。
+  started_at?: string
+  // 资产完整路径(后端读路径 attach,来自 ScanRecord.Inventory 快照)。列表 tooltip 用。
+  source_path?: string
   // 规则指纹(仅 RulesDetector 填充);抑制按钮依赖此字段,空则无法按指纹抑制。
   fingerprint?: string
   // 抑制状态:suppressed=true 表示已被 baseline/inline 豁免,不计入健康分。
