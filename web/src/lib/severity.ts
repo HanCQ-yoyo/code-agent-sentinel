@@ -24,21 +24,22 @@ export const SEVERITY_DOT: Record<Severity, string> = {
   info: 'var(--sev-info)',
 }
 
-// 处置状态配色(antd Tag 色):用于风险列表处置状态列 + 处置弹框状态选择。
+// 处置状态 → 实色背景 token(替代 antd 命名色,统一 OKLCH)。
+// open=中性、in_progress=cat-1 蓝、resolved=sev-low 绿、false_positive=cat-5 紫、accepted=cat-3 黄。
 export const STATUS_COLOR: Record<string, string> = {
-  open: 'default',
-  in_progress: 'blue',
-  resolved: 'green',
-  false_positive: 'purple',
-  accepted: 'gold',
+  open: 'var(--color-rule-2)',
+  in_progress: 'var(--cat-1)',
+  resolved: 'var(--sev-low-solid)',
+  false_positive: 'var(--cat-5)',
+  accepted: 'var(--cat-3)',
 }
 
-// 优先级配色(antd Tag 色):P0 红 → P3 蓝。
+// 优先级 → 实色背景 token:P0 红 → P3 蓝。
 export const PRIORITY_COLOR: Record<string, string> = {
-  P0: 'red',
-  P1: 'orange',
-  P2: 'gold',
-  P3: 'blue',
+  P0: 'var(--sev-critical-solid)',
+  P1: 'var(--sev-high-solid)',
+  P2: 'var(--sev-medium-solid)',
+  P3: 'var(--cat-1)',
 }
 
 // severity → 优先级派生(从 FindingTable/FindingDrawer 提取,消除重复)。

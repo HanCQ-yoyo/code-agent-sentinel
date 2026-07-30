@@ -327,7 +327,7 @@ export default function Assets() {
       </Typography.Text>
       {/* 收藏计数提示 */}
       {favorites.length > 0 ? (
-        <Tag color="gold" style={{ marginInlineStart: 0 }}>{t('assets.favoritesCount', { count: favorites.length })}</Tag>
+        <Tag style={{ marginInlineStart: 0, background: 'var(--cat-3)', color: 'var(--badge-text)', border: 'none' }}>{t('assets.favoritesCount', { count: favorites.length })}</Tag>
       ) : null}
     </div>
   )

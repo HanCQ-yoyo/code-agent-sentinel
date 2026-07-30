@@ -12,21 +12,21 @@ function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }
 
-// outcome → Tag color(deny=红 / warn=橙 / ask=金 / allow=默认灰)。
+// outcome → 实色背景 token(deny=红 / warn=橙 / ask=金 / allow=默认灰)。
 // 与 FindingTable/History 风险色阶方向一致:越严重越红。
 const outcomeColor: Record<string, string> = {
-  deny: 'red',
-  warn: 'orange',
-  ask: 'gold',
-  allow: 'default',
+  deny: 'var(--sev-critical-solid)',
+  warn: 'var(--sev-high-solid)',
+  ask: 'var(--cat-3)',
+  allow: 'var(--color-rule-2)',
 }
 
-// confidence → Tag color(Stage R3)。high=绿(明确命中)/ low=橙(降级)/ unknown=默认灰。
+// confidence → 实色背景 token(Stage R3)。high=绿(明确命中)/ low=橙(降级)/ unknown=默认灰。
 // 仅 deny/warn 且规则引擎填充时才有值;allow 记录缺省。
 const confidenceColor: Record<string, string> = {
-  high: 'green',
-  low: 'orange',
-  unknown: 'default',
+  high: 'var(--sev-low-solid)',
+  low: 'var(--sev-high-solid)',
+  unknown: 'var(--color-rule-2)',
 }
 
 export default function Intercept() {
@@ -117,7 +117,7 @@ export default function Intercept() {
       title: t('intercept.outcome'),
       dataIndex: 'outcome',
       width: 90,
-      render: (v: string) => <Tag color={outcomeColor[v] ?? 'default'}>{v}</Tag>,
+      render: (v: string) => <Tag style={{ background: outcomeColor[v] ?? 'var(--color-rule-2)', color: 'var(--badge-text)', border: 'none' }}>{v}</Tag>,
     },
     {
       title: t('intercept.command'),
@@ -147,7 +147,7 @@ export default function Intercept() {
       dataIndex: 'confidence',
       width: 110,
       render: (v?: string) => v ? (
-        <Tag color={confidenceColor[v] ?? 'default'}>{v}</Tag>
+        <Tag style={{ background: confidenceColor[v] ?? 'var(--color-rule-2)', color: 'var(--badge-text)', border: 'none' }}>{v}</Tag>
       ) : <Typography.Text type="secondary">—</Typography.Text>,
     },
     {
@@ -215,13 +215,13 @@ export default function Intercept() {
             {/* 决策 + 严重度 + 置信度(三列同行,重要度高) */}
             <div style={{ display: 'flex', gap: 16 }}>
               <Form.Item label={t('intercept.outcomeLabel', { defaultValue: '决策' })} style={{ flex: 1 }}>
-                <Tag color={outcomeColor[detail.outcome] ?? 'default'}>{detail.outcome}</Tag>
+                <Tag style={{ background: outcomeColor[detail.outcome] ?? 'var(--color-rule-2)', color: 'var(--badge-text)', border: 'none' }}>{detail.outcome}</Tag>
               </Form.Item>
               <Form.Item label={t('intercept.severityLabel', { defaultValue: '严重度' })} style={{ flex: 1 }}>
                 {detail.severity ? <Tag>{detail.severity}</Tag> : <Typography.Text type="secondary">—</Typography.Text>}
               </Form.Item>
               <Form.Item label={t('intercept.confidenceLabel', { defaultValue: '置信度' })} style={{ flex: 1 }}>
-                {detail.confidence ? <Tag color={confidenceColor[detail.confidence] ?? 'default'}>{detail.confidence}</Tag> : <Typography.Text type="secondary">—</Typography.Text>}
+                {detail.confidence ? <Tag style={{ background: confidenceColor[detail.confidence] ?? 'var(--color-rule-2)', color: 'var(--badge-text)', border: 'none' }}>{detail.confidence}</Tag> : <Typography.Text type="secondary">—</Typography.Text>}
               </Form.Item>
             </div>
             {/* 原因(文字可能多,独立行) */}
@@ -299,7 +299,7 @@ export default function Intercept() {
             </div>
             <div>
               <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('intercept.outcome')}</Typography.Text>
-              <div style={{ marginTop: 4 }}><Tag color={outcomeColor[disposeRec.outcome] ?? 'default'}>{disposeRec.outcome}</Tag></div>
+              <div style={{ marginTop: 4 }}><Tag style={{ background: outcomeColor[disposeRec.outcome] ?? 'var(--color-rule-2)', color: 'var(--badge-text)', border: 'none' }}>{disposeRec.outcome}</Tag></div>
             </div>
             <Space>
               <Popconfirm title={t('intercept.confirmAddBlocklist', { defaultValue: '确认以此命令新建拦截规则?' })} okText={t('common.save')} cancelText={t('common.cancel')} onConfirm={addToBlocklist}>

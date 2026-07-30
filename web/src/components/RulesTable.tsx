@@ -109,8 +109,7 @@ export function RulesTable({ domain, onEdit, onFork }: RulesTableProps) {
       //   (基线,旧 FlatRule 语义)更贴合 RuleDTO 的 builtin/custom 二分。
       title: t('ruleTable.colSource'), width: 90, render: (_: unknown, r: RuleDTO) => (
         <Tag
-          color={r.source === 'custom' ? 'blue' : 'default'}
-          style={{ marginInlineEnd: 0, fontSize: 11 }}
+          style={{ marginInlineEnd: 0, fontSize: 11, background: r.source === 'custom' ? 'var(--cat-1)' : 'transparent', color: r.source === 'custom' ? 'var(--badge-text)' : 'var(--color-muted)', border: r.source === 'custom' ? 'none' : '1px solid var(--color-rule)' }}
         >
           {r.source === 'custom' ? t('rulesManage.sourceCustom') : t('rulesManage.sourceBuiltin')}
         </Tag>

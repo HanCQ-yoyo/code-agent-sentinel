@@ -94,14 +94,14 @@ export function FindingTable({ findings, startedAt, detectors, onSelect, onDispo
               {name}
               {f.suppressed ? (
                 <Tooltip title={t('findingTable.supprTooltip', { source: f.suppression ?? '--', reason: f.reason ? t('findingTable.reasonPart', { reason: f.reason }) : '' })}>
-                  <Tag style={{ marginInlineEnd: 0, marginLeft: 6, fontSize: 10, lineHeight: '16px', padding: '0 5px', borderColor: 'var(--bg-border)', color: 'var(--text-muted)', background: 'var(--surface-2)' }}>
+                  <Tag style={{ marginInlineEnd: 0, marginLeft: 6, fontSize: 10, lineHeight: '16px', padding: '0 5px', borderColor: 'var(--color-rule)', color: 'var(--color-muted)', background: 'var(--color-surface)' }}>
                     {t('findingTable.suppressedTag')}
                   </Tag>
                 </Tooltip>
               ) : null}
               {/* Task 14:combo 规则的 contributing chips —— 在规则名后附 +N(命中子规则数)。 */}
               {f.contributing_rule_ids?.length ? (
-                <Tag color="purple" style={{ marginInlineEnd: 0, marginLeft: 6, fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
+                <Tag style={{ marginInlineEnd: 0, marginLeft: 6, fontSize: 10, lineHeight: '16px', padding: '0 5px', background: 'var(--cat-5)', color: 'var(--badge-text)', border: 'none' }}>
                   +{f.contributing_rule_ids.length}
                 </Tag>
               ) : null}
@@ -144,7 +144,7 @@ export function FindingTable({ findings, startedAt, detectors, onSelect, onDispo
     {
       title: t('findingTable.colStatus', { defaultValue: '处置状态' }), width: 110, render: (_: unknown, f: Finding) => (
         f.status && f.status !== 'open' ? (
-          <Tag color={STATUS_COLOR[f.status] ?? 'default'} style={{ fontSize: 10, lineHeight: '16px', padding: '0 5px' }}>
+          <Tag style={{ fontSize: 10, lineHeight: '16px', padding: '0 5px', background: STATUS_COLOR[f.status] ?? 'var(--color-rule-2)', color: 'var(--badge-text)', border: 'none' }}>
             {t(`findingTable.status.${f.status}`, { defaultValue: f.status })}
           </Tag>
         ) : <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('findingTable.status.open')}</Typography.Text>
@@ -201,7 +201,7 @@ export function FindingTable({ findings, startedAt, detectors, onSelect, onDispo
         <Select size="small" value={statusFilter} onChange={setStatusFilter} style={{ width: 110 }}
           options={['all', 'open', 'in_progress', 'resolved', 'false_positive', 'accepted'].map((s) => ({ value: s, label: s === 'all' ? t('findingTable.statusAll') : t(`findingTable.status.${s}`) }))} />
         <Select size="small" value={prioFilter} onChange={setPrioFilter} style={{ width: 120 }}
-          options={['all', 'P0', 'P1', 'P2', 'P3'].map((p) => ({ value: p, label: p === 'all' ? t('findingTable.prioAll') : <Tag color={PRIORITY_COLOR[p]} style={{ marginInlineEnd: 0, fontSize: 10, padding: '0 5px' }}>{p}</Tag> }))} />
+          options={['all', 'P0', 'P1', 'P2', 'P3'].map((p) => ({ value: p, label: p === 'all' ? t('findingTable.prioAll') : <Tag style={{ marginInlineEnd: 0, fontSize: 10, padding: '0 5px', background: PRIORITY_COLOR[p], color: 'var(--badge-text)', border: 'none' }}>{p}</Tag> }))} />
         <Select size="small" value={typeFilter} onChange={setTypeFilter} style={{ width: 130 }}
           options={[{ value: 'all', label: t('findingTable.typeAll') }, ...types.map((ty) => {
             const meta = ASSET_TYPE_META.find((m) => m.type === ty)
@@ -236,7 +236,7 @@ export function FindingTable({ findings, startedAt, detectors, onSelect, onDispo
                   {ruleNameById(ruleId, fs[0].message)}{' '}
                   <Tag>{fs.length} {t('findingTable.hits')}</Tag>
                   {fs[0].contributing_rule_ids?.length ? (
-                    <Tag color="purple">+{fs[0].contributing_rule_ids.length}</Tag>
+                    <Tag style={{ marginInlineEnd: 0, marginLeft: 6, fontSize: 10, lineHeight: '16px', padding: '0 5px', background: 'var(--cat-5)', color: 'var(--badge-text)', border: 'none' }}>+{fs[0].contributing_rule_ids.length}</Tag>
                   ) : null}
                 </span>
               ),

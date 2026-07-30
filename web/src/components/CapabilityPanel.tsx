@@ -44,7 +44,7 @@ function buildItems(type: string, f: Record<string, any>, asset: Asset, t: any):
     }
     case 'hook':
       return [
-        { label: t('capability.hookEvent'), render: <Tag color="blue">{f.event ?? '—'}</Tag> },
+        { label: t('capability.hookEvent'), render: <Tag style={{ background: 'var(--cat-1)', color: 'var(--badge-text)', border: 'none' }}>{f.event ?? '—'}</Tag> },
         { label: t('capability.hookMatcher'), render: <Typography.Text code>{f.matcher ?? '—'}</Typography.Text> },
         { label: t('capability.hookCommand'), render: <Typography.Text code>{f.command ?? '—'}</Typography.Text> },
       ]
@@ -64,7 +64,7 @@ function buildItems(type: string, f: Record<string, any>, asset: Asset, t: any):
       return [
         ...(envKeys.length ? [{ label: t('capability.envKeys'), render: chipList(envKeys) }] : []),
         ...(f.model ? [{ label: t('capability.model'), render: <Tag>{f.model}</Tag> }] : []),
-        ...(f.skip_dangerous ? [{ label: t('capability.skipDangerous'), render: <Tag color="orange">{t('capability.enabled')}</Tag> }] : []),
+        ...(f.skip_dangerous ? [{ label: t('capability.skipDangerous'), render: <Tag style={{ background: 'var(--sev-high-solid)', color: 'var(--badge-text)', border: 'none' }}>{t('capability.enabled')}</Tag> }] : []),
       ]
     }
     case 'permissions':
@@ -101,7 +101,7 @@ function buildItems(type: string, f: Record<string, any>, asset: Asset, t: any):
       ]
     case 'credential':
       return [
-        { label: t('capability.credKind'), render: <Tag color="red">{f.kind ?? '—'}</Tag> },
+        { label: t('capability.credKind'), render: <Tag style={{ background: 'var(--sev-critical-solid)', color: 'var(--badge-text)', border: 'none' }}>{f.kind ?? '—'}</Tag> },
         { label: t('capability.credPath'), render: <Typography.Text code>{f.path ?? '—'}</Typography.Text> },
       ]
     case 'keybinding': {

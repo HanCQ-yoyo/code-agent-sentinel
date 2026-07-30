@@ -96,7 +96,7 @@ export default function History() {
         <Link to="/history"><Button type="link" icon={<ArrowLeftOutlined />}>{t('history.backToList')}</Button></Link>
         <Typography.Title level={5} style={{ color: 'var(--text)', fontFamily: 'var(--font-mono)' }}>
           {detail.id} · {formatDateTime(detail.started_at)}
-          {isBatch ? <Tag style={{ marginLeft: 8 }} color="blue">{t('history.batchTag', { id: detail.batch_id!.slice(-8) })}</Tag> : null}
+          {isBatch ? <Tag style={{ marginLeft: 8, background: 'var(--cat-1)', color: 'var(--badge-text)', border: 'none' }}>{t('history.batchTag', { id: detail.batch_id!.slice(-8) })}</Tag> : null}
         </Typography.Title>
         {batchLoading ? <Spin size="small" style={{ display: 'block', margin: '8px auto' }} /> : null}
         {/* Task 16:批次内其他 agent 的轻量链接行(不再合并 findings)。
@@ -171,7 +171,7 @@ export default function History() {
       ) : <Typography.Text type="secondary">—</Typography.Text>,
     },
     // Task 12:Batch 列 — 显示 batch_id 末 8 位(同次重扫共享);无 batch_id(旧/单 agent 扫描)显示 '-'。
-    { title: t('history.colBatch'), dataIndex: 'batch_id', width: 110, render: (bid?: string) => bid ? <Tag color="blue" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{bid.slice(-8)}</Tag> : '-' },
+    { title: t('history.colBatch'), dataIndex: 'batch_id', width: 110, render: (bid?: string) => bid ? <Tag style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--cat-1)', color: 'var(--badge-text)', border: 'none' }}>{bid.slice(-8)}</Tag> : '-' },
     { title: t('history.colAction'), width: 110, render: (_: unknown, h: ScanSummary) => (
       <Popconfirm title={t('history.confirmDelete')} okText={t('history.delete')} okButtonProps={{ danger: true }} cancelText={t('common.cancel')} onConfirm={() => deleteHistory(h.id)}>
         <Button danger size="small" icon={<DeleteOutlined />}>{t('history.delete')}</Button>
