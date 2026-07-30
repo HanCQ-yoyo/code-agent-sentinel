@@ -1,10 +1,13 @@
-// Task 17:规则配置页 e2e —— 域切换 + 启停核心路径(无外网依赖)。
+// 规则配置页 e2e —— 检测规则启停 + 拦截规则拉取核心路径(无外网依赖)。
 //
-// 覆盖 Task 14-17 的端到端接线:
-//   1. Settings 域切换 Segmented(detect/intercept)渲染 + 切换后表格按域重拉(store fetch + RulesTable domain)。
-//   2. 禁用 builtin 规则的 Switch → toggleRule 调用成功,行内 Switch 反映 disabled。
+// 覆盖:
+//   1. 「拦截配置」tab → 拦截规则子 tab 渲染 + 拉 GET /api/intercept-rules。扫描配置 tab 已不再
+//      做检测/拦截切换:builtin 检测规则与拦截规则同源(db_init.go 把同一份 builtin 灌进 detect/
+//      intercept 两表,因 destructive 等规则双用),切换只展示同一份数据,故 Segmented 已移除;
+//      拦截规则的查看/编辑收口到「拦截配置」tab 的子 tab。
+//   2. 「扫描配置」tab 禁用 builtin 检测规则的 Switch → toggleRule 调用成功,行内 Switch 反映 disabled。
 //
-// 重型流程(fork→编辑→重扫命中、拦截启停→guard)在离线 e2e 环境脆弱(需扫描/guard 子流程),
+// 重型流程(fork→编辑→重扫命中、拦截启停→guard)在离线 e2e 环境脆弱(需扫描/guard 子进程),
 // 按 brief「e2e 优先跑无外网依赖的核心路径」暂缓,见 task-17-sqlite-report.md。
 //
 // beforeEach 独立于 e2e.spec.ts(Playwright 每个文件 beforeEach 各自独立):复制字体拦截 + 中文注入。
@@ -25,44 +28,26 @@ test.beforeEach(async ({ page }) => {
 })
 
 // 导航到「扫描配置」tab 的公共步骤:带 token 进首页 → 点设置菜单 → 点「扫描配置」tab。
-// (Task 17:tab 由「规则配置」改名「扫描配置」,见 settings.rulesConfig i18n。)
 async function gotoRulesConfig(page: import('@playwright/test').Page) {
   await page.goto(`/#token=${TOKEN}`, { waitUntil: 'domcontentloaded' })
   await page.getByRole('menuitem', { name: /设置/i }).click()
   await page.getByRole('tab', { name: /扫描配置|Scan Config/ }).click()
 }
 
-// 定位域切换 Segmented:它含「检测规则」/「拦截规则」文案(来源/级别筛选 Segmented 无此文案)。
-// antd Segmented 项可点文案(同 e2e.spec.ts:343 tagSeg.getByText 模式),不用 role=radio(Segmented 非标准 radio)。
-function domainSegment(page: import('@playwright/test').Page) {
-  return page.locator('.ant-segmented').filter({ hasText: /检测规则|拦截规则/ }).first()
-}
-
-test('规则配置页域切换 detect↔intercept 刷新表格', async ({ page }) => {
-  await gotoRulesConfig(page)
-  // 检测器胶囊行 + 规则表行可见(证明 detect 域规则已加载,RulesTable 默认 domain='detect')。
-  await expect(page.getByTestId('detector-chips')).toBeVisible({ timeout: 10000 })
-  await expect(page.locator('.ant-table-row').filter({ visible: true }).first()).toBeVisible({ timeout: 10000 })
-
-  // 切到拦截规则域:点击前先挂 response 监听,捕获切换触发的 GET /api/intercept-rules。
-  // RulesTable 内部 useEffect 在 domain 变化时调 fetchInterceptRules → store GET /api/intercept-rules。
-  const seg = domainSegment(page)
-  await expect(seg).toBeVisible()
+test('拦截配置 tab 拦截规则子 tab 拉 intercept-rules', async ({ page }) => {
+  await page.goto(`/#token=${TOKEN}`, { waitUntil: 'domcontentloaded' })
+  await page.getByRole('menuitem', { name: /设置/i }).click()
+  // Settings Tabs 顺序:agents → schedules → detectors-rules(扫描配置)→ intercept-config(拦截配置)。
+  await page.getByRole('tab', { name: /拦截配置/ }).click()
+  // 拦截配置 tab 内两个子 tab:拦截规则 / 白名单。点「拦截规则」子 tab(t('settings.subRules')=「拦截规则」)。
+  // RulesTable(domain="intercept") 内部 useEffect 在 domain=intercept 时调 fetchInterceptRules → GET /api/intercept-rules。
   const interceptResp = page.waitForResponse(
     (r) => r.url().includes('/api/intercept-rules') && r.request().method() === 'GET' && r.status() === 200,
     { timeout: 10000 },
   )
-  await seg.getByText('拦截规则', { exact: true }).click()
+  await page.getByRole('tab', { name: /拦截规则/ }).click()
   await interceptResp
-
-  // 切回检测规则域:断言 detect-rules API 被重拉(验证双向切换都触发表格重拉)。
-  const detectResp = page.waitForResponse(
-    (r) => r.url().includes('/api/detect-rules') && r.request().method() === 'GET' && r.status() === 200,
-    { timeout: 10000 },
-  )
-  await seg.getByText('检测规则', { exact: true }).click()
-  await detectResp
-  // detect 域规则行重新可见。
+  // 拦截规则表格行可见(证明 intercept 域规则已加载)。
   await expect(page.locator('.ant-table-row').filter({ visible: true }).first()).toBeVisible({ timeout: 10000 })
 })
 
