@@ -136,17 +136,9 @@ export default function Settings() {
         <Button type="primary" onClick={handleCreate}>{t('rulesManage.create')}</Button>
       </div>
       <RulesTable domain={ruleDomain} onEdit={handleEdit} onFork={handleFork} />
-      {/* edit/create 抽屉(Settings 拥有,与 RulesTable 的 view 抽屉分离)。
-          open 由 rule!==null || mode==='create' 控制(RuleDrawer 内部)。
-          domain 传当前 ruleDomain:fork/create 都基于当前选中域。 */}
-      <RuleDrawer
-        rule={editingRule}
-        mode={drawerMode}
-        domain={ruleDomain}
-        onClose={handleDrawerClose}
-        onSaved={handleSaved}
-        onForked={handleForked}
-      />
+      {/* edit/create 抽屉已提升到页面级(见 return),确保任意顶层 tab 下都能挂载:
+          antd Tabs 默认卸载非活动 pane,若抽屉留在本(detectors-rules)tab 内,
+          切到 intercept-config tab 时抽屉不挂载、handleIntercept* 打不开抽屉。 */}
     </div>
   )
 
@@ -183,6 +175,19 @@ export default function Settings() {
   return (
     <div>
       <Tabs items={items} activeKey={activeTab} onChange={setActiveTab} />
+      {/* edit/create 抽屉(Settings 拥有,与 RulesTable 内 view-only 抽屉分离)。
+          open 由 rule!==null || mode==='create' 控制(RuleDrawer 内部)。
+          domain 传当前 ruleDomain:fork/create 都基于当前选中域。
+          提升到页面级:antd Tabs 默认卸载非活动 pane,留在某 tab 内则其他 tab 下的
+          handleIntercept* / handleCreate/Edit/Fork 设置了 state 但抽屉不挂载,打不开。 */}
+      <RuleDrawer
+        rule={editingRule}
+        mode={drawerMode}
+        domain={ruleDomain}
+        onClose={handleDrawerClose}
+        onSaved={handleSaved}
+        onForked={handleForked}
+      />
     </div>
   )
 }
