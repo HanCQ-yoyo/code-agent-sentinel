@@ -28,6 +28,12 @@ type Finding struct {
 	AssetType   configengine.AssetType `json:"asset_type"`
 	AssetName   string                 `json:"asset_name"`
 	AgentID     string                 `json:"agent_id,omitempty"` // 所属 code agent(由 Runner 层回填)
+	// StartedAt 是该 finding 所属扫描的起始时间(读路径 attach,来自 ScanRecord.StartedAt)。
+	// 不参与健康分,仅 UI 展示扫描时间。
+	StartedAt time.Time `json:"started_at,omitempty"`
+	// SourcePath 是命中资产完整路径(读路径 attach,来自 ScanRecord.Inventory 快照)。
+	// 供 UI 列表 tooltip 展示完整路径,不参与持久化。
+	SourcePath string `json:"source_path,omitempty"`
 	Message     string                 `json:"message"`
 	Evidence    string                 `json:"evidence"`
 	Remediation string                 `json:"remediation"`
