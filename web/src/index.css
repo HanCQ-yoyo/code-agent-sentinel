@@ -51,6 +51,14 @@
   --agent-claude: oklch(68% 0.130 41);
   --agent-codex: oklch(70% 0.130 165);
 
+  /* scope 4 色(Badge scope badge 左色块;design.md L82 映射到 category) */
+  --scope-global:  oklch(68% 0.110 195);  /* 青 = cat-6 */
+  --scope-project: oklch(60% 0.150 145);  /* 绿 = cat-2 */
+  --scope-managed: oklch(72% 0.150 85);   /* 黄 = cat-3 */
+  --scope-plugin:  oklch(55% 0.160 300);  /* 紫 = cat-5 */
+  /* 命中行高亮琥珀底(MonacoViewer + .hit-line 共用,替代裸 rgba) */
+  --warn-bg: oklch(75% 0.150 75 / 0.18);
+
   /* 字号阶梯(major third,从 14px 正文起) */
   --fs-xs:   11px;
   --fs-sm:   12px;
@@ -121,6 +129,12 @@
 
   --agent-claude: oklch(72% 0.130 41);
   --agent-codex: oklch(74% 0.130 165);
+
+  --scope-global:  oklch(74% 0.110 195);
+  --scope-project: oklch(66% 0.150 145);
+  --scope-managed: oklch(78% 0.140 85);
+  --scope-plugin:  oklch(62% 0.150 300);
+  --warn-bg: oklch(75% 0.150 75 / 0.22);
 }
 
 /* 兼容旧 token 名别名 —— 组件迁移过渡期:旧 --bg / --text 等名映射到新 --color-*,
@@ -247,9 +261,9 @@ body {
 }
 
 /* #7 命中行高亮:Monaco deltaDecorations 整行背景(isWholeLine:true)。
-   固定 rgba(警示色,不随主题切换),!important 压过 Monaco 默认行背景。 */
+   警示色底走 --warn-bg(随主题切换:light 0.18 / dark 0.22 提可见),!important 压过 Monaco 默认行背景。 */
 .hit-line {
-  background: rgba(250, 173, 20, 0.18) !important;
+  background: var(--warn-bg) !important;
 }
 
 /* #9 风险信息 Descriptions 表格:antd Descriptions 在 column={1} 下渲染为 table,

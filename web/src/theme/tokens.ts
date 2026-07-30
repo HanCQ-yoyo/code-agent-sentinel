@@ -42,6 +42,13 @@ export interface TokenSet {
   // 品牌身份色(agent 图标专用,与 accent 平级,不进 category)
   agentClaude: string
   agentCodex: string
+  // scope 4 色(design.md L82:映射到 category;Badge scope badge 左色块用,浅深各定)
+  scopeGlobal: string
+  scopeProject: string
+  scopeManaged: string
+  scopePlugin: string
+  // 命中行高亮琥珀底(MonacoViewer + index.css .hit-line 共用,替代两处裸 rgba)
+  warnBg: string
   fontSans: string
   fontMono: string
 }
@@ -84,6 +91,11 @@ export const tokens: Record<Mode, TokenSet> = {
     cat6: 'oklch(68% 0.110 195)',
     agentClaude: 'oklch(68% 0.130 41)',
     agentCodex: 'oklch(70% 0.130 165)',
+    scopeGlobal: 'oklch(68% 0.110 195)',   // = cat-6 青
+    scopeProject: 'oklch(60% 0.150 145)',  // = cat-2 绿
+    scopeManaged: 'oklch(72% 0.150 85)',   // = cat-3 黄
+    scopePlugin: 'oklch(55% 0.160 300)',   // = cat-5 紫
+    warnBg: 'oklch(75% 0.150 75 / 0.18)',  // 琥珀 18% 透明(替代 rgba(250,173,20,0.18))
     fontSans,
     fontMono,
   },
@@ -119,6 +131,11 @@ export const tokens: Record<Mode, TokenSet> = {
     cat6: 'oklch(74% 0.110 195)',
     agentClaude: 'oklch(72% 0.130 41)',
     agentCodex: 'oklch(74% 0.130 165)',
+    scopeGlobal: 'oklch(74% 0.110 195)',
+    scopeProject: 'oklch(66% 0.150 145)',
+    scopeManaged: 'oklch(78% 0.140 85)',
+    scopePlugin: 'oklch(62% 0.150 300)',
+    warnBg: 'oklch(75% 0.150 75 / 0.22)',  // 深色底透明度略提保证可见
     fontSans,
     fontMono,
   },
