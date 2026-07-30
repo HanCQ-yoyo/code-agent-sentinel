@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Drawer, Descriptions, Typography, Alert, Spin, Empty, Radio, Input, Button, Space, Tag, message } from 'antd'
+import { Drawer, Descriptions, Typography, Alert, Spin, Empty, Modal, Input, Button, Space, Tag, message } from 'antd'
 import { useTranslation } from 'react-i18next'
-import type { Finding, DetectorMeta, Asset, Severity } from '../types'
+import type { Finding, DetectorMeta, Asset } from '../types'
 import { apiGet } from '../api/client'
 import { useStore } from '../store'
 import { useTheme } from '../theme'
@@ -9,13 +9,16 @@ import { Badge as SevBadge, type BadgeTone } from './Badge'
 import { ContentArea } from './ContentArea'
 import { relativeClaudePath } from '../lib/path'
 import { formatDateTime } from '../lib/format'
-import { SEVERITY_LABEL_KEY } from '../lib/severity'
+import { SEVERITY_LABEL_KEY, STATUS_COLOR, PRIORITY_COLOR, severityToPrio } from '../lib/severity'
 import { detectorNameById, ruleNameById } from '../lib/i18n-names'
 
-// Severity → 优先级回退(无显式 priority 时按严重度派生)。info 归 P3(与 low 同档,均不影响健康分)。
-// Task 14 在 FindingTable 里有同名 helper;此处按 brief 内联,避免过度重构跨文件抽取共享。
-const severityToPrio = (s: Severity): string =>
-  ({ critical: 'P0', high: 'P1', medium: 'P2', low: 'P3', info: 'P3' } as Record<Severity, string>)[s]
+// antd 预设 Tag 色的十六进制(项目无 --antd-<color> token,用 hex 保证暗色对比)。
+// STATUS_COLOR/PRIORITY_COLOR 存的是 antd Tag 色名(red/blue/...),CheckableTag 选中态
+// 用 inline style 设背景色,但 var(--antd-<color>) token 在本项目 CSS 不存在,故回退到 hex。
+const TAG_HEX: Record<string, string> = {
+  red: '#f5222d', orange: '#fa8c16', gold: '#faad14', blue: '#1677ff',
+  green: '#52c41d', purple: '#722ed1', default: 'var(--bg-border)',
+}
 
 interface FindingDrawerProps {
   finding: Finding | null
@@ -96,14 +99,14 @@ function AssetSection({ assetId, locations, agentId }: { assetId: string, locati
   )
 }
 
-// 处置面板:对带 fingerprint 的 finding 设状态/优先级/备注,落盘到 ~/.claude-sentinel/finding_states.yaml。
-// Task 15:取代旧的「添加到 suppressions」+「加入 baseline」两按钮区块。
-//   - 旧 addSuppression → POST /api/suppressions(Task 11 已删端点)
-//   - 旧 generateBaseline → POST /api/baseline(Task 11 重定义为 bulk-accept;Task 12 的 bulkAccept action 取代)
-// 改用 Task 12 的 setFindingState/resetFindingState:统一处置生命周期(status/priority/note),
-//   后端 /api/finding-state POST/DELETE,API 读时把治理字段合并到 Finding 上。
-// severityToPrio 内联(同 FindingTable,不抽共享以免过度重构)。
-function DispositionPanel({ finding }: { finding: Finding }) {
+// 处置弹框:对带 fingerprint 的 finding 设状态/优先级/备注,落盘到 ~/.claude-sentinel/finding_states.yaml。
+// Task 9:由原 DispositionPanel(Radio.Group 内联表单)改为 Modal 弹框,状态/优先级改用带色
+// Tag.CheckableTag 选择器;由 FindingDrawer「立即处置」按钮 + Findings.tsx 列表操作列复用触发。
+//   - 旧 addSuppression/generateBaseline(Task 11/12 已删)
+//   - setFindingState/resetFindingState:统一处置生命周期,后端 /api/finding-state POST/DELETE
+// severityToPrio 从 lib/severity 导入(消除与 FindingTable 的重复 helper)。
+// CheckableTag 选中态用 TAG_HEX[<色名>] 取 hex 背景(项目无 --antd-<color> token,见文件顶部说明)。
+export function DispositionModal({ finding, open, onClose }: { finding: Finding; open: boolean; onClose: () => void }) {
   const { t } = useTranslation()
   const [status, setStatus] = useState(finding.status ?? 'open')
   const [priority, setPriority] = useState(finding.priority ?? severityToPrio(finding.severity))
@@ -114,38 +117,48 @@ function DispositionPanel({ finding }: { finding: Finding }) {
   const save = async () => {
     await setFindingState(finding.fingerprint!, status, priority, note)
     message.success(t('findingDrawer.saved'))
+    onClose()
   }
   const reset = async () => {
     await resetFindingState(finding.fingerprint!)
     setStatus('open'); setPriority(severityToPrio(finding.severity)); setNote('')
     message.success(t('findingDrawer.reset'))
+    onClose()
   }
 
   return (
-    <div style={{ marginTop: 16 }}>
-      <div className="asset-section-title">{t('findingDrawer.disposition')}</div>
+    <Modal open={open} title={t('findingDrawer.disposition')} onCancel={onClose}
+      footer={[
+        <Button key="reset" onClick={reset}>{t('findingDrawer.resetToOpen')}</Button>,
+        <Button key="cancel" onClick={onClose}>{t('common.cancel')}</Button>,
+        <Button key="save" type="primary" onClick={save}>{t('findingDrawer.save')}</Button>,
+      ]}>
       <Space direction="vertical" style={{ width: '100%' }}>
         <div>
           <Typography.Text type="secondary">{t('findingDrawer.status')}</Typography.Text>
-          <Radio.Group value={status} onChange={(e) => setStatus(e.target.value)} style={{ marginLeft: 8 }}>
+          <div style={{ marginTop: 4, display: 'flex', gap: 8, flexWrap: 'wrap' }}>
             {['open', 'in_progress', 'resolved', 'false_positive', 'accepted'].map((s) => (
-              <Radio.Button key={s} value={s}>{t(`findingTable.status.${s}`)}</Radio.Button>
+              <Tag.CheckableTag key={s} checked={status === s} onChange={() => setStatus(s)}
+                style={status === s ? { background: TAG_HEX[STATUS_COLOR[s] ?? 'default'] ?? 'var(--bg-border)', borderColor: 'transparent', color: '#fff' } : {}}>
+                {t(`findingTable.status.${s}`)}
+              </Tag.CheckableTag>
             ))}
-          </Radio.Group>
+          </div>
         </div>
         <div>
           <Typography.Text type="secondary">{t('findingDrawer.priority')}</Typography.Text>
-          <Radio.Group value={priority} onChange={(e) => setPriority(e.target.value)} style={{ marginLeft: 8 }}>
-            {['P0', 'P1', 'P2', 'P3'].map((p) => <Radio.Button key={p} value={p}>{p}</Radio.Button>)}
-          </Radio.Group>
+          <div style={{ marginTop: 4, display: 'flex', gap: 8 }}>
+            {['P0', 'P1', 'P2', 'P3'].map((p) => (
+              <Tag.CheckableTag key={p} checked={priority === p} onChange={() => setPriority(p)}
+                style={priority === p ? { background: TAG_HEX[PRIORITY_COLOR[p] ?? 'default'] ?? 'var(--bg-border)', borderColor: 'transparent', color: '#fff' } : {}}>
+                {p}
+              </Tag.CheckableTag>
+            ))}
+          </div>
         </div>
         <Input.TextArea value={note} onChange={(e) => setNote(e.target.value)} placeholder={t('findingDrawer.notePlaceholder')} rows={2} />
-        <Space>
-          <Button type="primary" onClick={save}>{t('findingDrawer.save')}</Button>
-          <Button onClick={reset}>{t('findingDrawer.resetToOpen')}</Button>
-        </Space>
       </Space>
-    </div>
+    </Modal>
   )
 }
 
@@ -156,6 +169,8 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
   // supprModalOpen/supprReason/submitting/baselineLoading 状态——DispositionPanel 自管 local state。
   // DispositionPanel 用 key={finding.fingerprint} 强制在 finding 切换时重挂载:其 useState
   // 初始值依赖 finding prop,不重挂载会保留旧 finding 的 status/priority/note(脏状态)。
+  // Task 9:DispositionPanel → DispositionModal,由「立即处置」按钮触发(disposeOpen state)。
+  const [disposeOpen, setDisposeOpen] = useState(false)
 
   // key={assetId}:切换 finding 时 AssetSection 重挂载,重拉资产(防脏数据)。
   return (
@@ -172,6 +187,13 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
     >
       {finding ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {/* Task 9:「立即处置」按钮(有 fingerprint 才显示)。已处置(status≠open)显示「已处置」文案,
+              否则「立即处置」。点击打开 DispositionModal(底部 key={finding.fingerprint} 重挂载保证 state 重置)。 */}
+          {finding.fingerprint ? (
+            <Button type="primary" onClick={() => setDisposeOpen(true)} style={{ marginBottom: 12, alignSelf: 'flex-start' }}>
+              {finding.status && finding.status !== 'open' ? t('findingDrawer.disposed') : t('findingDrawer.disposeNow')}
+            </Button>
+          ) : null}
           {/* #9:label 列定宽 120 + nowrap,值列 word-break,table-layout:fixed 防止标签长短不一导致值列错位。
               className + index.css 的 .risk-desc table 规则为兜底(antd Descriptions 包 div,inline style 不一定生效)。 */}
           <Descriptions
@@ -220,6 +242,14 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
                 <Typography.Text type="secondary">{t('findingDrawer.active')}</Typography.Text>
               )}
             </Descriptions.Item>
+            {/* Task 9:处置状态只读摘要(status≠open 显示带色 Tag,否则 secondary 文案)+ 优先级 Tag。
+                改写入口在上方「立即处置」按钮(DispositionModal),此处仅展示当前值。 */}
+            <Descriptions.Item label={t('findingDrawer.disposition')}>
+              {finding.status && finding.status !== 'open' ? (
+                <Tag color={STATUS_COLOR[finding.status] ?? 'default'}>{t(`findingTable.status.${finding.status}`)}</Tag>
+              ) : <Typography.Text type="secondary">{t('findingTable.status.open')}</Typography.Text>}
+              {finding.priority ? <Tag color={PRIORITY_COLOR[finding.priority] ?? 'default'} style={{ marginLeft: 6 }}>{finding.priority}</Tag> : null}
+            </Descriptions.Item>
           </Descriptions>
 
           <div>
@@ -227,12 +257,13 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
             <AssetSection key={finding.asset_id} assetId={finding.asset_id} locations={finding.locations} agentId={finding.agent_id} />
           </div>
 
-          {/* 处置面板:需 fingerprint(仅 RulesDetector 填充)。无 fingerprint 显示提示。
-              key={finding.fingerprint} 强制 DispositionPanel 在 finding 切换时重挂载:
+          {/* Task 9:处置弹框(需 fingerprint,仅 RulesDetector 填充)。
+              key={finding.fingerprint} 强制 DispositionModal 在 finding 切换时重挂载:
               其 useState(status/priority/note)初始值从 finding prop 取,不重挂载会保留旧 finding
-              的处置状态(脏数据,甚至可能把 A 的状态写到 B 的 fingerprint)。 */}
+              的处置状态(脏数据,甚至可能把 A 的状态写到 B 的 fingerprint)。
+              无 fingerprint 显示提示(子进程检测器 finding 无法按指纹处置)。 */}
           {finding.fingerprint ? (
-            <DispositionPanel key={finding.fingerprint} finding={finding} />
+            <DispositionModal key={finding.fingerprint} finding={finding} open={disposeOpen} onClose={() => setDisposeOpen(false)} />
           ) : (
             <Typography.Text type="secondary">{t('findingDrawer.noFingerprint')}</Typography.Text>
           )}

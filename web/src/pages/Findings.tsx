@@ -3,7 +3,7 @@ import { Alert, Empty } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
 import { FindingTable } from '../components/FindingTable'
-import { FindingDrawer } from '../components/FindingDrawer'
+import { FindingDrawer, DispositionModal } from '../components/FindingDrawer'
 import { AgentMultiSelect } from '../components/AgentMultiSelect'
 import type { Finding } from '../types'
 
@@ -13,6 +13,8 @@ export default function Findings() {
   // 不再读 scan?.findings(单 agent 旧路径)。selectedAgents 变化 → 重新拉取。
   const { findings, selectedAgents, setSelectedAgents, error, detectors, fetchDetectors, fetchFindings } = useStore()
   const [selected, setSelected] = useState<Finding | null>(null)
+  // Task 9:列表操作列「处置」按钮触发的弹框 finding(与抽屉 selected 独立,复用 DispositionModal)。
+  const [disposeFinding, setDisposeFinding] = useState<Finding | null>(null)
   useEffect(() => { fetchDetectors() }, [fetchDetectors])
   useEffect(() => { fetchFindings() }, [fetchFindings, selectedAgents])
 
@@ -28,6 +30,7 @@ export default function Findings() {
           findings={findings}
           detectors={detectors}
           onSelect={setSelected}
+          onDispose={setDisposeFinding}
         />
       )}
       <FindingDrawer
@@ -35,6 +38,11 @@ export default function Findings() {
         detectors={detectors}
         onClose={() => setSelected(null)}
       />
+      {/* Task 9:列表操作列触发的处置弹框(复用 FindingDrawer 导出的 DispositionModal)。
+          disposeFinding 为 null 时不渲染(弹框 open 始终 true,由挂载控制开关)。 */}
+      {disposeFinding ? (
+        <DispositionModal finding={disposeFinding} open={!!disposeFinding} onClose={() => setDisposeFinding(null)} />
+      ) : null}
     </div>
   )
 }
