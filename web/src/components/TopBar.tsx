@@ -87,7 +87,7 @@ export function TopBar({ onOpenRescan, loading }: Props) {
           unCheckedChildren={t('topbar.light')}
           aria-label={t('topbar.theme')}
         />
-        <Button type="primary" icon={<ReloadOutlined />} loading={loading} onClick={onOpenRescan} style={{ whiteSpace: 'nowrap' }}>
+        <Button icon={<ReloadOutlined />} loading={loading} onClick={onOpenRescan} style={{ whiteSpace: 'nowrap' }}>
           {loading ? t('topbar.scanning') : t('topbar.rescan')}
         </Button>
       </Space>

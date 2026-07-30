@@ -65,7 +65,7 @@ export function AssetDetailPanel({ asset, highlights, findings, detectors, agent
 
   return (
     <div className="asset-detail asset-detail-flow" style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
-      {/* ① 基本信息:资产名(左)+ 类型/scope 标签(名右)+ 「安全检查」按钮(最右,primary 配色同顶栏);
+      {/* ① 基本信息:资产名(左)+ 类型/scope 标签(名右)+ 「安全检查」按钮(最右,default 描边同顶栏);
           名下一行:资产文件路径(mono);再下一行:描述(若有)。 */}
       <header style={{ paddingBottom: 'var(--space-xl)' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', flexWrap: 'wrap' }}>
@@ -73,9 +73,9 @@ export function AssetDetailPanel({ asset, highlights, findings, detectors, agent
           {/* 类型 + scope 标签紧贴资产名右侧。 */}
           <Badge tone="neutral">{asset.type}</Badge>
           <Badge tone={`scope-${asset.scope}` as BadgeTone}>{scopeText}</Badge>
-          {/* 安全检查按钮:primary(accent 实色 + onAccent 字),与顶部导航栏安全检测按钮配色一致;
-              marginLeft:auto 推到行最右,与「资产详情」标题靠右对齐。 */}
-          <Button type="primary" size="small" style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }} onClick={openCheck}>{t('rescan.check')}</Button>
+          {/* 安全检查按钮:default 描边(accent hover),与顶部导航栏安全检查按钮一致;
+              之前 primary 实色在暗色下与主题色过近,改 default 提升暗色可见性。 */}
+          <Button size="small" style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }} onClick={openCheck}>{t('rescan.check')}</Button>
         </div>
         {/* 资产文件路径:名下一行,mono 小字 dim。 */}
         <Typography.Text style={{ display: 'block', marginTop: 'var(--space-xs)', fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', color: 'var(--color-dim)', wordBreak: 'break-all' }} title={asset.source_path}>{relativeClaudePath(asset.source_path)}</Typography.Text>
