@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/security"
 )
 
@@ -37,6 +38,8 @@ func (s *Server) getFindings(c *gin.Context) {
 			out = append(out, f)
 		}
 	}
+	states := s.loadStates()
+	security.ApplyFindingStateBatch(out, states, latest.StartedAt, assetSourcePathFromInventory(latest.Inventory))
 	c.JSON(http.StatusOK, attachCategory(out))
 }
 
@@ -49,16 +52,20 @@ func (s *Server) getFindingsAggregated(c *gin.Context, agentIDs []string) {
 	asset := c.Query("asset")
 	latestScans, _ := s.History.LatestForAgents(agentIDs)
 	out := []security.Finding{}
+	states := s.loadStates()
 	for _, id := range agentIDs {
 		rec, ok := latestScans[id]
 		if !ok || rec == nil {
 			continue
 		}
+		var batch []security.Finding
 		for _, f := range rec.Findings {
 			if (sev == "" || f.Severity == sev) && (asset == "" || f.AssetID == asset) {
-				out = append(out, f)
+				batch = append(batch, f)
 			}
 		}
+		security.ApplyFindingStateBatch(batch, states, rec.StartedAt, assetSourcePathFromInventory(rec.Inventory))
+		out = append(out, batch...)
 	}
 	c.JSON(http.StatusOK, attachCategory(out))
 }
@@ -127,4 +134,17 @@ func (s *Server) getHealthAggregated(c *gin.Context, agentIDs []string) {
 		"is_aggregate": true,
 		"agent_scores": scores,
 	})
+}
+
+// assetSourcePathFromInventory 从 ScanRecord.Inventory 快照构造 assetID→SourcePath 查找回调。
+// inventory 为 nil 时返回 nil(ApplyFindingStateBatch 跳过 SourcePath attach)。
+func assetSourcePathFromInventory(inv *configengine.Inventory) func(assetID string) string {
+	if inv == nil {
+		return nil
+	}
+	idx := make(map[string]string, len(inv.Assets))
+	for _, a := range inv.Assets {
+		idx[a.ID] = a.SourcePath
+	}
+	return func(assetID string) string { return idx[assetID] }
 }
