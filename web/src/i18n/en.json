@@ -181,7 +181,10 @@
     "scanDefaultInterval": "Default interval (fallback when no tasks)",
     "scanToggleHint": "When off, all agents' scheduled tasks pause; {{running}} agent(s) currently running. Per-agent enable/interval in the table below.",
     "guardTab": "Guard",
-    "allowlistTab": "Allowlist"
+    "allowlistTab": "Allowlist",
+    "interceptConfigTab": "Intercept Config",
+    "subRules": "Intercept Rules",
+    "subAllowlist": "Allowlist"
   },
   "guard": {
     "title": "Guard Config",

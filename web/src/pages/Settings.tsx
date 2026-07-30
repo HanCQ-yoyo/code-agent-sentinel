@@ -78,6 +78,8 @@ export default function Settings() {
   //   由 editingRule+drawerMode 控制。用户点 Edit/Fork → onEdit/onFork → 关 view 抽屉(若开着)+ 开 edit 抽屉。
   //   实际中用户点操作按钮前不会同时开两个抽屉(操作按钮在表格行内,行点击才开 view 抽屉),故无需显式互斥。
   const [ruleDomain, setRuleDomain] = useState<RuleDomain>('detect')
+  // Task 18:顶层 tab 受控,用于让拦截配置子 tab 内的操作强制 domain='intercept'。
+  const [activeTab, setActiveTab] = useState('agents')
   const [editingRule, setEditingRule] = useState<RuleDTO | null>(null)
   const [drawerMode, setDrawerMode] = useState<'view' | 'edit' | 'create'>('view')
 
@@ -94,6 +96,13 @@ export default function Settings() {
   // fork 成功:切到新 custom 规则的 edit 态(created 为新创建的 RuleDTO,source=custom、can_edit=true)。
   const handleForked = (created: RuleDTO) => { setEditingRule(created); setDrawerMode('edit') }
   const handleDrawerClose = () => { setEditingRule(null); setDrawerMode('view') }
+
+  // Task 18:拦截配置 tab 子 tab 内的规则操作:强制 domain='intercept'(与顶部 Segmented 解耦)。
+  // 顶部「扫描配置」tab 的 ruleDomain Segmented 仍保留 detect/intercept 切换;拦截配置子 tab 固定 intercept 域,
+  // 故此处 wrapper 在调用既有 handler 前先把 ruleDomain 置为 'intercept',使共享 RuleDrawer(domain={ruleDomain})在拦截域打开。
+  const handleInterceptCreate = () => { setRuleDomain('intercept'); handleCreate() }
+  const handleInterceptEdit = (r: RuleDTO) => { setRuleDomain('intercept'); handleEdit(r) }
+  const handleInterceptFork = (r: RuleDTO) => { setRuleDomain('intercept'); handleFork(r) }
 
   const detectorsAndRules = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -141,18 +150,39 @@ export default function Settings() {
     </div>
   )
 
+  // Task 18:拦截配置 tab:合并原「拦截配置」(SettingsGuard)+「放行清单」(SettingsAllowlist)两个顶层 tab。
+  // 子 tab 上方放拦截总开关 + 高级按钮(Task 19)。两个子 tab:拦截规则(复用 RulesTable domain=intercept)/ 白名单(SettingsAllowlist)。
+  // Task 19 注:总开关 + 高级弹框插在子 Tabs 上方,本任务先搭子 tab 结构,总开关在 Task 19 加。
+  // SettingsGuard(5 字段全量 form)原在 guard tab,合并后被移除——Task 19 把它的字段搬进高级弹框(故 import 暂留)。
+  const interceptConfig = (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <Tabs
+        items={[
+          { key: 'intercept-rules', label: t('settings.subRules'), children: (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Button type="primary" onClick={handleInterceptCreate}>{t('rulesManage.create')}</Button>
+              </div>
+              <RulesTable domain="intercept" onEdit={handleInterceptEdit} onFork={handleInterceptFork} />
+            </div>
+          ) },
+          { key: 'allowlist', label: t('settings.subAllowlist'), children: <SettingsAllowlist /> },
+        ]}
+      />
+    </div>
+  )
+
   const items = [
     { key: 'agents', label: t('settings.agentsTab'), children: <SettingsAgents /> },
     { key: 'schedules', label: t('settings.schedulesTab'), children: <SettingsSchedules /> },
     { key: 'detectors-rules', label: t('settings.rulesConfig'), children: detectorsAndRules },
-    // Stage R3 Task 12:Guard 运行时拦截配置 + 放行清单编辑面板。
-    { key: 'guard', label: t('settings.guardTab'), children: <SettingsGuard /> },
-    { key: 'allowlist', label: t('settings.allowlistTab'), children: <SettingsAllowlist /> },
+    // 拦截配置(合并原 guard + allowlist 两个 tab):拦截规则子 tab + 白名单子 tab。
+    { key: 'intercept-config', label: t('settings.interceptConfigTab'), children: interceptConfig },
   ]
 
   return (
     <div>
-      <Tabs items={items} />
+      <Tabs items={items} activeKey={activeTab} onChange={setActiveTab} />
     </div>
   )
 }

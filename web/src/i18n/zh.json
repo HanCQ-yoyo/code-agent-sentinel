@@ -181,7 +181,10 @@
     "scanDefaultInterval": "默认间隔(无任务时回退)",
     "scanToggleHint": "关闭后所有 agent 的定时任务暂停;当前 {{running}} 个 agent 在跑。单个 agent 启停/间隔见下表。",
     "guardTab": "拦截配置",
-    "allowlistTab": "放行清单"
+    "allowlistTab": "放行清单",
+    "interceptConfigTab": "拦截配置",
+    "subRules": "拦截规则",
+    "subAllowlist": "白名单"
   },
   "guard": {
     "title": "拦截配置",
