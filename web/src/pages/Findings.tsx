@@ -42,9 +42,11 @@ export default function Findings() {
         onClose={() => setSelected(null)}
       />
       {/* Task 9:列表操作列触发的处置弹框(复用 FindingDrawer 导出的 DispositionModal)。
-          disposeFinding 为 null 时不渲染(弹框 open 始终 true,由挂载控制开关)。 */}
+          disposeFinding 为 null 时不渲染(弹框 open 始终 true,由挂载控制开关)。
+          key={disposeFinding.fingerprint} 对齐 Drawer 路径(FindingDrawer L266):强制在 finding
+          切换时重挂载,防 useState(status/priority/note) 残留上一 finding 的脏 state。 */}
       {disposeFinding ? (
-        <DispositionModal finding={disposeFinding} open={!!disposeFinding} onClose={() => setDisposeFinding(null)} />
+        <DispositionModal key={disposeFinding.fingerprint} finding={disposeFinding} open={!!disposeFinding} onClose={() => setDisposeFinding(null)} />
       ) : null}
     </div>
   )
