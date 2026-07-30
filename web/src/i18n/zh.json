@@ -147,7 +147,14 @@
     "confirmAddBlocklist": "确认以此命令新建拦截规则?",
     "confirmAddAllowlist": "确认将此命令加入放行名单?",
     "addedToBlocklist": "已加入拦截名单",
-    "addedToAllowlist": "已加入放行名单"
+    "addedToAllowlist": "已加入放行名单",
+    "outcomeLabel": "决策",
+    "severityLabel": "严重度",
+    "confidenceLabel": "置信度",
+    "ruleBgTitle": "规则背景",
+    "packId": "规则包",
+    "envTitle": "执行环境",
+    "protocol": "协议"
   },
   "settings": {
     "binaryPath": "二进制路径",

@@ -147,7 +147,14 @@
     "confirmAddBlocklist": "Create an intercept rule for this command?",
     "confirmAddAllowlist": "Add this command to the allowlist?",
     "addedToBlocklist": "Added to blocklist",
-    "addedToAllowlist": "Added to allowlist"
+    "addedToAllowlist": "Added to allowlist",
+    "outcomeLabel": "Decision",
+    "severityLabel": "Severity",
+    "confidenceLabel": "Confidence",
+    "ruleBgTitle": "Rule Context",
+    "packId": "Rule Pack",
+    "envTitle": "Execution Env",
+    "protocol": "Protocol"
   },
   "settings": {
     "binaryPath": "Binary path",

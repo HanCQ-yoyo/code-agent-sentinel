@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Card, Table, Tag, Drawer, Select, Button, Space, Tooltip, Empty, Spin, Popconfirm, Typography, message, Modal, Input } from 'antd'
+import { Card, Table, Tag, Drawer, Select, Button, Space, Tooltip, Empty, Spin, Popconfirm, Typography, message, Modal, Input, Form } from 'antd'
 import { ReloadOutlined, DeleteOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { useTranslation } from 'react-i18next'
@@ -196,77 +196,73 @@ export default function Intercept() {
       <Drawer
         open={open}
         onClose={() => setOpen(false)}
-        width={560}
+        width={720}
         title={t('intercept.detail')}
         destroyOnClose
       >
         {loadingDetail ? <Spin style={{ display: 'block', margin: '40px auto' }} /> : detail && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-            <div>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('intercept.command')}</Typography.Text>
-              <pre style={{ background: 'var(--surface-2)', padding: 8, borderRadius: 4, fontSize: 12, fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: '4px 0 0' }}>
+          <Form layout="vertical">
+            {/* 时间最上方 */}
+            <Form.Item label={t('intercept.time')}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{formatDateTime(detail.timestamp)}</span>
+            </Form.Item>
+            {/* 命令独立行(文字多,独占) */}
+            <Form.Item label={t('intercept.command')}>
+              <pre style={{ background: 'var(--surface-2)', padding: 8, borderRadius: 4, fontSize: 12, fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}>
                 {detail.command}
               </pre>
+            </Form.Item>
+            {/* 决策 + 严重度 + 置信度(三列同行,重要度高) */}
+            <div style={{ display: 'flex', gap: 16 }}>
+              <Form.Item label={t('intercept.outcomeLabel', { defaultValue: '决策' })} style={{ flex: 1 }}>
+                <Tag color={outcomeColor[detail.outcome] ?? 'default'}>{detail.outcome}</Tag>
+              </Form.Item>
+              <Form.Item label={t('intercept.severityLabel', { defaultValue: '严重度' })} style={{ flex: 1 }}>
+                {detail.severity ? <Tag>{detail.severity}</Tag> : <Typography.Text type="secondary">—</Typography.Text>}
+              </Form.Item>
+              <Form.Item label={t('intercept.confidenceLabel', { defaultValue: '置信度' })} style={{ flex: 1 }}>
+                {detail.confidence ? <Tag color={confidenceColor[detail.confidence] ?? 'default'}>{detail.confidence}</Tag> : <Typography.Text type="secondary">—</Typography.Text>}
+              </Form.Item>
             </div>
-            <div>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('intercept.outcome')}</Typography.Text>
-              <div style={{ marginTop: 4 }}><Tag color={outcomeColor[detail.outcome] ?? 'default'}>{detail.outcome}</Tag></div>
-            </div>
-            {detail.reason && (
-              <div>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('intercept.reason')}</Typography.Text>
-                <Typography.Paragraph style={{ margin: '4px 0 0' }}>{detail.reason}</Typography.Paragraph>
-              </div>
-            )}
-            {detail.rule_id && (
-              <div>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('intercept.rule')}</Typography.Text>
-                <div style={{ marginTop: 4 }}><Typography.Text code>{detail.rule_id}</Typography.Text></div>
-              </div>
-            )}
-            {detail.severity && (
-              <div>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('intercept.severity')}</Typography.Text>
-                <div style={{ marginTop: 4 }}><Tag>{detail.severity}</Tag></div>
-              </div>
-            )}
-            {detail.confidence && (
-              <div>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('intercept.confidence')}</Typography.Text>
-                <div style={{ marginTop: 4 }}>
-                  <Tag color={confidenceColor[detail.confidence] ?? 'default'}>{detail.confidence}</Tag>
-                </div>
-              </div>
-            )}
-            {detail.matched_span && (
-              <div>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('intercept.matchedSpan')}</Typography.Text>
-                <pre style={{ background: 'var(--surface-2)', padding: 8, borderRadius: 4, fontSize: 12, fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: '4px 0 0' }}>
+            {/* 原因(文字可能多,独立行) */}
+            {detail.reason ? (
+              <Form.Item label={t('intercept.reason')}>
+                <Typography.Paragraph style={{ margin: 0 }}>{detail.reason}</Typography.Paragraph>
+              </Form.Item>
+            ) : null}
+            {/* 命中片段(命令级背景,独立行) */}
+            {detail.matched_span ? (
+              <Form.Item label={t('intercept.matchedSpan')}>
+                <pre style={{ background: 'var(--surface-2)', padding: 8, borderRadius: 4, fontSize: 12, fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}>
                   {detail.matched_span}
                 </pre>
-              </div>
-            )}
-            {detail.working_dir && (
-              <div>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('intercept.cwd')}</Typography.Text>
-                <div style={{ marginTop: 4 }}><Typography.Text code style={{ fontSize: 11 }}>{detail.working_dir}</Typography.Text></div>
-              </div>
-            )}
-            {detail.session_id && (
-              <div>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('intercept.session')}</Typography.Text>
-                <div style={{ marginTop: 4 }}><Typography.Text code style={{ fontSize: 11 }}>{detail.session_id}</Typography.Text></div>
-              </div>
-            )}
-            {detail.tool_name && (
-              <div>
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('intercept.tool')}</Typography.Text>
-                <div style={{ marginTop: 4 }}><Typography.Text code>{detail.tool_name}</Typography.Text></div>
-              </div>
-            )}
-            <div>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('intercept.duration')}</Typography.Text>
-              <div style={{ marginTop: 4, fontFamily: 'var(--font-mono)', fontSize: 12 }}>{detail.eval_duration_us}μs</div>
+              </Form.Item>
+            ) : null}
+            {/* 规则背景信息分组(rule_id/pack_id/tool_name) */}
+            <Typography.Title level={5} style={{ marginTop: 8 }}>{t('intercept.ruleBgTitle', { defaultValue: '规则背景' })}</Typography.Title>
+            <div style={{ display: 'flex', gap: 16 }}>
+              <Form.Item label={t('intercept.rule')} style={{ flex: 1 }}>
+                {detail.rule_id ? <Typography.Text code style={{ fontSize: 12 }}>{detail.rule_id}</Typography.Text> : <Typography.Text type="secondary">—</Typography.Text>}
+              </Form.Item>
+              <Form.Item label={t('intercept.packId', { defaultValue: '规则包' })} style={{ flex: 1 }}>
+                {detail.pack_id ? <Typography.Text code style={{ fontSize: 12 }}>{detail.pack_id}</Typography.Text> : <Typography.Text type="secondary">—</Typography.Text>}
+              </Form.Item>
+              <Form.Item label={t('intercept.tool')} style={{ flex: 1 }}>
+                {detail.tool_name ? <Typography.Text code>{detail.tool_name}</Typography.Text> : <Typography.Text type="secondary">—</Typography.Text>}
+              </Form.Item>
+            </div>
+            {/* 执行环境(working_dir/session_id/agent_protocol) */}
+            <Typography.Title level={5}>{t('intercept.envTitle', { defaultValue: '执行环境' })}</Typography.Title>
+            <Form.Item label={t('intercept.cwd')}>
+              {detail.working_dir ? <Typography.Text code style={{ fontSize: 11 }}>{detail.working_dir}</Typography.Text> : <Typography.Text type="secondary">—</Typography.Text>}
+            </Form.Item>
+            <div style={{ display: 'flex', gap: 16 }}>
+              <Form.Item label={t('intercept.session')} style={{ flex: 1 }}>
+                {detail.session_id ? <Typography.Text code style={{ fontSize: 11 }}>{detail.session_id}</Typography.Text> : <Typography.Text type="secondary">—</Typography.Text>}
+              </Form.Item>
+              <Form.Item label={t('intercept.protocol', { defaultValue: '协议' })} style={{ flex: 1 }}>
+                {detail.agent_protocol ? <Typography.Text code style={{ fontSize: 11 }}>{detail.agent_protocol}</Typography.Text> : <Typography.Text type="secondary">—</Typography.Text>}
+              </Form.Item>
             </div>
             <Popconfirm
               title={t('intercept.confirmDelete')}
@@ -275,11 +271,11 @@ export default function Intercept() {
               cancelText={t('common.cancel')}
               onConfirm={() => onDelete(detail.id)}
             >
-              <Button danger icon={<DeleteOutlined />} style={{ alignSelf: 'flex-start', marginTop: 8 }}>
+              <Button danger icon={<DeleteOutlined />} style={{ marginTop: 8 }}>
                 {t('intercept.delete')}
               </Button>
             </Popconfirm>
-          </div>
+          </Form>
         )}
       </Drawer>
       <Modal
