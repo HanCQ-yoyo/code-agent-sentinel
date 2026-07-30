@@ -95,8 +95,8 @@
     "colFindings": "Findings",
     "colRiskCount": "Risk Count",
     "colDetectors": "Detectors",
-    "colScope": "Scope",
-    "colScopePath": "Target",
+    "colScope": "Scan Scope",
+    "colScopePath": "Scan Target",
     "scope": {
       "global": "Global",
       "user": "User",
@@ -521,7 +521,7 @@
     "cancel": "Cancel",
     "hashChanged": "File was modified externally (during edit)",
     "hashChangedDesc": "Base hash mismatch; saving may overwrite others' changes. Please reload the asset before editing.",
-    "dangerous": "Dangerous changes detected",
+    "dangerous": "Dangerous change detected",
     "line": "(line {{line}})",
     "noChange": "(no changes)"
   },
