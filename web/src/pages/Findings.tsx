@@ -30,7 +30,10 @@ export default function Findings() {
           findings={findings}
           detectors={detectors}
           onSelect={setSelected}
-          onDispose={setDisposeFinding}
+          // 守卫:子进程检测器(gitleaks/govulncheck/npm-audit)的 finding 无 fingerprint,
+          // 不能写处置状态(会触发 setFindingState(undefined, ...) 致 POST/DELETE /api/finding-state/undefined)。
+          // 此处与 FindingDrawer 的 {finding.fingerprint ? <DispositionModal/> : ...} 守卫对齐。
+          onDispose={(f) => { if (f.fingerprint) setDisposeFinding(f) }}
         />
       )}
       <FindingDrawer
