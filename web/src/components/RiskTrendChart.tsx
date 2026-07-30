@@ -1,4 +1,4 @@
-import { Card, Empty } from 'antd'
+import { Card, Empty, Tooltip } from 'antd'
 import { useTranslation } from 'react-i18next'
 import type { ScanSummary } from '../types'
 import { formatDateTimeShort } from '../lib/format'
@@ -59,7 +59,7 @@ export function RiskTrendChart({ history }: { history: ScanSummary[] }) {
             <text x={4} y={y(v) + 4} fontSize={10} fill="var(--color-muted)">{v}</text>
           </g>
         ))}
-        {/* 每 agent 一条折线 + 点(带 <title> tooltip) */}
+        {/* 每 agent 一条折线 + 点(带 antd Tooltip 浮层:点用 r=8 透明命中区,线用首点信息) */}
         {agentIds.map((aid, i) => {
           const color = COLORS[i % COLORS.length]
           const pts = byAgent[aid]
@@ -67,11 +67,43 @@ export function RiskTrendChart({ history }: { history: ScanSummary[] }) {
           const label = agentMetaById(aid).label
           return (
             <g key={aid}>
-              <path d={line} fill="none" stroke={color} strokeWidth={2} />
+              {/* 线段 hover:整条 path 包一个 Tooltip(title 取首个点信息)。
+                  antd Tooltip 需单一可持 ref 子元素,单条 <path> 符合;cursor 指示可交互。 */}
+              <Tooltip
+                title={`${label} · ${formatDateTimeShort(pts[0].started_at)}: ${pts[0].health_score}`}
+              >
+                <path
+                  d={line}
+                  fill="none"
+                  stroke={color}
+                  strokeWidth={2}
+                  style={{ cursor: 'pointer' }}
+                  pointerEvents="all"
+                />
+              </Tooltip>
+              {/* 圆点:可见小圆 r=3(不抢 hover) + Tooltip 包透明大圆 r=8(放大命中区,作为 Tooltip 单一子元素)。 */}
               {pts.map((p) => (
-                <circle key={p.id} cx={xOf(p.started_at)} cy={y(p.health_score)} r={3} fill={color}>
-                  <title>{`${label} · ${formatDateTimeShort(p.started_at)}: ${p.health_score}`}</title>
-                </circle>
+                <g key={p.id}>
+                  <circle
+                    cx={xOf(p.started_at)}
+                    cy={y(p.health_score)}
+                    r={3}
+                    fill={color}
+                    pointerEvents="none"
+                  />
+                  <Tooltip
+                    title={`${label} · ${formatDateTimeShort(p.started_at)}: ${p.health_score}`}
+                  >
+                    <circle
+                      cx={xOf(p.started_at)}
+                      cy={y(p.health_score)}
+                      r={8}
+                      fill="transparent"
+                      style={{ cursor: 'pointer' }}
+                      pointerEvents="all"
+                    />
+                  </Tooltip>
+                </g>
               ))}
             </g>
           )
