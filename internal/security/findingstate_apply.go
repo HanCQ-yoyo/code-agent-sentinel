@@ -3,7 +3,11 @@
 // (findingstate → security → findingstate)。与原 suppression_apply.go 同构。
 package security
 
-import "code-agent-sentinel/internal/security/findingstate"
+import (
+	"time"
+
+	"code-agent-sentinel/internal/security/findingstate"
+)
 
 // applyFindingState 将处置生命周期状态合并到单条 Finding。
 //
@@ -37,5 +41,24 @@ func applyFindingState(f *Finding, fp string, states *findingstate.States) {
 		f.Suppression = "state"
 	case findingstate.StatusInProgress:
 		// 仍可见,不设 Suppressed;健康分靠 Status 取 0.5
+	}
+}
+
+// ApplyFindingStateBatch 对一批 finding 做读路径统一处理:
+//  1. 调 applyFindingState 把 finding_states.yaml 的处置状态合并进每条 finding(含 resolved/false_positive → Suppressed)。
+//  2. 附 StartedAt(来自所属 ScanRecord)。
+//  3. 附 SourcePath(通过 assetSourcePath 回调按 AssetID 查 ScanRecord.Inventory 快照)。
+//
+// 与 rules_detector.go 扫描路径用同一 applyFindingState,保证读路径与扫描路径语义一致。
+// states 为 nil 安全(applyFindingState 内部降级 Status="open")。assetSourcePath 为 nil 时跳过 SourcePath。
+// 用于 API 读路径(/api/findings),使处置后列表立即反映已抑制状态,无需重扫。
+func ApplyFindingStateBatch(findings []Finding, states *findingstate.States, startedAt time.Time, assetSourcePath func(assetID string) string) {
+	for i := range findings {
+		f := &findings[i]
+		applyFindingState(f, f.Fingerprint, states)
+		f.StartedAt = startedAt
+		if assetSourcePath != nil {
+			f.SourcePath = assetSourcePath(f.AssetID)
+		}
 	}
 }
