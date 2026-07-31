@@ -47,8 +47,17 @@ func syncBuiltinRules(db *storage.DB) {
 	if _, err := storage.SyncBuiltin(db, storage.DomainDetect, builtinStored, builtinComboStored, ruleEngineVersion); err != nil {
 		fmt.Fprintf(os.Stderr, "同步 builtin 检测规则失败: %v\n", err)
 	}
-	// intercept 域:同一份 builtin 规则(运行时拦截共用检测规则定义),combos 传 nil。
-	if _, err := storage.SyncBuiltin(db, storage.DomainIntercept, builtinStored, nil, ruleEngineVersion); err != nil {
+	// intercept 域:只同步 destructive_commands.yaml 的规则(运行时拦截只用破坏性命令规则)。
+	// baseline/injection/skill 等检测规则不进拦截表。combos 传 nil(guard 不消费 combo)。
+	// SyncBuiltin 的 deleteStaleBuiltin 会清掉 intercept 表里不在本批的旧 builtin 行
+	// (从「全量 builtin」改成「只 destructive」的一次性数据收敛:研发阶段接受)。
+	interceptBuiltin, _, _ := ruleengine.LoadInterceptBuiltin()
+	interceptStored, err := rulesToStoredRules(interceptBuiltin, ruleEngineVersion)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "转换 intercept builtin 规则失败,跳过同步: %v\n", err)
+		return
+	}
+	if _, err := storage.SyncBuiltin(db, storage.DomainIntercept, interceptStored, nil, ruleEngineVersion); err != nil {
 		fmt.Fprintf(os.Stderr, "同步 builtin 拦截规则失败: %v\n", err)
 	}
 }

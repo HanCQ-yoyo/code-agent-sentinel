@@ -12,6 +12,21 @@
 
 ---
 
+## 拦截规则表收敛到 destructive_commands.yaml
+
+- **合入日期**:2026-07-31(直接在 main 修复)
+- **合入 SHA**:`6af6593`(main)
+
+### 修复
+
+- **拦截域只加载破坏性命令规则**:此前 `syncBuiltinRules` 给 intercept 域同步了与 detect 域相同的**全部** builtin 规则(baseline/injection/skill/destructive),导致运行时拦截表混入检测规则;`sentinel guard` 的 fail-open 回退路径(`LoadBuiltin`)同样加载全部。修复:新增 `ruleengine.LoadInterceptBuiltin()` 只读 `rules/destructive_commands.yaml`(190 条 `destructive.*` 规则),`syncBuiltinRules` 给 intercept 域改用它,guard 回退路径同步改用。detect 域不受影响(仍加载全部 builtin 做静态扫描);用户自定义拦截规则(`/api/intercept-rules`)不受影响(`SyncBuiltin` 只清 source=builtin 的 stale 行,不碰 custom)。已部署 db 下次启动由 `deleteStaleBuiltin` 自动收敛(257 → 190,一次性数据影响,研发阶段接受)。
+
+### 已知限制
+
+- 纯后端规则加载路径修复,不改 API 契约、不改 db schema、不改前端。
+
+---
+
 ## UI 设计一致性修复(token 收敛 / 详情表单 / 按钮规范 / 字号统一)
 
 - **合入日期**:2026-07-31(分支 `feat/ui-consistency-fix`)

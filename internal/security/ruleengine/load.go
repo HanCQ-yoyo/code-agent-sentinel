@@ -46,6 +46,25 @@ func LoadBuiltin() (rules []Rule, combos []ComboRule, errs []RuleLoadError) {
 	return rules, combos, errs
 }
 
+// LoadInterceptBuiltin 只加载 destructive_commands.yaml(运行时拦截 builtin 规则来源)。
+//
+// 拦截域只该用破坏性命令规则(destructive.git.* / destructive.filesystem.* 等),
+// baseline/injection/skill 等检测规则不进拦截表。syncBuiltinRules 用本函数给 intercept
+// 域同步 builtin 行,确保拦截规则表只含拦截规则。
+//
+// 只读 embed 内的 rules/destructive_commands.yaml 单文件(Source 标 "builtin"),
+// 不做 Validate(Validate 在 LoadInterceptRules 统一执行)。combos 恒为 nil
+// (guard 不消费 combo 规则,见 db_init.go syncBuiltinRules 注释)。
+func LoadInterceptBuiltin() (rules []Rule, combos []ComboRule, errs []RuleLoadError) {
+	const path = "rules/destructive_commands.yaml"
+	data, err := builtinRuleFS.ReadFile(path)
+	if err != nil {
+		return nil, nil, []RuleLoadError{{Source: "builtin:" + path, Reason: fmt.Sprintf("read: %v", err)}}
+	}
+	parsed, _, parseErrs := parseRuleYAML(data, "builtin")
+	return parsed, nil, parseErrs
+}
+
 // LoadDir 从目录加载 *.yaml 规则文件。目录不存在返回 (nil, nil, nil)。
 // source 是来源前缀("global"/"project"),每条规则 Source = source + ":" + 文件路径。
 // 仅解析 YAML,不做 Validate。

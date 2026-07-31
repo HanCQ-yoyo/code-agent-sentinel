@@ -3,6 +3,7 @@ package ruleengine
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"code-agent-sentinel/internal/configengine"
@@ -80,6 +81,31 @@ func TestLoadDetectRulesRespectsDisabledOverride(t *testing.T) {
 		if r.ID == first.ID {
 			t.Fatalf("disabled rule %s still present", first.ID)
 		}
+	}
+}
+
+// TestLoadInterceptBuiltinOnlyDestructive 验证拦截域的 builtin 规则只来自
+// destructive_commands.yaml(即 id 前缀为 "destructive." 的规则)。
+//
+// 背景:运行时拦截(guard)只该用破坏性命令规则;baseline/injection/skill 等检测规则
+// 不应进拦截表。LoadInterceptBuiltin 是 syncBuiltinRules 给 intercept 域同步用的来源,
+// 必须只返回 destructive 文件的规则,而非 LoadBuiltin 的全部。
+func TestLoadInterceptBuiltinOnlyDestructive(t *testing.T) {
+	rules, _, errs := LoadInterceptBuiltin()
+	if len(errs) != 0 {
+		t.Fatalf("errs = %+v", errs)
+	}
+	if len(rules) == 0 {
+		t.Fatal("expected destructive builtin rules loaded")
+	}
+	for _, r := range rules {
+		if !strings.HasPrefix(r.ID, "destructive.") {
+			t.Fatalf("intercept builtin 含非 destructive 规则: %s(只该有 destructive_commands.yaml 的规则)", r.ID)
+		}
+	}
+	// destructive_commands.yaml 有 190 条规则(见规则文件);拦截 builtin 应等于该数。
+	if len(rules) != 190 {
+		t.Fatalf("intercept builtin 规则数 = %d,期望 190(destructive_commands.yaml 全量)", len(rules))
 	}
 }
 

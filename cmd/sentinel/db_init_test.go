@@ -3,6 +3,7 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"code-agent-sentinel/internal/storage"
@@ -135,6 +136,55 @@ func TestSyncBuiltinRulesPopulatesBothDomains(t *testing.T) {
 	detectRules2, _ := storage.ListRules(db, storage.DomainDetect)
 	if len(detectRules2) != len(detectRules) {
 		t.Fatalf("幂等同步不应改变行数: first=%d second=%d", len(detectRules), len(detectRules2))
+	}
+}
+
+// TestSyncBuiltinRulesInterceptOnlyDestructive 验证 intercept 域只含 destructive 规则。
+//
+// 方案 2:拦截规则表只该含拦截规则(destructive_commands.yaml)。syncBuiltinRules 给
+// intercept 域同步的 builtin 行必须只有 destructive.* 规则,baseline/injection/skill 等
+// 检测规则不进拦截表。detect 域仍同步全部 builtin(扫描用)。
+func TestSyncBuiltinRulesInterceptOnlyDestructive(t *testing.T) {
+	home := t.TempDir()
+	dbPath := filepath.Join(home, "sentinel.db")
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer db.Close()
+	if err := storage.RunMigrations(db); err != nil {
+		t.Fatalf("RunMigrations: %v", err)
+	}
+
+	syncBuiltinRules(db)
+
+	interceptRules, err := storage.ListRules(db, storage.DomainIntercept)
+	if err != nil {
+		t.Fatalf("ListRules intercept: %v", err)
+	}
+	if len(interceptRules) == 0 {
+		t.Fatal("intercept 域应含 destructive builtin 规则")
+	}
+	for _, r := range interceptRules {
+		if !strings.HasPrefix(r.ID, "destructive.") {
+			t.Fatalf("intercept 域含非 destructive 规则: %s(只该有 destructive_commands.yaml 的规则)", r.ID)
+		}
+	}
+
+	// detect 域仍应有非 destructive 规则(baseline/injection 等检测规则仍在)。
+	detectRules, err := storage.ListRules(db, storage.DomainDetect)
+	if err != nil {
+		t.Fatalf("ListRules detect: %v", err)
+	}
+	hasNonDestructive := false
+	for _, r := range detectRules {
+		if !strings.HasPrefix(r.ID, "destructive.") {
+			hasNonDestructive = true
+			break
+		}
+	}
+	if !hasNonDestructive {
+		t.Fatal("detect 域应仍含非 destructive 检测规则(baseline/injection 等),不该被收窄")
 	}
 }
 

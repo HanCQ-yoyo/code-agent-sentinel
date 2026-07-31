@@ -56,8 +56,8 @@ func runGuardWithDB(stdin io.Reader, stdout, stderr io.Writer, cfg *config.Confi
 }
 
 // dbWithInterceptBuiltin 构造一个已同步 builtin 拦截规则的 db(返回路径,db 已 Close)。
-// 把全部 builtin 规则 SyncBuiltin 进 intercept 域(Task 10 起用户自定义规则才独立同步,
-// 这里复用 builtin 作拦截规则源,验证 guard 能从 db 读到 rm -rf 拦截规则)。
+// 与生产 syncBuiltinRules 对齐:intercept 域只同步 destructive_commands.yaml 的规则
+// (LoadInterceptBuiltin),验证 guard 能从 db 读到 rm -rf 拦截规则。
 func dbWithInterceptBuiltin(t *testing.T) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "guard.db")
@@ -69,7 +69,7 @@ func dbWithInterceptBuiltin(t *testing.T) string {
 	if err := storage.RunMigrations(db); err != nil {
 		t.Fatal(err)
 	}
-	builtin, _, _ := ruleengine.LoadBuiltin()
+	builtin, _, _ := ruleengine.LoadInterceptBuiltin()
 	stored := make([]storage.StoredRule, 0, len(builtin))
 	for _, r := range builtin {
 		s, err := ruleengine.RuleToStoredRule(r, "builtin", "v1")
@@ -136,6 +136,21 @@ func TestGuardAllowSafeCommand(t *testing.T) {
 	stdout, _ := runGuardForTest(t, stdin, nil)
 	if stdout != "" {
 		t.Fatalf("ls -la 应 allow(空 stdout), got %q", stdout)
+	}
+}
+
+// TestGuardFallbackOnlyDestructiveRules 验证 db 不可用时的 fail-open 回退只加载
+// destructive 规则,不加载 baseline/injection 等检测规则。
+//
+// `base64 -d 'AAA...'`(40+ base64 字符 + 引号)只命中 baseline.dangerous-hook
+// 这条非 destructive 规则(引号触发混淆字符,绕过 quick-reject 进精检)。
+// 回退若仍加载全部 builtin(LoadBuiltin)→ 这条会 ask;只加载 destructive → allow。
+// 方案 2:拦截规则(含回退路径)只该用 destructive_commands.yaml 的规则。
+func TestGuardFallbackOnlyDestructiveRules(t *testing.T) {
+	stdin := `{"tool_input":{"command":"echo result | base64 -d 'AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'"}}`
+	stdout, _ := runGuardForTest(t, stdin, nil)
+	if stdout != "" {
+		t.Fatalf("回退只加载 destructive 规则,base64 载荷(只命中 baseline.dangerous-hook)应 allow(空 stdout), got %q", stdout)
 	}
 }
 

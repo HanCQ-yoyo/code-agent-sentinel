@@ -151,8 +151,10 @@ func runGuard(stdin io.Reader, stdout, stderr io.Writer, cfg *config.Config, hom
 		}
 	}
 	if len(rules) == 0 {
-		// fail-open 回退 builtin(db 无/打不开/读空 → 用 embed 规则,不致检测失效)
-		rules, _, loadErrs = ruleengine.LoadBuiltin()
+		// fail-open 回退 builtin(db 无/打不开/读空 → 用 embed 规则,不致检测失效)。
+		// 只加载 destructive_commands.yaml:拦截只该用破坏性命令规则,与 db 路径
+		// (LoadInterceptRules 只读 intercept 域,而 intercept 域只同步了 destructive)对齐。
+		rules, _, loadErrs = ruleengine.LoadInterceptBuiltin()
 		if debug {
 			fmt.Fprintf(stderr, "guard fallback to builtin (db unavailable)\n")
 		}
