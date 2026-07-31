@@ -1,4 +1,4 @@
-import { Routes, Route, useLocation } from 'react-router-dom'
+import { Routes, Route, Navigate, useLocation } from 'react-router-dom'
 import { useEffect } from 'react'
 import { ConfigProvider, Layout } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
@@ -9,7 +9,11 @@ import Assets from './pages/Assets'
 import Findings from './pages/Findings'
 import History from './pages/History'
 import Intercept from './pages/Intercept'
-import Settings from './pages/Settings'
+import GeneralSettings from './pages/settings/GeneralSettings'
+import ScanConfig from './pages/settings/ScanConfig'
+import ScanRules from './pages/settings/ScanRules'
+import InterceptConfig from './pages/settings/InterceptConfig'
+import InterceptRules from './pages/settings/InterceptRules'
 import AssetDetail from './components/AssetDetail'
 import { AuthGate } from './components/AuthGate'
 import { Sidebar } from './components/Sidebar'
@@ -51,7 +55,12 @@ export default function App() {
                 <Route path="/history" element={<History />} />
                 <Route path="/history/:id" element={<History />} />
                 <Route path="/intercept" element={<Intercept />} />
-                <Route path="/settings" element={<Settings />} />
+                <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
+                <Route path="/settings/general" element={<GeneralSettings />} />
+                <Route path="/settings/scan-config" element={<ScanConfig />} />
+                <Route path="/settings/scan-rules" element={<ScanRules />} />
+                <Route path="/settings/intercept-config" element={<InterceptConfig />} />
+                <Route path="/settings/intercept-rules" element={<InterceptRules />} />
                 <Route path="*" element={<div className="text-text-muted">页面不存在</div>} />
               </Routes>
             </Content>

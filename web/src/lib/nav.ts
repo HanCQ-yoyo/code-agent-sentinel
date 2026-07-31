@@ -4,7 +4,17 @@
 export interface NavItem {
   path: string
   label: string
+  children?: NavItem[]  // 新增: 侧栏嵌套子菜单
 }
+
+// 设置页 5 子项(route key 不含 domain 前缀,与旧 RuleDomain 解耦)
+export const SETTINGS_SUB: NavItem[] = [
+  { path: '/settings/general', label: 'nav.sub.general' },
+  { path: '/settings/scan-config', label: 'nav.sub.scanConfig' },
+  { path: '/settings/scan-rules', label: 'nav.sub.scanRules' },
+  { path: '/settings/intercept-config', label: 'nav.sub.interceptConfig' },
+  { path: '/settings/intercept-rules', label: 'nav.sub.interceptRules' },
+]
 
 export const navItems: NavItem[] = [
   { path: '/dashboard', label: 'nav.dashboard' },
@@ -12,10 +22,10 @@ export const navItems: NavItem[] = [
   { path: '/findings', label: 'nav.findings' },
   { path: '/history', label: 'nav.history' },
   { path: '/intercept', label: 'nav.intercept' },
-  { path: '/settings', label: 'nav.settings' },
+  { path: '/settings', label: 'nav.settings', children: SETTINGS_SUB },
 ]
 
 // route → i18n key(侧栏 label 查找;消费者需 t() 翻译)。
 export const navLabels: Record<string, string> = Object.fromEntries(
-  navItems.map((i) => [i.path, i.label]),
+  [...navItems, ...SETTINGS_SUB].map((i) => [i.path, i.label]),
 )
