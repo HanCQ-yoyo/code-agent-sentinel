@@ -1,9 +1,8 @@
 import { useEffect } from 'react'
-import { Layout, Button, Switch, Space, Select, Breadcrumb } from 'antd'
+import { Layout, Button, Space, Breadcrumb } from 'antd'
 import { ReloadOutlined, HomeOutlined } from '@ant-design/icons'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
-import { useTheme } from '../theme'
 import { useStore } from '../store'
 import { navLabels } from '../lib/nav'
 
@@ -22,9 +21,8 @@ function leafLabel(pathname: string, t: (k: string) => string): string | null {
 }
 
 export function TopBar({ onOpenRescan, loading }: Props) {
-  const { theme, toggle } = useTheme()
-  const { t, i18n } = useTranslation()
-  const { agents, fetchAgents, language, saveLanguage } = useStore()
+  const { t } = useTranslation()
+  const { agents, fetchAgents } = useStore()
   const loc = useLocation()
 
   // 当前一级路由(用于面包屑首段)。navLabels 存 i18n key,需 t() 翻译。
@@ -63,30 +61,6 @@ export function TopBar({ onOpenRescan, loading }: Props) {
         <Breadcrumb items={crumbItems} />
       </Space>
       <Space size="middle">
-        <Select
-          value={i18n.language === 'zh' ? 'zh' : 'en'}
-          onChange={(v) => {
-            // 持久化双写:localStorage(i18n detection init 读取,刷新生效)+ 后端(跨重启/跨端口)。
-            // i18n.changeLanguage 在 detection caches:['localStorage'] 下也会写 localStorage,
-            // 但显式 setItem 与 saveLanguage 双保险,确保刷新与跨端口重启都不丢语言。
-            localStorage.setItem('sentinel.lang', v)
-            i18n.changeLanguage(v)
-            saveLanguage(v)
-          }}
-          aria-label={t('topbar.language')}
-          style={{ width: 96 }}
-          options={[
-            { value: 'zh', label: '中文' },
-            { value: 'en', label: 'English' },
-          ]}
-        />
-        <Switch
-          checked={theme === 'dark'}
-          onChange={toggle}
-          checkedChildren={t('topbar.dark')}
-          unCheckedChildren={t('topbar.light')}
-          aria-label={t('topbar.theme')}
-        />
         <Button icon={<ReloadOutlined />} loading={loading} onClick={onOpenRescan} style={{ whiteSpace: 'nowrap' }}>
           {loading ? t('topbar.scanning') : t('topbar.rescan')}
         </Button>
