@@ -15,7 +15,7 @@
 ## 拦截规则表收敛到 destructive_commands.yaml
 
 - **合入日期**:2026-07-31(直接在 main 修复)
-- **合入 SHA**:`6af6593`(main)
+- **合入 SHA**:`31397f0`(main)
 
 ### 修复
 
