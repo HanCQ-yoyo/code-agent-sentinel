@@ -50,7 +50,7 @@ export function RescanModal({ open, onClose, initialScope }: Props) {
       render: (id: string) => <Typography.Text type="secondary" style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }}>{id}</Typography.Text> },
     { title: t('rescan.colStatus'), dataIndex: 'scan_enabled', key: 'status', width: 80,
       render: (on: boolean) => on
-        ? <Tag color="green">{t('rescan.statusOn')}</Tag>
+        ? <Tag style={{ background: 'var(--sev-low-solid)', color: 'var(--badge-text)', border: 'none' }}>{t('rescan.statusOn')}</Tag>
         : <Tag>{t('rescan.statusOff')}</Tag> },
   ]
 

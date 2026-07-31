@@ -143,7 +143,7 @@ export function MatchNodeRow({
     return (
       <div style={{ borderLeft: '2px solid var(--border)', paddingLeft: 12, marginBottom: 8 }}>
         <Space style={{ marginBottom: 6 }}>
-          <Tag color={node.type === 'not' ? 'orange' : 'blue'}>{label}</Tag>
+          <Tag style={{ background: node.type === 'not' ? 'var(--sev-high-solid)' : 'var(--cat-1)', color: 'var(--badge-text)', border: 'none' }}>{label}</Tag>
           {!readOnly && (node.type === 'and' || node.type === 'or') && (
             <>
               <Button size="small" icon={<PlusOutlined />} onClick={() => onAddChild('leaf')}>{t('ruleForm.addCondition')}</Button>

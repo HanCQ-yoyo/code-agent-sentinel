@@ -52,7 +52,7 @@ export function SettingsAllowlist() {
       {/* 白名单启停状态:读 guardConfig.allowlist_enabled(开关在拦截配置 tab 高级弹框)。
           true=启用(绿 Tag)/ false=停用(灰 Tag)。只读展示,不改开关(避免与本组件保存逻辑耦合)。 */}
       <div style={{ marginBottom: 8 }}>
-        <Tag color={guardConfig?.allowlist_enabled ? 'green' : 'default'}>
+        <Tag style={guardConfig?.allowlist_enabled ? { background: 'var(--sev-low-solid)', color: 'var(--badge-text)', border: 'none' } : {}}>
           {guardConfig?.allowlist_enabled ? t('guard.allowlistOn', { defaultValue: '白名单已启用' }) : t('guard.allowlistOff', { defaultValue: '白名单已停用' })}
         </Tag>
       </div>
