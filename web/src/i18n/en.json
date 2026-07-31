@@ -190,7 +190,8 @@
     "subRules": "Intercept Rules",
     "subAllowlist": "Allowlist",
     "advanced": "Advanced",
-    "interceptPerAgentPlaceholder": "Per-agent intercept config will be supported in a future release. Currently all agents share the global guard configuration above."
+    "interceptPerAgentPlaceholder": "Per-agent intercept config will be supported in a future release. Currently all agents share the global guard configuration above.",
+    "personalization": "Personalization"
   },
   "guard": {
     "title": "Guard Config",

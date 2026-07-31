@@ -3,12 +3,14 @@ import { Card, Select, Table, Switch, Typography, Tooltip } from 'antd'
 import { InfoCircleOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../../store'
+import { useTheme } from '../../theme'
 import type { Agent } from '../../types'
 import { AgentIcon } from '../../components/AgentIcon'
 
 export default function GeneralSettings() {
   const { t, i18n } = useTranslation()
   const { agents, fetchAgents, saveAgentScanEnabled, language, saveLanguage } = useStore()
+  const { theme, toggle } = useTheme()
 
   useEffect(() => { if (!agents) fetchAgents() }, [agents, fetchAgents])
 
@@ -16,22 +18,39 @@ export default function GeneralSettings() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      {/* 语言选择 */}
-      <Card title={t('topbar.language')} size="small">
-        <Select
-          value={i18n.language === 'zh' ? 'zh' : 'en'}
-          onChange={(v) => {
-            localStorage.setItem('sentinel.lang', v)
-            i18n.changeLanguage(v)
-            saveLanguage(v)
-          }}
-          aria-label={t('topbar.language')}
-          style={{ width: 160 }}
-          options={[
-            { value: 'zh', label: '中文' },
-            { value: 'en', label: 'English' },
-          ]}
-        />
+      {/* 个性化配置: 主题 + 语言,标题在左控件在右 */}
+      <Card title={t('settings.personalization', { defaultValue: '个性化配置' })} size="small">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 'var(--fs-sm)' }}>{t('topbar.theme')}</span>
+            <Switch
+              size="small"
+              checked={theme === 'dark'}
+              onChange={toggle}
+              checkedChildren={t('topbar.dark')}
+              unCheckedChildren={t('topbar.light')}
+              aria-label={t('topbar.theme')}
+            />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+            <span style={{ fontSize: 'var(--fs-sm)' }}>{t('topbar.language')}</span>
+            <Select
+              value={i18n.language === 'zh' ? 'zh' : 'en'}
+              onChange={(v) => {
+                localStorage.setItem('sentinel.lang', v)
+                i18n.changeLanguage(v)
+                saveLanguage(v)
+              }}
+              aria-label={t('topbar.language')}
+              style={{ width: 120 }}
+              size="small"
+              options={[
+                { value: 'zh', label: '中文' },
+                { value: 'en', label: 'English' },
+              ]}
+            />
+          </div>
+        </div>
       </Card>
 
       {/* Code Agents(原 SettingsAgents 内容) */}
