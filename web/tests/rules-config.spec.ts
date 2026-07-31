@@ -27,32 +27,26 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
-// 导航到「扫描配置」tab 的公共步骤:带 token 进首页 → 点设置菜单 → 点「扫描配置」tab。
-async function gotoRulesConfig(page: import('@playwright/test').Page) {
-  await page.goto(`/#token=${TOKEN}`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('menuitem', { name: /设置/i }).click()
-  await page.getByRole('tab', { name: /扫描配置|Scan Config/ }).click()
+async function gotoScanRules(page: import('@playwright/test').Page) {
+  await page.goto(`/settings/scan-rules#token=${TOKEN}`, { waitUntil: 'domcontentloaded' })
+}
+async function gotoInterceptRules(page: import('@playwright/test').Page) {
+  await page.goto(`/settings/intercept-rules#token=${TOKEN}`, { waitUntil: 'domcontentloaded' })
 }
 
-test('拦截配置 tab 拦截规则子 tab 拉 intercept-rules', async ({ page }) => {
-  await page.goto(`/#token=${TOKEN}`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('menuitem', { name: /设置/i }).click()
-  // Settings Tabs 顺序:agents → schedules → detectors-rules(扫描配置)→ intercept-config(拦截配置)。
-  await page.getByRole('tab', { name: /拦截配置/ }).click()
-  // 拦截配置 tab 内两个子 tab:拦截规则 / 白名单。点「拦截规则」子 tab(t('settings.subRules')=「拦截规则」)。
-  // RulesTable(domain="intercept") 内部 useEffect 在 domain=intercept 时调 fetchInterceptRules → GET /api/intercept-rules。
+test('拦截规则页拉 intercept-rules', async ({ page }) => {
   const interceptResp = page.waitForResponse(
     (r) => r.url().includes('/api/intercept-rules') && r.request().method() === 'GET' && r.status() === 200,
     { timeout: 10000 },
   )
-  await page.getByRole('tab', { name: /拦截规则/ }).click()
+  await gotoInterceptRules(page)
   await interceptResp
-  // 拦截规则表格行可见(证明 intercept 域规则已加载)。
-  await expect(page.locator('.ant-table-row').filter({ visible: true }).first()).toBeVisible({ timeout: 10000 })
+  // InterceptRules 页:RulesTable domain="intercept" + SettingsAllowlist 渲染
+  await expect(page.locator('.ant-table-row').first()).toBeVisible({ timeout: 10000 })
 })
 
 test('禁用 builtin 检测规则后 Switch 反映 disabled', async ({ page }) => {
-  await gotoRulesConfig(page)
+  await gotoScanRules(page)
   await expect(page.locator('.ant-table-row').filter({ visible: true }).first()).toBeVisible({ timeout: 10000 })
 
   // 找一行 builtin 规则(来源列「内置」灰 Tag)。规则较多有分页,取首个可见 builtin 行。

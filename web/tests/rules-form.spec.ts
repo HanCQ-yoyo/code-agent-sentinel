@@ -41,15 +41,12 @@ test.beforeEach(async ({ page }) => {
   })
 })
 
-async function gotoRulesConfig(page: import('@playwright/test').Page) {
-  await page.goto(`/#token=${TOKEN}`, { waitUntil: 'domcontentloaded' })
-  await page.getByRole('menuitem', { name: /设置/i }).click()
-  // Task 17:tab 由「规则配置」改名「扫描配置」(settings.rulesConfig i18n)。
-  await page.getByRole('tab', { name: /扫描配置|Scan Config/ }).click()
+async function gotoScanRules(page: import('@playwright/test').Page) {
+  await page.goto(`/settings/scan-rules#token=${TOKEN}`, { waitUntil: 'domcontentloaded' })
 }
 
 test('create 新建单叶子规则保存后列表出现', async ({ page }) => {
-  await gotoRulesConfig(page)
+  await gotoScanRules(page)
   await expect(page.locator('.ant-table-row').filter({ visible: true }).first()).toBeVisible({ timeout: 10000 })
 
   // 点「新建规则」打开 create 抽屉。
@@ -100,7 +97,7 @@ test('create 新建单叶子规则保存后列表出现', async ({ page }) => {
 })
 
 test('view 内置规则 match 树渲染非纯 JSON', async ({ page }) => {
-  await gotoRulesConfig(page)
+  await gotoScanRules(page)
   await expect(page.locator('.ant-table-row').filter({ visible: true }).first()).toBeVisible({ timeout: 10000 })
 
   // 点首行 builtin 规则(来源「内置」)的行 → 打开 view 抽屉。
@@ -116,7 +113,7 @@ test('view 内置规则 match 树渲染非纯 JSON', async ({ page }) => {
 })
 
 test('builtin 规则 view 态只读标记与 Fork 入口', async ({ page }) => {
-  await gotoRulesConfig(page)
+  await gotoScanRules(page)
   await expect(page.locator('.ant-table-row').filter({ visible: true, hasText: '内置' }).first()).toBeVisible({ timeout: 10000 })
 
   // builtin 规则行点击 → 打开 view 抽屉(行 onClick 打开 view,非 edit)。
