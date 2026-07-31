@@ -12,6 +12,31 @@
 
 ---
 
+## UI 设计一致性修复(token 收敛 / 详情表单 / 按钮规范 / 字号统一)
+
+- **合入日期**:2026-07-31(分支 `feat/ui-consistency-fix`)
+- **合入 SHA**:`19fec4d`(main,fast-forward,10 commits,9 任务 SDD + 整支 review 1 Important 已修)
+
+### 升级
+
+- **token 体系收口**:补齐缺失的 `--scope-*`(global 青 / project 绿 / managed 黄 / plugin 紫)与 `--warn-bg`(命中行琥珀底)token;`.hit-line` 琥珀色去重改 token;收敛 10 个旧别名 token(`--bg` / `--text` / `--accent` 等)到新 `--color-*` 并删 `index.css` 别名块,后续维护只认 `--color-*` / `--fs-*`。
+- **配色统一到 OKLCH**:Badge 全量迁 `--color-*`,scope 色块浅深主题生效;antd 命名色 `<Tag color="blue/red/...">` 全部改为 inline style 引 token(`STATUS_COLOR` / `PRIORITY_COLOR` 存 token 字符串),消除与 Badge 的双轨配色;FindingDrawer 的 `TAG_HEX` 裸 hex + `#fff` 改 token。整支 review 补迁 3 处遗漏(MatchNodeRow 的 AND/OR/NOT 标签、RescanModal 扫描启用态、SettingsAllowlist 白名单启停态)。
+- **详情表单两列布局**:FindingDrawer 与 RuleDrawer view 态 `<Descriptions>` 由单列改 `column={2}`,短字段左右排、长内容字段(evidence / metadata / match 树等)`span={2}` 整行上下排,消除窄抽屉单列长表堆叠。
+- **按钮规范归一**:行内操作(表格 delete / edit / fork)统一 `type="text"` + 图标 + `aria-label`(仅图标);导航按钮加 `Arrow*Outlined`;RuleDrawer dashed `+` 号去冗余字面文本改 i18n;规范记入 `design.md` CTA voice。
+- **消除单按钮独占行**:SettingsSchedules「添加定时任务」并入总开关 Card `extra`;Findings 的 AgentMultiSelect 并入 `.filter-toolbar`(空态无条件渲染,保留切 agent 能力);Settings 保存配置并入检测器配置卡。
+- **字号统一**:79 处裸 `fontSize: 10/11/12/12.5/13/14/18` 迁移到 `--fs-*` token,同语义字号归一(RawFilePanel 标题 18 → 20 对齐 AssetDetailPanel;次级文字 12;微标签 11);antdTheme 全局 token 与 MonacoViewer API 数值豁免。
+
+### 修复
+
+- **Findings 空态切 agent 锁死**:Task 7 初版把 AgentMultiSelect 并入 FindingTable `toolbarPrefix`,因 FindingTable 仅在 `findings.length > 0` 时渲染,空态筛选器消失致选了零 finding 的 agent 后无法切回。修:回退 toolbarPrefix,Findings 无条件渲染 `.filter-toolbar` 内的 AgentMultiSelect。
+
+### 已知限制
+
+- 纯前端 token / 样式 / 布局改动,不碰 Go 后端,不改 API 契约与业务逻辑。
+- `design.md` 是本地 gitignored 文件,token 漂移回写与 CTA voice 规范仅本地留存,不进版本库。
+
+---
+
 ## 产品打磨(8 区域 UI/UX + 后端读路径修复)
 
 - **合入日期**:2026-07-30(分支 `feat/product-polish`)
