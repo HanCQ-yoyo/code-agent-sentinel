@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Card, Tabs, Switch, Input, Button, Segmented, Modal, InputNumber, Radio, Form, Space, Typography, Popconfirm } from 'antd'
+import { Card, Tabs, Switch, Input, Button, Modal, InputNumber, Radio, Form, Space, Typography, Popconfirm } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
 import type { DetectorMeta, DetectorsConfig, RuleDTO, RuleDomain, GuardConfig } from '../types'
@@ -116,6 +116,10 @@ export default function Settings() {
   const handleInterceptCreate = () => { setRuleDomain('intercept'); handleCreate() }
   const handleInterceptEdit = (r: RuleDTO) => { setRuleDomain('intercept'); handleEdit(r) }
   const handleInterceptFork = (r: RuleDTO) => { setRuleDomain('intercept'); handleFork(r) }
+  // 扫描配置 tab 的「新建规则」:显式落到 detect 域。ruleDomain 是与拦截 tab 共享的 state,
+  // 用户若先在拦截 tab 操作过(置 'intercept')再回扫描 tab 点新建,会误落到 intercept 域——
+  // 此处先 setRuleDomain('detect') 隔离,保证扫描 tab 新建始终是检测规则。
+  const handleDetectCreate = () => { setRuleDomain('detect'); handleCreate() }
 
   const detectorsAndRules = (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -129,21 +133,15 @@ export default function Settings() {
           if (!ok) { /* error 已由 wrap 写入 store.error */ }
         }} />
       ) : null}
-      {/* Task 17:域切换 Segmented(detect/intercept)+ 新建规则按钮。
-          RulesTable 按 ruleDomain 拉对应域规则;切换域时 RulesTable 内部 useEffect 重拉。
-          新建规则按钮:打开 create 模式抽屉(rule=null)。 */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-        <Segmented
-          value={ruleDomain}
-          onChange={(v) => setRuleDomain(v as RuleDomain)}
-          options={[
-            { label: t('rulesManage.detectRules'), value: 'detect' },
-            { label: t('rulesManage.interceptRules'), value: 'intercept' },
-          ]}
-        />
-        <Button type="primary" onClick={handleCreate}>{t('rulesManage.create')}</Button>
+      {/* 扫描配置 tab 只展示「检测规则」。拦截规则的查看/编辑收口到「拦截配置」tab。
+          builtin 检测规则与拦截规则同源(db_init.go 把同一份 builtin 灌进 detect/intercept 两表,
+          因 destructive 等规则双用:command 字段供运行时拦截 + 静态扫描 hook 资产,content/allow
+          字段仅供静态扫描)。故此处不再做检测/拦截切换,避免展示同一份 builtin 造成混淆。
+          新建规则显式落到 detect 域(handleDetectCreate),与拦截 tab 的 handleIntercept* 隔离。 */}
+      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+        <Button type="primary" onClick={handleDetectCreate}>{t('rulesManage.create')}</Button>
       </div>
-      <RulesTable domain={ruleDomain} onEdit={handleEdit} onFork={handleFork} />
+      <RulesTable domain="detect" onEdit={handleEdit} onFork={handleFork} />
       {/* edit/create 抽屉已提升到页面级(见 return),确保任意顶层 tab 下都能挂载:
           antd Tabs 默认卸载非活动 pane,若抽屉留在本(detectors-rules)tab 内,
           切到 intercept-config tab 时抽屉不挂载、handleIntercept* 打不开抽屉。 */}
