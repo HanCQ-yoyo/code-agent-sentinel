@@ -59,20 +59,20 @@ export function RawFilePanel({ path }: { path: string }) {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16, height: '100%' }}>
       <div>
-        <h2 data-testid="raw-file-name" style={{ color: 'var(--color-ink)', margin: '0 0 4px', fontFamily: 'var(--font-mono)', fontSize: 18 }}>{data.name}</h2>
-        <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+        <h2 data-testid="raw-file-name" style={{ color: 'var(--color-ink)', margin: '0 0 4px', fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-lg)' }}>{data.name}</h2>
+        <Typography.Text type="secondary" style={{ fontSize: 'var(--fs-sm)' }}>
           {t('rawFile.subtitle')}
         </Typography.Text>
       </div>
       <Descriptions size="small" column={2} bordered>
         <Descriptions.Item label={t('rawFile.path')} span={2}>
-          <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{data.path}</Typography.Text>
+          <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)', wordBreak: 'break-all' }}>{data.path}</Typography.Text>
         </Descriptions.Item>
         <Descriptions.Item label={t('rawFile.size')}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{formatSize(data.size)}</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }}>{formatSize(data.size)}</span>
         </Descriptions.Item>
         <Descriptions.Item label={t('rawFile.type')}>
-          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{data.is_text ? t('rawFile.typeText') : t('rawFile.typeBinary')}</span>
+          <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }}>{data.is_text ? t('rawFile.typeText') : t('rawFile.typeBinary')}</span>
         </Descriptions.Item>
       </Descriptions>
       <Card

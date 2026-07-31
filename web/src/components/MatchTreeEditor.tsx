@@ -29,7 +29,7 @@ export function MatchTreeEditor({ value, matchMap, assetType, readOnly, onChange
           description={t('ruleForm.unsupportedMatchHint')}
           style={{ marginBottom: 8 }}
         />
-        <pre style={{ margin: 0, fontSize: 12, fontFamily: 'var(--font-mono)', color: 'var(--color-muted)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+        <pre style={{ margin: 0, fontSize: 'var(--fs-sm)', fontFamily: 'var(--font-mono)', color: 'var(--color-muted)', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
           {JSON.stringify(matchMap, null, 2)}
         </pre>
       </div>

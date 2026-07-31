@@ -21,18 +21,18 @@ function DetectorConfigControls({ d, draft, setDraft, saving, onSave }: { d: Det
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {d.id === 'rules' ? (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 13 }}>{t('common.enabled')}</span>
+            <span style={{ fontSize: 'var(--fs-sm)' }}>{t('common.enabled')}</span>
             <Switch size="small" checked={draft.rules.enabled} onChange={(v) => patch({ rules: { ...draft.rules, enabled: v } })} />
           </div>
         ) : null}
         {d.id === 'secret' ? (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 13 }}>{t('common.enabled')}</span>
+              <span style={{ fontSize: 'var(--fs-sm)' }}>{t('common.enabled')}</span>
               <Switch size="small" checked={draft.secret.enabled} onChange={(v) => patch({ secret: { ...draft.secret, enabled: v } })} />
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 13, width: 80 }}>{t('settings.binaryPath')}</span>
+              <span style={{ fontSize: 'var(--fs-sm)', width: 80 }}>{t('settings.binaryPath')}</span>
               <Input size="small" style={{ flex: 1 }} placeholder={t('settings.defaultBinary', { name: 'gitleaks' })} value={draft.secret.binary} onChange={(e) => patch({ secret: { ...draft.secret, binary: e.target.value } })} />
             </div>
           </>
@@ -40,7 +40,7 @@ function DetectorConfigControls({ d, draft, setDraft, saving, onSave }: { d: Det
         {d.id === 'dep' ? (
           <>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 13 }}>{t('common.enabled')}</span>
+              <span style={{ fontSize: 'var(--fs-sm)' }}>{t('common.enabled')}</span>
               <Switch size="small" checked={draft.dep.enabled} onChange={(v) => patch({ dep: { ...draft.dep, enabled: v } })} />
             </div>
             {['npm', 'govulncheck'].map((name) => {
@@ -48,7 +48,7 @@ function DetectorConfigControls({ d, draft, setDraft, saving, onSave }: { d: Det
               return (
                 <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <Switch size="small" checked={e.enabled} onChange={(v) => patch({ dep: { ...draft.dep, engines: { ...draft.dep.engines, [name]: { ...e, enabled: v } } } })} />
-                  <span style={{ fontSize: 13, width: 100 }}>{name}</span>
+                  <span style={{ fontSize: 'var(--fs-sm)', width: 100 }}>{name}</span>
                   <Input size="small" style={{ flex: 1 }} placeholder={t('settings.defaultBinary', { name })} value={e.binary} onChange={(ev) => patch({ dep: { ...draft.dep, engines: { ...draft.dep.engines, [name]: { ...e, binary: ev.target.value } } } })} />
                 </div>
               )
@@ -171,7 +171,7 @@ export default function Settings() {
             <Switch checked={guardConfig?.enabled ?? false} />
           </Popconfirm>
           <Typography.Text>{t('guard.enabled')}</Typography.Text>
-          <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('guard.enabledHint')}</Typography.Text>
+          <Typography.Text type="secondary" style={{ fontSize: 'var(--fs-sm)' }}>{t('guard.enabledHint')}</Typography.Text>
         </Space>
         <Button onClick={() => setAdvOpen(true)}>{t('settings.advanced', { defaultValue: '高级' })}</Button>
       </div>
@@ -240,7 +240,7 @@ export default function Settings() {
             <Form.Item label={t('guard.allowlistEnabled')}>
               <Space align="center">
                 <Switch checked={advForm.allowlist_enabled} onChange={(v) => patchAdv({ allowlist_enabled: v })} />
-                <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('guard.allowlistEnabledHint')}</Typography.Text>
+                <Typography.Text type="secondary" style={{ fontSize: 'var(--fs-sm)' }}>{t('guard.allowlistEnabledHint')}</Typography.Text>
               </Space>
             </Form.Item>
             <Form.Item label={t('guard.deadlineMs')}>

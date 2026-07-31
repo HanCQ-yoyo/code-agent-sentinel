@@ -112,7 +112,7 @@ export function AssetTable({ assets, findings = [], onSelect, favorites, onToggl
         if (!tag) return <span style={{ color: 'var(--color-dim)' }}>—</span>
         const color = tag === 'config' ? 'var(--color-accent)' : 'var(--color-dim)'
         return (
-          <span style={{ fontSize: 11, padding: '0 6px', borderRadius: 8, border: `1px solid ${color}`, color, fontFamily: 'var(--font-sans)' }}>
+          <span style={{ fontSize: 'var(--fs-xs)', padding: '0 6px', borderRadius: 8, border: `1px solid ${color}`, color, fontFamily: 'var(--font-sans)' }}>
             {tag === 'config' ? t('assetTable.tagConfig') : t('assetTable.tagRuntime')}
           </span>
         )
@@ -136,7 +136,7 @@ export function AssetTable({ assets, findings = [], onSelect, favorites, onToggl
       title: t('assetTable.colPath'),
       dataIndex: 'source_path',
       render: (p: string) => (
-        <Typography.Text style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-dim)' }} title={p}>
+        <Typography.Text style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)', color: 'var(--color-dim)' }} title={p}>
           {relativeClaudePath(p)}
         </Typography.Text>
       ),

@@ -135,7 +135,7 @@ export default function History() {
           <Col xs={24} lg={12} style={{ display: 'flex' }}><SeverityChart findings={detailFindings} /></Col>
           <Col xs={24} lg={12} style={{ display: 'flex' }}>
             <Card style={{ width: '100%' }} size="small">
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+              <Typography.Text type="secondary" style={{ fontSize: 'var(--fs-sm)' }}>
                 {isBatch
                   ? t('history.batchAgentsCount', { count: batchSiblings.length + 1 })
                   : t('history.singleAgentHint')}
@@ -149,7 +149,7 @@ export default function History() {
   }
 
   const columns: ColumnsType<ScanSummary> = [
-    { title: t('history.colTime'), dataIndex: 'started_at', width: 150, render: (time: string, h: ScanSummary) => <Link to={`/history/${h.id}`}><span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{formatDateTimeShort(time)}</span></Link> },
+    { title: t('history.colTime'), dataIndex: 'started_at', width: 150, render: (time: string, h: ScanSummary) => <Link to={`/history/${h.id}`}><span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }}>{formatDateTimeShort(time)}</span></Link> },
     { title: t('history.agent'), dataIndex: 'agent_id', width: 120, render: (id: string) => { const m = agentMetaById(id ?? ''); return id ? <span style={{ whiteSpace: 'nowrap' }}><AgentIcon id={id} /> {m.label}</span> : '-' } },
     { title: t('history.colRiskScore'), width: 90, render: (_: unknown, h: ScanSummary) => (
       <span title={h.band} style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: riskColor(h.health_score) }}>{h.health_score}</span>
@@ -167,11 +167,11 @@ export default function History() {
     {
       title: t('history.colScopePath'), width: 200, ellipsis: true,
       render: (_: unknown, h: ScanSummary) => h.scope_path ? (
-        <Tooltip title={h.scope_path}><Typography.Text code style={{ fontSize: 11 }}>{h.scope_path}</Typography.Text></Tooltip>
+        <Tooltip title={h.scope_path}><Typography.Text code style={{ fontSize: 'var(--fs-xs)' }}>{h.scope_path}</Typography.Text></Tooltip>
       ) : <Typography.Text type="secondary">—</Typography.Text>,
     },
     // Task 12:Batch 列 — 显示 batch_id 末 8 位(同次重扫共享);无 batch_id(旧/单 agent 扫描)显示 '-'。
-    { title: t('history.colBatch'), dataIndex: 'batch_id', width: 110, render: (bid?: string) => bid ? <Tag style={{ fontFamily: 'var(--font-mono)', fontSize: 11, background: 'var(--cat-1)', color: 'var(--badge-text)', border: 'none' }}>{bid.slice(-8)}</Tag> : '-' },
+    { title: t('history.colBatch'), dataIndex: 'batch_id', width: 110, render: (bid?: string) => bid ? <Tag style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', background: 'var(--cat-1)', color: 'var(--badge-text)', border: 'none' }}>{bid.slice(-8)}</Tag> : '-' },
     { title: t('history.colAction'), width: 110, render: (_: unknown, h: ScanSummary) => (
       <Popconfirm title={t('history.confirmDelete')} okText={t('history.delete')} okButtonProps={{ danger: true }} cancelText={t('common.cancel')} onConfirm={() => deleteHistory(h.id)}>
         <Button type="text" danger size="small" icon={<DeleteOutlined />} aria-label={t('history.delete')} />

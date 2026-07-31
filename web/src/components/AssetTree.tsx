@@ -94,7 +94,7 @@ export function AssetTree({ tree, assets, findings = [], onSelect, onOpenRaw, ro
         title={t('assetTree.tagEditTip', { tag })}
         onClick={(e) => { e.stopPropagation(); onEditTag(relPath, tag) }}
         style={{
-          marginLeft: 6, fontSize: 10, padding: '0 5px', borderRadius: 8,
+          marginLeft: 6, fontSize: 'var(--fs-xs)', padding: '0 5px', borderRadius: 8,
           border: `1px solid ${color}`, color, cursor: 'pointer', lineHeight: '16px',
           fontFamily: 'var(--font-sans)', flexShrink: 0,
         }}

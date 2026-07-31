@@ -221,21 +221,21 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
             </Descriptions.Item>
             <Descriptions.Item label={t('findingDrawer.detector')}>{detName(finding.detector_id)}</Descriptions.Item>
             <Descriptions.Item label={t('findingDrawer.ruleId')}>
-              <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 14 }}>{finding.rule_id}</Typography.Text>
+              <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-base)' }}>{finding.rule_id}</Typography.Text>
             </Descriptions.Item>
             <Descriptions.Item label={t('findingDrawer.ruleSyntax')} span={2}>
               {/* 规则语法用纯代码格式(monospace 等宽、无标签背景框),字体放大到 14 便于阅读;长语法换行不撑破布局。 */}
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 14, wordBreak: 'break-all', color: 'var(--color-ink)' }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-base)', wordBreak: 'break-all', color: 'var(--color-ink)' }}>
                 {findSyntax(detectors, finding.detector_id, finding.rule_id) ?? '--'}
               </span>
             </Descriptions.Item>
             <Descriptions.Item label={t('findingDrawer.scanTime')}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }}>
                 {startedAt ? formatDateTime(startedAt) : '--'}
               </span>
             </Descriptions.Item>
             <Descriptions.Item label={t('findingDrawer.evidence')} span={2}>
-              <Typography.Paragraph style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 12 }} ellipsis={{ rows: 3, expandable: true, symbol: t('common.expand') }}>
+              <Typography.Paragraph style={{ margin: 0, fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }} ellipsis={{ rows: 3, expandable: true, symbol: t('common.expand') }}>
                 {finding.evidence || t('common.none')}
               </Typography.Paragraph>
             </Descriptions.Item>

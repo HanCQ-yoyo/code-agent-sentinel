@@ -252,7 +252,7 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <Descriptions title={t('ruleDrawer.infoTitle')} size="small" column={2} bordered>
             <Descriptions.Item label={t('ruleDrawer.ruleId')}>
-              <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 14 }}>{rule.id}</Typography.Text>
+              <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-base)' }}>{rule.id}</Typography.Text>
             </Descriptions.Item>
             <Descriptions.Item label={t('ruleDrawer.ruleName')}>{ruleName({ id: rule.id, description: rule.description ?? '' })}</Descriptions.Item>
             <Descriptions.Item label={t('ruleDrawer.severity')}>
@@ -263,7 +263,7 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
               {rule.source === 'custom' ? t('ruleTable.sourceCustom') : t('ruleTable.sourceBaseline')}
             </Descriptions.Item>
             <Descriptions.Item label={t('ruleDrawer.assetType')}>
-              <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{rule.asset_type || '--'}</Typography.Text>
+              <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }}>{rule.asset_type || '--'}</Typography.Text>
             </Descriptions.Item>
             {/* match 摘要:RuleDTO 把规则语法并入 match 对象(如 {regex: ...});展示完整 JSON。 */}
             <Descriptions.Item label={t('ruleDrawer.ruleSyntax')} span={2}>
@@ -278,11 +278,11 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
               ) : <Typography.Text type="secondary">{t('ruleDrawer.none')}</Typography.Text>}
             </Descriptions.Item>
             <Descriptions.Item label={t('ruleDrawer.remediation')} span={2}>
-              <span style={{ fontSize: 13 }}>{rule.remediation || '--'}</span>
+              <span style={{ fontSize: 'var(--fs-sm)' }}>{rule.remediation || '--'}</span>
             </Descriptions.Item>
             <Descriptions.Item label={t('ruleDrawer.pathFilter')} span={2}>
               {rule.paths ? (
-                <span style={{ fontSize: 12 }}>
+                <span style={{ fontSize: 'var(--fs-sm)' }}>
                   {rule.paths.include?.length ? `${t('ruleDrawer.pathInclude', { items: rule.paths.include.join(', ') })} ` : ''}
                   {rule.paths.exclude?.length ? `${t('ruleDrawer.pathExclude', { items: rule.paths.exclude.join(', ') })}` : ''}
                   {!rule.paths.include?.length && !rule.paths.exclude?.length ? t('ruleDrawer.none') : ''}
@@ -291,18 +291,18 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
             </Descriptions.Item>
             <Descriptions.Item label={t('ruleDrawer.postExclude')} span={2}>
               {rule.post_exclude?.length ? (
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{rule.post_exclude.join(', ')}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)', wordBreak: 'break-all' }}>{rule.post_exclude.join(', ')}</span>
               ) : <Typography.Text type="secondary">{t('ruleDrawer.none')}</Typography.Text>}
             </Descriptions.Item>
             <Descriptions.Item label={t('ruleDrawer.deobfuscation')} span={2}>
               {rule.deobfuscation?.length ? (
-                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{rule.deobfuscation.join(', ')}</span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }}>{rule.deobfuscation.join(', ')}</span>
               ) : <Typography.Text type="secondary">{t('ruleDrawer.none')}</Typography.Text>}
             </Descriptions.Item>
             <Descriptions.Item label={t('ruleDrawer.dotall')}>{rule.dotall ? t('common.yes') : t('common.no')}</Descriptions.Item>
             <Descriptions.Item label={t('ruleDrawer.metadata')} span={2}>
               {rule.metadata && Object.keys(rule.metadata).length > 0 ? (
-                <pre style={{ margin: 0, fontSize: 11, fontFamily: 'var(--font-mono)' }}>{JSON.stringify(rule.metadata, null, 2)}</pre>
+                <pre style={{ margin: 0, fontSize: 'var(--fs-xs)', fontFamily: 'var(--font-mono)' }}>{JSON.stringify(rule.metadata, null, 2)}</pre>
               ) : <Typography.Text type="secondary">{t('ruleDrawer.none')}</Typography.Text>}
             </Descriptions.Item>
           </Descriptions>

@@ -58,7 +58,8 @@ export default function MonacoViewer({
       // 设 false 后:Monaco 仅在自身确有内容可滚时消费 wheel,到边界(或内容不溢出)即放行
       // 冒泡到外层预览容器,嵌套滚动联动正常。对源码/脚本编辑态无影响(范围内仍滚代码)。
       scrollbar: { alwaysConsumeMouseWheel: false },
-      fontSize: 12.5,
+      // 对齐 --fs-sm(12);Monaco editor fontSize 需数值,不接 CSS var
+      fontSize: 12,
       fontFamily: 'var(--font-mono, "JetBrains Mono", ui-monospace, monospace)',
       lineNumbers: 'on',
       wordWrap: 'on',

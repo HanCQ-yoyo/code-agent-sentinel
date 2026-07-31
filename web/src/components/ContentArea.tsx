@@ -193,8 +193,8 @@ export function ContentArea({
       <div data-testid="structured-kv">
         <Descriptions size="small" column={1} bordered>
           {entries.map(([k, v]) => (
-            <Descriptions.Item key={k} label={<Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{k}</Typography.Text>}>
-              <Typography.Text style={{ fontFamily: 'var(--font-mono)', fontSize: 12, wordBreak: 'break-all' }}>{formatFieldValue(v)}</Typography.Text>
+            <Descriptions.Item key={k} label={<Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }}>{k}</Typography.Text>}>
+              <Typography.Text style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)', wordBreak: 'break-all' }}>{formatFieldValue(v)}</Typography.Text>
             </Descriptions.Item>
           ))}
         </Descriptions>

@@ -21,7 +21,7 @@ function SevSegLabel({ text, count, sev }: { text: string; count: number; sev?: 
         style={{ width: 8, height: 8, borderRadius: '50%', background: sev ? SEVERITY_DOT[sev] : 'var(--color-accent)' }}
       />
       <span>{text}</span>
-      <span className="sev-seg-count" style={{ fontFamily: 'var(--font-mono)', fontSize: 11 }}>{count}</span>
+      <span className="sev-seg-count" style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)' }}>{count}</span>
     </span>
   )
 }
@@ -91,7 +91,7 @@ export function RulesTable({ domain, onEdit, onFork }: RulesTableProps) {
   // RuleDTO 无 detector/syntax/valid 字段(旧 FlatRule 才有),故去掉检测器列与规则语法列。
   // 行可点击 → 打开规则详情抽屉(只读,Task 16 改编辑模式)。
   const columns: ColumnsType<RuleDTO> = [
-    { title: t('ruleTable.colRuleId'), width: 260, dataIndex: 'id', render: (id: string) => <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{id}</Typography.Text> },
+    { title: t('ruleTable.colRuleId'), width: 260, dataIndex: 'id', render: (id: string) => <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }}>{id}</Typography.Text> },
     {
       title: t('ruleTable.colRuleName'), ellipsis: true, render: (_: unknown, r: RuleDTO) => {
         // 规则名称取双语名(ruleName:先 i18n rules.<id>,回退 r.description 后端原文)。
@@ -110,7 +110,7 @@ export function RulesTable({ domain, onEdit, onFork }: RulesTableProps) {
       //   (基线,旧 FlatRule 语义)更贴合 RuleDTO 的 builtin/custom 二分。
       title: t('ruleTable.colSource'), width: 90, render: (_: unknown, r: RuleDTO) => (
         <Tag
-          style={{ marginInlineEnd: 0, fontSize: 11, background: r.source === 'custom' ? 'var(--cat-1)' : 'transparent', color: r.source === 'custom' ? 'var(--badge-text)' : 'var(--color-muted)', border: r.source === 'custom' ? 'none' : '1px solid var(--color-rule)' }}
+          style={{ marginInlineEnd: 0, fontSize: 'var(--fs-xs)', background: r.source === 'custom' ? 'var(--cat-1)' : 'transparent', color: r.source === 'custom' ? 'var(--badge-text)' : 'var(--color-muted)', border: r.source === 'custom' ? 'none' : '1px solid var(--color-rule)' }}
         >
           {r.source === 'custom' ? t('rulesManage.sourceCustom') : t('rulesManage.sourceBuiltin')}
         </Tag>

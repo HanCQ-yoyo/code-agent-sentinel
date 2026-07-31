@@ -435,7 +435,7 @@ export default function Assets() {
                 <span style={{ color: 'var(--color-muted)', fontWeight: 500 }}>{t('assets.resetTag')}</span>
               </Card>
             </div>
-            <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            <Typography.Text type="secondary" style={{ fontSize: 'var(--fs-sm)' }}>
               {t('assets.editTagHint')}
             </Typography.Text>
           </div>

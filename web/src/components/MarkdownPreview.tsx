@@ -18,7 +18,7 @@ export function MarkdownPreview({ content }: { content: string }) {
         flex: 1,
         overflow: 'auto',
         fontFamily: 'var(--font-sans)',
-        fontSize: 14,
+        fontSize: 'var(--fs-base)',
         lineHeight: 1.7,
         color: 'var(--color-ink)',
       }}
@@ -37,7 +37,7 @@ export function MarkdownPreview({ content }: { content: string }) {
               return <MonacoBlock code={codeText} className={className} theme={theme} />
             }
             // 兜底:无法提取文本(罕见),回退 styled pre
-            return <pre style={{ margin: '8px 0', padding: 12, background: 'var(--color-surface)', borderRadius: 6, overflow: 'auto', fontFamily: 'var(--font-mono)', fontSize: 12.5 }}>{children}</pre>
+            return <pre style={{ margin: '8px 0', padding: 12, background: 'var(--color-surface)', borderRadius: 6, overflow: 'auto', fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }}>{children}</pre>
           },
           // code:react-markdown v10 围栏块走 pre>code(本 override 仅渲染 code 元素本身,
           // 块外壳与 Monaco 由 pre override 接管)。此处 code 总被 pre 包裹 → 渲染纯文本 code。

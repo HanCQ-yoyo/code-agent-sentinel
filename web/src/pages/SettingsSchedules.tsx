@@ -116,7 +116,7 @@ export function SettingsSchedules() {
             <Text strong>{t('settings.scanMasterToggle')}</Text>
           </Space>
           <Space>
-            <Text type="secondary" style={{ fontSize: 12 }}>{t('settings.scanDefaultInterval')}</Text>
+            <Text type="secondary" style={{ fontSize: 'var(--fs-sm)' }}>{t('settings.scanDefaultInterval')}</Text>
             <Input
               size="small"
               style={{ width: 100 }}
@@ -133,7 +133,7 @@ export function SettingsSchedules() {
               }}
             />
           </Space>
-          <Text type="secondary" style={{ fontSize: 12 }}>
+          <Text type="secondary" style={{ fontSize: 'var(--fs-sm)' }}>
             {t('settings.scanToggleHint', { running: runningCount })}
           </Text>
         </Space>

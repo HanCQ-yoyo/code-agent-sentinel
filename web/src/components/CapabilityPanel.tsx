@@ -86,8 +86,8 @@ function buildItems(type: string, f: Record<string, any>, asset: Asset, t: any):
         { label: t('capability.memoryOutline'), render: (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
             {outline.map((o, i) => (
-              <span key={i} style={{ paddingInlineStart: (o.level - 1) * 12, fontFamily: 'var(--font-mono)', fontSize: 12 }}>
-                {'#'.repeat(o.level)} {o.title} <Typography.Text type="secondary" style={{ fontSize: 10 }}>: {o.line}</Typography.Text>
+              <span key={i} style={{ paddingInlineStart: (o.level - 1) * 12, fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }}>
+                {'#'.repeat(o.level)} {o.title} <Typography.Text type="secondary" style={{ fontSize: 'var(--fs-xs)' }}>: {o.line}</Typography.Text>
               </span>
             ))}
           </div>

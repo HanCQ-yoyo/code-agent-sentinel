@@ -110,7 +110,7 @@ export default function Intercept() {
       dataIndex: 'timestamp',
       width: 170,
       render: (v: string) => (
-        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{formatDateTime(v)}</span>
+        <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }}>{formatDateTime(v)}</span>
       ),
     },
     {
@@ -124,7 +124,7 @@ export default function Intercept() {
       dataIndex: 'command',
       ellipsis: { showTitle: false },
       render: (v: string) => (
-        <Tooltip title={v}><Typography.Text code style={{ fontSize: 12 }}>{v}</Typography.Text></Tooltip>
+        <Tooltip title={v}><Typography.Text code style={{ fontSize: 'var(--fs-sm)' }}>{v}</Typography.Text></Tooltip>
       ),
     },
     {
@@ -133,7 +133,7 @@ export default function Intercept() {
       width: 160,
       ellipsis: true,
       render: (v?: string) => v ? (
-        <Typography.Text code style={{ fontSize: 12 }}>{v}</Typography.Text>
+        <Typography.Text code style={{ fontSize: 'var(--fs-sm)' }}>{v}</Typography.Text>
       ) : <Typography.Text type="secondary">—</Typography.Text>,
     },
     {
@@ -204,11 +204,11 @@ export default function Intercept() {
           <Form layout="vertical">
             {/* 时间最上方 */}
             <Form.Item label={t('intercept.time')}>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12 }}>{formatDateTime(detail.timestamp)}</span>
+              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }}>{formatDateTime(detail.timestamp)}</span>
             </Form.Item>
             {/* 命令独立行(文字多,独占) */}
             <Form.Item label={t('intercept.command')}>
-              <pre style={{ background: 'var(--color-surface)', padding: 8, borderRadius: 4, fontSize: 12, fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}>
+              <pre style={{ background: 'var(--color-surface)', padding: 8, borderRadius: 4, fontSize: 'var(--fs-sm)', fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}>
                 {detail.command}
               </pre>
             </Form.Item>
@@ -233,7 +233,7 @@ export default function Intercept() {
             {/* 命中片段(命令级背景,独立行) */}
             {detail.matched_span ? (
               <Form.Item label={t('intercept.matchedSpan')}>
-                <pre style={{ background: 'var(--color-surface)', padding: 8, borderRadius: 4, fontSize: 12, fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}>
+                <pre style={{ background: 'var(--color-surface)', padding: 8, borderRadius: 4, fontSize: 'var(--fs-sm)', fontFamily: 'var(--font-mono)', whiteSpace: 'pre-wrap', wordBreak: 'break-all', margin: 0 }}>
                   {detail.matched_span}
                 </pre>
               </Form.Item>
@@ -242,10 +242,10 @@ export default function Intercept() {
             <Typography.Title level={5} style={{ marginTop: 8 }}>{t('intercept.ruleBgTitle', { defaultValue: '规则背景' })}</Typography.Title>
             <div style={{ display: 'flex', gap: 16 }}>
               <Form.Item label={t('intercept.rule')} style={{ flex: 1 }}>
-                {detail.rule_id ? <Typography.Text code style={{ fontSize: 12 }}>{detail.rule_id}</Typography.Text> : <Typography.Text type="secondary">—</Typography.Text>}
+                {detail.rule_id ? <Typography.Text code style={{ fontSize: 'var(--fs-sm)' }}>{detail.rule_id}</Typography.Text> : <Typography.Text type="secondary">—</Typography.Text>}
               </Form.Item>
               <Form.Item label={t('intercept.packId', { defaultValue: '规则包' })} style={{ flex: 1 }}>
-                {detail.pack_id ? <Typography.Text code style={{ fontSize: 12 }}>{detail.pack_id}</Typography.Text> : <Typography.Text type="secondary">—</Typography.Text>}
+                {detail.pack_id ? <Typography.Text code style={{ fontSize: 'var(--fs-sm)' }}>{detail.pack_id}</Typography.Text> : <Typography.Text type="secondary">—</Typography.Text>}
               </Form.Item>
               <Form.Item label={t('intercept.tool')} style={{ flex: 1 }}>
                 {detail.tool_name ? <Typography.Text code>{detail.tool_name}</Typography.Text> : <Typography.Text type="secondary">—</Typography.Text>}
@@ -254,14 +254,14 @@ export default function Intercept() {
             {/* 执行环境(working_dir/session_id/agent_protocol) */}
             <Typography.Title level={5}>{t('intercept.envTitle', { defaultValue: '执行环境' })}</Typography.Title>
             <Form.Item label={t('intercept.cwd')}>
-              {detail.working_dir ? <Typography.Text code style={{ fontSize: 11 }}>{detail.working_dir}</Typography.Text> : <Typography.Text type="secondary">—</Typography.Text>}
+              {detail.working_dir ? <Typography.Text code style={{ fontSize: 'var(--fs-xs)' }}>{detail.working_dir}</Typography.Text> : <Typography.Text type="secondary">—</Typography.Text>}
             </Form.Item>
             <div style={{ display: 'flex', gap: 16 }}>
               <Form.Item label={t('intercept.session')} style={{ flex: 1 }}>
-                {detail.session_id ? <Typography.Text code style={{ fontSize: 11 }}>{detail.session_id}</Typography.Text> : <Typography.Text type="secondary">—</Typography.Text>}
+                {detail.session_id ? <Typography.Text code style={{ fontSize: 'var(--fs-xs)' }}>{detail.session_id}</Typography.Text> : <Typography.Text type="secondary">—</Typography.Text>}
               </Form.Item>
               <Form.Item label={t('intercept.protocol', { defaultValue: '协议' })} style={{ flex: 1 }}>
-                {detail.agent_protocol ? <Typography.Text code style={{ fontSize: 11 }}>{detail.agent_protocol}</Typography.Text> : <Typography.Text type="secondary">—</Typography.Text>}
+                {detail.agent_protocol ? <Typography.Text code style={{ fontSize: 'var(--fs-xs)' }}>{detail.agent_protocol}</Typography.Text> : <Typography.Text type="secondary">—</Typography.Text>}
               </Form.Item>
             </div>
             <Popconfirm
@@ -289,16 +289,16 @@ export default function Intercept() {
         {disposeRec ? (
           <Space direction="vertical" style={{ width: '100%' }} size="middle">
             <div>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('intercept.command')}</Typography.Text>
+              <Typography.Text type="secondary" style={{ fontSize: 'var(--fs-sm)' }}>{t('intercept.command')}</Typography.Text>
               <Input.TextArea
                 value={disposeCmd}
                 onChange={(e) => setDisposeCmd(e.target.value)}
                 rows={3}
-                style={{ fontFamily: 'var(--font-mono)', fontSize: 12, marginTop: 4 }}
+                style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)', marginTop: 4 }}
               />
             </div>
             <div>
-              <Typography.Text type="secondary" style={{ fontSize: 12 }}>{t('intercept.outcome')}</Typography.Text>
+              <Typography.Text type="secondary" style={{ fontSize: 'var(--fs-sm)' }}>{t('intercept.outcome')}</Typography.Text>
               <div style={{ marginTop: 4 }}><Tag style={{ background: outcomeColor[disposeRec.outcome] ?? 'var(--color-rule-2)', color: 'var(--badge-text)', border: 'none' }}>{disposeRec.outcome}</Tag></div>
             </div>
             <Space>
