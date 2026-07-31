@@ -75,7 +75,7 @@ export default function InterceptConfig() {
         type="info"
         showIcon
         message={t('nav.sub.interceptConfig')}
-        description="Per-agent intercept config will be supported in a future release. Currently all agents share the global guard configuration above."
+        description={t('settings.interceptPerAgentPlaceholder')}
       />
     </div>
   )

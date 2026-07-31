@@ -189,7 +189,8 @@
     "interceptConfigTab": "拦截配置",
     "subRules": "拦截规则",
     "subAllowlist": "白名单",
-    "advanced": "高级"
+    "advanced": "高级",
+    "interceptPerAgentPlaceholder": "per-agent 拦截配置将在后续版本支持。当前所有 agent 共享上方全局 guard 配置。"
   },
   "guard": {
     "title": "拦截配置",
