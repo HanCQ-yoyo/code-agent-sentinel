@@ -7,12 +7,11 @@ export interface NavItem {
   children?: NavItem[]  // 新增: 侧栏嵌套子菜单
 }
 
-// 设置页 5 子项(route key 不含 domain 前缀,与旧 RuleDomain 解耦)
+// 设置页 4 子项
 export const SETTINGS_SUB: NavItem[] = [
   { path: '/settings/general', label: 'nav.sub.general' },
-  { path: '/settings/scan-config', label: 'nav.sub.scanConfig' },
+  { path: '/settings/security', label: 'nav.sub.securityConfig' },
   { path: '/settings/scan-rules', label: 'nav.sub.scanRules' },
-  { path: '/settings/intercept-config', label: 'nav.sub.interceptConfig' },
   { path: '/settings/intercept-rules', label: 'nav.sub.interceptRules' },
 ]
 
