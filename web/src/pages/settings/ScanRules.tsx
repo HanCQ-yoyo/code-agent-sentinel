@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Button } from 'antd'
 import { useTranslation } from 'react-i18next'
 import type { RuleDTO } from '../../types'
 import { RulesTable } from '../../components/RulesTable'
@@ -19,10 +18,7 @@ export default function ScanRules() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <Button type="primary" onClick={handleCreate}>{t('rulesManage.create')}</Button>
-      </div>
-      <RulesTable domain="detect" onEdit={handleEdit} onFork={handleFork} />
+      <RulesTable domain="detect" onCreate={handleCreate} onEdit={handleEdit} onFork={handleFork} />
       <RuleDrawer
         rule={editingRule}
         mode={drawerMode}
