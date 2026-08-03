@@ -47,7 +47,8 @@
     "runtime": "运行时",
     "delete": "删除",
     "save": "保存",
-    "confirmDelete": "确认删除此条目?"
+    "confirmDelete": "确认删除此条目?",
+    "builtin": "内置"
   },
   "dashboard": {
     "detectorStatus": "检测器状态",
@@ -148,11 +149,11 @@
     "dispose": "处置",
     "disposeTitle": "处置拦截记录",
     "addToBlocklist": "加入拦截名单",
-    "addToAllowlist": "加入放行名单",
+    "addToAllowlist": "加入白名单",
     "confirmAddBlocklist": "确认以此命令新建拦截规则?",
-    "confirmAddAllowlist": "确认将此命令加入放行名单?",
+    "confirmAddAllowlist": "确认将此命令加入白名单?",
     "addedToBlocklist": "已加入拦截名单",
-    "addedToAllowlist": "已加入放行名单",
+    "addedToAllowlist": "已加入白名单",
     "outcomeLabel": "决策",
     "severityLabel": "严重度",
     "confidenceLabel": "置信度",
@@ -185,12 +186,12 @@
     "scanMasterToggle": "允许定时扫描",
     "scanDefaultInterval": "默认间隔(无任务时回退)",
     "scanToggleHint": "关闭后所有 agent 的定时任务暂停;当前 {{running}} 个 agent 在跑。单个 agent 启停/间隔见下表。",
-    "interceptConfigTab": "拦截配置",
     "subRules": "拦截规则",
     "subAllowlist": "白名单",
     "advanced": "高级",
-    "interceptPerAgentPlaceholder": "per-agent 拦截配置将在后续版本支持。当前所有 agent 共享上方全局 guard 配置。",
-    "personalization": "个性化配置"
+    "personalization": "个性化配置",
+    "securityTab.scan": "扫描配置",
+    "securityTab.intercept": "拦截配置"
   },
   "guard": {
     "title": "拦截配置",
@@ -201,16 +202,16 @@
     "mode": "安全模式",
     "modeStrict": "严格(不确定时拦截)",
     "modeLenient": "宽松(不确定时询问)",
-    "allowlistEnabled": "放行清单启用",
-    "allowlistEnabledHint": "关闭后跳过精确匹配放行",
+    "allowlistEnabled": "白名单启用",
+    "allowlistEnabledHint": "关闭后跳过白名单精确匹配",
     "deadlineMs": "评估预算(ms)",
     "maxCommandBytes": "命令长度上限(字节)",
-    "allowlistTitle": "放行清单",
-    "allowlistHint": "精确命令匹配,不支持通配。命中的命令即便命中规则也放行。",
+    "allowlistTitle": "白名单",
+    "allowlistHint": "精确命令匹配,不支持通配。命中白名单的命令即便命中规则也放行。",
     "allowlistPlaceholder": "rm -rf node_modules",
-    "allowlistEmpty": "暂无放行条目",
+    "allowlistEmpty": "暂无白名单条目",
     "add": "添加",
-    "allowlistDup": "已在清单中",
+    "allowlistDup": "已在白名单中",
     "allowlistOn": "白名单已启用",
     "allowlistOff": "白名单已停用",
     "saved": "拦截配置已保存"
@@ -482,7 +483,13 @@
     "external": "外部",
     "engines": "引擎",
     "covers": "覆盖",
-    "summary": "共 {{total}} 个检测器,{{avail}} 个可用。"
+    "summary": "共 {{total}} 个检测器,{{avail}} 个可用。",
+    "colName": "扫描引擎",
+    "colDeps": "引擎依赖",
+    "colStatus": "可用状态",
+    "colEnable": "启用",
+    "title": "扫描引擎",
+    "rulesEngineDesc": "内置规则引擎，无需外部依赖"
   },
   "auth": {
     "title": "需要访问 token",

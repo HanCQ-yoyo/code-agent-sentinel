@@ -94,13 +94,13 @@ export default function Intercept() {
     setDisposeRec(null)
   }
 
-  // 加入放行名单:把编辑后的命令追加进 allowlist 全量 PUT。
+  // 加入白名单:把编辑后的命令追加进 allowlist 全量 PUT。
   // saveAllowlist 全量替换(store SettingsAllowlist 同模式);去重。
   const addToAllowlist = async () => {
     if (!disposeRec) return
     const next = Array.from(new Set([...allowlist, disposeCmd]))
     const ok = await saveAllowlist(next)
-    if (ok) message.success(t('intercept.addedToAllowlist', { defaultValue: '已加入放行名单' }))
+    if (ok) message.success(t('intercept.addedToAllowlist', { defaultValue: '已加入白名单' }))
     setDisposeRec(null)
   }
 
@@ -305,8 +305,8 @@ export default function Intercept() {
               <Popconfirm title={t('intercept.confirmAddBlocklist', { defaultValue: '确认以此命令新建拦截规则?' })} okText={t('common.save')} cancelText={t('common.cancel')} onConfirm={addToBlocklist}>
                 <Button>{t('intercept.addToBlocklist', { defaultValue: '加入拦截名单' })}</Button>
               </Popconfirm>
-              <Popconfirm title={t('intercept.confirmAddAllowlist', { defaultValue: '确认将此命令加入放行名单?' })} okText={t('common.save')} cancelText={t('common.cancel')} onConfirm={addToAllowlist}>
-                <Button>{t('intercept.addToAllowlist', { defaultValue: '加入放行名单' })}</Button>
+              <Popconfirm title={t('intercept.confirmAddAllowlist', { defaultValue: '确认将此命令加入白名单?' })} okText={t('common.save')} cancelText={t('common.cancel')} onConfirm={addToAllowlist}>
+                <Button>{t('intercept.addToAllowlist', { defaultValue: '加入白名单' })}</Button>
               </Popconfirm>
             </Space>
           </Space>

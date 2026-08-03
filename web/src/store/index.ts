@@ -16,7 +16,7 @@ interface State {
   // Stage R2:Intercept 拦截日志(/api/intercept)。list=列表;fetchIntercepts 可带 ?outcome= 过滤;
   // fetchInterceptDetail 拉单条(返回值交组件本地 state 渲染抽屉,不入 store);deleteIntercept 删单条。
   intercept: InterceptRecord[]
-  // Stage R3 Task 12:Guard 配置 + 放行清单(GET/PUT /api/guard/{config,allowlist})。
+  // Stage R3 Task 12:Guard 配置 + 白名单(GET/PUT /api/guard/{config,allowlist})。
   // guardConfig 初始 null(设置页拦截配置 tab/高级弹框 fetch;null → 组件返回 null 不渲染)。
   // allowlist 初始 [](SettingsAllowlist 挂载时 fetch)。PUT 均要求全量(见 types.ts 注释)。
   guardConfig: GuardConfig | null
@@ -90,7 +90,7 @@ interface State {
   fetchIntercepts: (outcome?: string) => Promise<void>
   fetchInterceptDetail: (id: string) => Promise<InterceptRecord | undefined>
   deleteIntercept: (id: string) => Promise<void>
-  // Stage R3 Task 12:Guard 配置 + 放行清单 CRUD。API 内联(项目约定:复用 apiGet/apiPut + wrap,
+  // Stage R3 Task 12:Guard 配置 + 白名单 CRUD。API 内联(项目约定:复用 apiGet/apiPut + wrap,
   // 不建独立 *Api.ts)。PUT /api/guard/config 要求全量 6 键(见 types.ts 注释)——设置页高级弹框
   // fetch 全量后原地编辑、整体保存,保证不丢字段。saveGuardConfig 返回 boolean(与 saveDetectorConfig
   // 一致),供组件判定是否关闭 saving 状态(实际错误已由 wrap 写入 store.error)。
@@ -356,7 +356,7 @@ export const useStore = create<State>((set, get) => ({
     await wrap(() => apiDelete(`/api/intercept/${encodeURIComponent(id)}`), set)
     await get().fetchIntercepts()
   },
-  // Stage R3 Task 12:Guard 配置 + 放行清单。GET 全量 → 前端原地编辑 → PUT 全量(后端顶层键
+  // Stage R3 Task 12:Guard 配置 + 白名单。GET 全量 → 前端原地编辑 → PUT 全量(后端顶层键
   // 校验拒绝部分体,见 handlers_guard.go / handlers_allowlist.go)。saveGuardConfig/saveAllowlist
   // 返回 boolean(与 saveDetectorConfig 一致):wrap 返回 undefined 表示出错(已写入 store.error)。
   fetchGuardConfig: async () => {

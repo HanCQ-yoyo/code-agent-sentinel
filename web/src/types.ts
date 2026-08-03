@@ -228,7 +228,7 @@ export interface AgentScanResult {
 // 后端 config.GuardConfig 的 JSON 序列化(6 键齐全,见 handlers_guard.go)。
 // PUT /api/guard/config 顶层键校验拒绝部分体(防静默禁用):前端必须发送全部 6 字段。
 // mode: "strict"(默认,不确定时 deny)/ "lenient"(不确定时 ask)。高置信度命中两模式都 deny。
-// allowlist_enabled: true(默认)时管线 ⑦ 精确匹配放行;false 跳过放行。
+// allowlist_enabled: true(默认)时管线 ⑦ 精确匹配白名单放行;false 跳过白名单。
 export interface GuardConfig {
   enabled: boolean
   policy: string
@@ -238,7 +238,7 @@ export interface GuardConfig {
   allowlist_enabled: boolean
 }
 
-// Stage R3 Task 12:放行清单(GET/PUT /api/guard/allowlist)。
+// Stage R3 Task 12:白名单(GET/PUT /api/guard/allowlist)。
 // PUT 顶层键校验要求 "allowlist" 存在(空数组=清空,缺失键=拒绝)。
 export interface AllowlistBody {
   allowlist: string[]
