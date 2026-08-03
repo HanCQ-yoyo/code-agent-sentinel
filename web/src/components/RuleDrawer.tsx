@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import { Drawer, Descriptions, Typography, Badge as AntBadge, Button, Space, Modal, Input, Alert, message, Form, Select, Switch, Collapse } from 'antd'
+import { Drawer, Descriptions, Typography, Badge as AntBadge, Button, Space, Modal, Input, Alert, message, Form, Select, Switch } from 'antd'
 import { PlusOutlined, DeleteOutlined, ForkOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import type { RuleDTO, RuleDomain, Severity } from '../types'
@@ -250,7 +250,7 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
       {/* view 模式:只读 Descriptions(适配 RuleDTO 字段)。 */}
       {(!isEditing && rule) ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <Descriptions title={t('ruleDrawer.infoTitle')} size="small" column={2} bordered>
+          <Descriptions title={t('ruleDrawer.infoTitle')} size="small" column={1} bordered>
             <Descriptions.Item label={t('ruleDrawer.ruleId')}>
               <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-base)' }}>{rule.id}</Typography.Text>
             </Descriptions.Item>
@@ -258,15 +258,13 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
             <Descriptions.Item label={t('ruleDrawer.severity')}>
               <SevBadge tone={`sev-${rule.severity}` as BadgeTone}>{t(SEVERITY_LABEL_KEY[rule.severity as Severity])}</SevBadge>
             </Descriptions.Item>
-            {/* 来源:RuleDTO.source 只有 builtin/custom(ruleTable 双语 key 复用)。 */}
             <Descriptions.Item label={t('ruleDrawer.source')}>
               {rule.source === 'custom' ? t('ruleTable.sourceCustom') : t('ruleTable.sourceBaseline')}
             </Descriptions.Item>
             <Descriptions.Item label={t('ruleDrawer.assetType')}>
               <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }}>{rule.asset_type || '--'}</Typography.Text>
             </Descriptions.Item>
-            {/* match 摘要:RuleDTO 把规则语法并入 match 对象(如 {regex: ...});展示完整 JSON。 */}
-            <Descriptions.Item label={t('ruleDrawer.ruleSyntax')} span={2}>
+            <Descriptions.Item label={t('ruleDrawer.ruleSyntax')}>
               {rule.match && Object.keys(rule.match).length > 0 ? (
                 <MatchTreeEditor
                   value={matchMapToTree(rule.match)}
@@ -277,10 +275,10 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
                 />
               ) : <Typography.Text type="secondary">{t('ruleDrawer.none')}</Typography.Text>}
             </Descriptions.Item>
-            <Descriptions.Item label={t('ruleDrawer.remediation')} span={2}>
+            <Descriptions.Item label={t('ruleDrawer.remediation')}>
               <span style={{ fontSize: 'var(--fs-sm)' }}>{rule.remediation || '--'}</span>
             </Descriptions.Item>
-            <Descriptions.Item label={t('ruleDrawer.pathFilter')} span={2}>
+            <Descriptions.Item label={t('ruleDrawer.pathFilter')}>
               {rule.paths ? (
                 <span style={{ fontSize: 'var(--fs-sm)' }}>
                   {rule.paths.include?.length ? `${t('ruleDrawer.pathInclude', { items: rule.paths.include.join(', ') })} ` : ''}
@@ -289,18 +287,18 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
                 </span>
               ) : <Typography.Text type="secondary">{t('ruleDrawer.none')}</Typography.Text>}
             </Descriptions.Item>
-            <Descriptions.Item label={t('ruleDrawer.postExclude')} span={2}>
+            <Descriptions.Item label={t('ruleDrawer.postExclude')}>
               {rule.post_exclude?.length ? (
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)', wordBreak: 'break-all' }}>{rule.post_exclude.join(', ')}</span>
               ) : <Typography.Text type="secondary">{t('ruleDrawer.none')}</Typography.Text>}
             </Descriptions.Item>
-            <Descriptions.Item label={t('ruleDrawer.deobfuscation')} span={2}>
+            <Descriptions.Item label={t('ruleDrawer.deobfuscation')}>
               {rule.deobfuscation?.length ? (
                 <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }}>{rule.deobfuscation.join(', ')}</span>
               ) : <Typography.Text type="secondary">{t('ruleDrawer.none')}</Typography.Text>}
             </Descriptions.Item>
             <Descriptions.Item label={t('ruleDrawer.dotall')}>{rule.dotall ? t('common.yes') : t('common.no')}</Descriptions.Item>
-            <Descriptions.Item label={t('ruleDrawer.metadata')} span={2}>
+            <Descriptions.Item label={t('ruleDrawer.metadata')}>
               {rule.metadata && Object.keys(rule.metadata).length > 0 ? (
                 <pre style={{ margin: 0, fontSize: 'var(--fs-xs)', fontFamily: 'var(--font-mono)' }}>{JSON.stringify(rule.metadata, null, 2)}</pre>
               ) : <Typography.Text type="secondary">{t('ruleDrawer.none')}</Typography.Text>}
@@ -318,19 +316,23 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
       ) : null}
 
       {isEditing && draft ? (
-        <Form layout="vertical" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <Form layout="horizontal" labelCol={{ flex: '80px', style: { textAlign: 'left' } }} wrapperCol={{ flex: 'auto' }}>
           {rule && rule.source === 'builtin' ? (
-            <Alert type="warning" message={t('rulesManage.builtinReadonly')} showIcon style={{ marginBottom: 4 }} />
+            <Alert type="warning" message={t('rulesManage.builtinReadonly')} showIcon style={{ marginBottom: 12 }} />
           ) : null}
 
-          {/* 基础区 */}
-          <Typography.Title level={5} style={{ marginTop: 0 }}>{t('ruleForm.basicSection')}</Typography.Title>
+          {/* 基本信息 */}
+          <div style={{ fontSize: 'var(--fs-md)', fontWeight: 600, marginBottom: 12, color: 'var(--color-text)' }}>{t('ruleForm.basicSection')}</div>
           <Form.Item label={t('ruleDrawer.ruleId')}>
             <Input
               value={draft.id}
               disabled={isBuiltinEdit || mode === 'edit'}
               onChange={(e) => setDraft({ ...draft, id: e.target.value })}
             />
+          </Form.Item>
+          <Form.Item label={t('ruleDrawer.ruleName')}>
+            <Input value={draft.description} disabled={isBuiltinEdit}
+              onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
           </Form.Item>
           <Form.Item label={t('ruleDrawer.severity')}>
             <Select
@@ -345,6 +347,20 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
               ))}
             </Select>
           </Form.Item>
+          <Form.Item label={t('ruleDrawer.dotall')}>
+            <Switch
+              checked={draft.dotall}
+              disabled={isBuiltinEdit}
+              onChange={(v) => setDraft({ ...draft, dotall: v })}
+            />
+          </Form.Item>
+          <Form.Item label={t('ruleDrawer.remediation')}>
+            <Input.TextArea rows={2} value={draft.remediation} disabled={isBuiltinEdit}
+              onChange={(e) => setDraft({ ...draft, remediation: e.target.value })} />
+          </Form.Item>
+
+          {/* 规则语法 */}
+          <div style={{ fontSize: 'var(--fs-md)', fontWeight: 600, marginBottom: 12, marginTop: 8, color: 'var(--color-text)' }}>{t('ruleForm.matchTreeTitle')}</div>
           <Form.Item label={t('ruleDrawer.assetType')}>
             <Select
               value={draft.asset_type || undefined}
@@ -358,16 +374,6 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
               ))}
             </Select>
           </Form.Item>
-          <Form.Item label={t('ruleDrawer.dotall')} style={{ marginBottom: 0 }}>
-            <Switch
-              checked={draft.dotall}
-              disabled={isBuiltinEdit}
-              onChange={(v) => setDraft({ ...draft, dotall: v })}
-            />
-          </Form.Item>
-
-          {/* match 树 */}
-          <Typography.Title level={5}>{t('ruleForm.matchTreeTitle')}</Typography.Title>
           <MatchTreeEditor
             value={draft.matchTree}
             matchMap={draft.matchMap}
@@ -376,61 +382,43 @@ export function RuleDrawer({ rule, mode, domain, onClose, onSaved, onForked }: R
             onChange={(next) => setDraft({ ...draft, matchTree: next })}
           />
           {validation && !validation.valid ? (
-            <Alert type="error" message={validation.errors.join('; ')} showIcon />
+            <Alert type="error" message={validation.errors.join('; ')} showIcon style={{ marginTop: 8 }} />
           ) : null}
           {validation && validation.valid ? (
-            <Alert type="success" message={t('ruleDrawer.validationOk')} showIcon />
+            <Alert type="success" message={t('ruleDrawer.validationOk')} showIcon style={{ marginTop: 8 }} />
           ) : null}
 
-          {/* 高级区(折叠) */}
-          <Collapse
-            ghost
-            items={[{
-              key: 'advanced',
-              label: t('ruleForm.advancedSection'),
-              children: (
-                <>
-                  <Form.Item label={t('ruleDrawer.ruleName')}>
-                    <Input value={draft.description} disabled={isBuiltinEdit}
-                      onChange={(e) => setDraft({ ...draft, description: e.target.value })} />
-                  </Form.Item>
-                  <Form.Item label={t('ruleDrawer.remediation')}>
-                    <Input.TextArea rows={2} value={draft.remediation} disabled={isBuiltinEdit}
-                      onChange={(e) => setDraft({ ...draft, remediation: e.target.value })} />
-                  </Form.Item>
-                  <Form.Item label={t('ruleDrawer.deobfuscation')}>
-                    <Select mode="multiple" value={draft.deobfuscation} disabled={isBuiltinEdit} placeholder="--"
-                      onChange={(v: string[]) => setDraft({ ...draft, deobfuscation: v })}
-                      options={['zero_width','html_comment','base64','leetspeak','wrapper_strip','ansi_c_decode'].map((d) => ({ value: d, label: d }))} />
-                  </Form.Item>
-                  <Form.Item label={t('ruleDrawer.postExclude')}>
-                    <Select mode="tags" value={draft.post_exclude} disabled={isBuiltinEdit}
-                      onChange={(v: string[]) => setDraft({ ...draft, post_exclude: v })} />
-                  </Form.Item>
-                  <Form.Item label={t('ruleDrawer.pathFilter')}>
-                    <Select mode="tags" value={draft.pathsInclude} disabled={isBuiltinEdit} placeholder="include"
-                      onChange={(v: string[]) => setDraft({ ...draft, pathsInclude: v })} />
-                    <Select mode="tags" value={draft.pathsExclude} disabled={isBuiltinEdit} placeholder="exclude" style={{ marginTop: 4 }}
-                      onChange={(v: string[]) => setDraft({ ...draft, pathsExclude: v })} />
-                  </Form.Item>
-                  <Form.Item label={t('ruleDrawer.metadata')} style={{ marginBottom: 0 }}>
-                    {draft.metadata.map((m, i) => (
-                      <Space key={i} style={{ display: 'flex', marginBottom: 4 }} align="baseline">
-                        <Input value={m.key} disabled={isBuiltinEdit} placeholder="key" style={{ width: 140 }}
-                          onChange={(e) => setDraft({ ...draft, metadata: draft.metadata.map((x, j) => j === i ? { ...x, key: e.target.value } : x) })} />
-                        <Input value={m.value} disabled={isBuiltinEdit} placeholder="value" style={{ width: 200 }}
-                          onChange={(e) => setDraft({ ...draft, metadata: draft.metadata.map((x, j) => j === i ? { ...x, value: e.target.value } : x) })} />
-                        {!isBuiltinEdit && <Button type="text" danger icon={<DeleteOutlined />}
-                          onClick={() => setDraft({ ...draft, metadata: draft.metadata.filter((_, j) => j !== i) })} />}
-                      </Space>
-                    ))}
-                    {!isBuiltinEdit && <Button type="dashed" icon={<PlusOutlined />} size="small"
-                      onClick={() => setDraft({ ...draft, metadata: [...draft.metadata, { key: '', value: '' }] })}>{t('ruleForm.addMetadata')}</Button>}
-                  </Form.Item>
-                </>
-              ),
-            }]}
-          />
+          {/* 高级 */}
+          <div style={{ fontSize: 'var(--fs-md)', fontWeight: 600, marginBottom: 12, marginTop: 16, color: 'var(--color-text)' }}>{t('ruleForm.advancedSection')}</div>
+          <Form.Item label={t('ruleDrawer.deobfuscation')}>
+            <Select mode="multiple" value={draft.deobfuscation} disabled={isBuiltinEdit} placeholder="--"
+              onChange={(v: string[]) => setDraft({ ...draft, deobfuscation: v })}
+              options={['zero_width','html_comment','base64','leetspeak','wrapper_strip','ansi_c_decode'].map((d) => ({ value: d, label: d }))} />
+          </Form.Item>
+          <Form.Item label={t('ruleDrawer.postExclude')}>
+            <Select mode="tags" value={draft.post_exclude} disabled={isBuiltinEdit}
+              onChange={(v: string[]) => setDraft({ ...draft, post_exclude: v })} />
+          </Form.Item>
+          <Form.Item label={t('ruleDrawer.pathFilter')}>
+            <Select mode="tags" value={draft.pathsInclude} disabled={isBuiltinEdit} placeholder="include"
+              onChange={(v: string[]) => setDraft({ ...draft, pathsInclude: v })} />
+            <Select mode="tags" value={draft.pathsExclude} disabled={isBuiltinEdit} placeholder="exclude" style={{ marginTop: 4 }}
+              onChange={(v: string[]) => setDraft({ ...draft, pathsExclude: v })} />
+          </Form.Item>
+          <Form.Item label={t('ruleDrawer.metadata')} style={{ marginBottom: 0 }}>
+            {draft.metadata.map((m, i) => (
+              <Space key={i} style={{ display: 'flex', marginBottom: 4 }} align="baseline">
+                <Input value={m.key} disabled={isBuiltinEdit} placeholder="key" style={{ width: 140 }}
+                  onChange={(e) => setDraft({ ...draft, metadata: draft.metadata.map((x, j) => j === i ? { ...x, key: e.target.value } : x) })} />
+                <Input value={m.value} disabled={isBuiltinEdit} placeholder="value" style={{ width: 200 }}
+                  onChange={(e) => setDraft({ ...draft, metadata: draft.metadata.map((x, j) => j === i ? { ...x, value: e.target.value } : x) })} />
+                {!isBuiltinEdit && <Button type="text" danger icon={<DeleteOutlined />}
+                  onClick={() => setDraft({ ...draft, metadata: draft.metadata.filter((_, j) => j !== i) })} />}
+              </Space>
+            ))}
+            {!isBuiltinEdit && <Button type="dashed" icon={<PlusOutlined />} size="small"
+              onClick={() => setDraft({ ...draft, metadata: [...draft.metadata, { key: '', value: '' }] })}>{t('ruleForm.addMetadata')}</Button>}
+          </Form.Item>
         </Form>
       ) : null}
 

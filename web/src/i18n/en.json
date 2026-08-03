@@ -47,7 +47,8 @@
     "runtime": "Runtime",
     "delete": "Delete",
     "save": "Save",
-    "confirmDelete": "Delete this entry?"
+    "confirmDelete": "Delete this entry?",
+    "builtin": "Built-in"
   },
   "dashboard": {
     "detectorStatus": "Detector Status",
@@ -185,12 +186,12 @@
     "scanMasterToggle": "Allow scheduled scans",
     "scanDefaultInterval": "Default interval (fallback when no tasks)",
     "scanToggleHint": "When off, all agents' scheduled tasks pause; {{running}} agent(s) currently running. Per-agent enable/interval in the table below.",
-    "interceptConfigTab": "Intercept Config",
     "subRules": "Intercept Rules",
     "subAllowlist": "Allowlist",
     "advanced": "Advanced",
-    "interceptPerAgentPlaceholder": "Per-agent intercept config will be supported in a future release. Currently all agents share the global guard configuration above.",
-    "personalization": "Personalization"
+    "personalization": "Personalization",
+    "securityTab.scan": "Scan Config",
+    "securityTab.intercept": "Intercept Config"
   },
   "guard": {
     "title": "Guard Config",
@@ -482,7 +483,13 @@
     "external": "external",
     "engines": "Engines",
     "covers": "Coverage",
-    "summary": "{{total}} detectors total, {{avail}} available."
+    "summary": "{{total}} detectors total, {{avail}} available.",
+    "colName": "Scanner",
+    "colDeps": "Dependency",
+    "colStatus": "Status",
+    "colEnable": "Enable",
+    "title": "Scan Engines",
+    "rulesEngineDesc": "Built-in rules engine, no external dependencies"
   },
   "auth": {
     "title": "Access token required",

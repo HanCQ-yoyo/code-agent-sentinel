@@ -24,8 +24,8 @@ function detectorLabel(id: string, t: (k: string) => string): string {
   return map[id] ?? id
 }
 
-function detectorDeps(id: string, meta?: DetectorMeta): string {
-  if (id === 'rules') return '内置'
+function detectorDeps(id: string, t: (k: string) => string, meta?: DetectorMeta): string {
+  if (id === 'rules') return t('common.builtin')
   if (id === 'secret') return 'gitleaks'
   if (id === 'dep') return (meta?.engines ?? []).map((e) => e.name).join(' / ')
   return '—'
@@ -68,7 +68,7 @@ export default function SecurityConfig() {
     if (d.id === 'rules') {
       return (
         <div style={{ padding: '8px 0' }}>
-          <Text type="secondary" style={{ fontSize: 'var(--fs-sm)' }}>{t('detector.rulesEngineDesc', { defaultValue: '内置规则引擎，无需外部依赖' })}</Text>
+          <Text type="secondary" style={{ fontSize: 'var(--fs-sm)' }}>{t('detector.rulesEngineDesc')}</Text>
         </div>
       )
     }
@@ -126,13 +126,13 @@ export default function SecurityConfig() {
   }
 
   const scanColumns: ColumnsType<DetectorMeta> = [
-    { title: t('detector.colName', { defaultValue: '扫描引擎' }), dataIndex: 'id', width: 160,
+    { title: t('detector.colName'), dataIndex: 'id', width: 160,
       render: (id: string) => <Text strong style={{ fontSize: 'var(--fs-sm)' }}>{detectorLabel(id, t)}</Text> },
-    { title: t('detector.colDeps', { defaultValue: '引擎依赖' }), width: 240,
-      render: (_: unknown, r: DetectorMeta) => <Text style={{ fontSize: 'var(--fs-sm)' }}>{detectorDeps(r.id, r)}</Text> },
-    { title: t('detector.colStatus', { defaultValue: '可用状态' }), width: 100,
+    { title: t('detector.colDeps'), width: 240,
+      render: (_: unknown, r: DetectorMeta) => <Text style={{ fontSize: 'var(--fs-sm)' }}>{detectorDeps(r.id, t, r)}</Text> },
+    { title: t('detector.colStatus'), width: 100,
       render: (_: unknown, r: DetectorMeta) => statusTag(r.available, t) },
-    { title: t('detector.colEnable', { defaultValue: '启用' }), width: 80,
+    { title: t('detector.colEnable'), width: 80,
       render: (_: unknown, r: DetectorMeta) => {
         if (!draft) return null
         const enabled = r.id === 'rules' ? draft.rules.enabled
@@ -168,7 +168,7 @@ export default function SecurityConfig() {
   // ---- Tab 内容 ----
   const scanTab = draft ? (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-      <Card title={t('detector.title', { defaultValue: '扫描引擎' })} size="small" extra={
+      <Card title={t('detector.title')} size="small" extra={
         <Button type="primary" size="small" loading={savingScan} onClick={onSaveScan}>{t('settings.saveConfig')}</Button>
       }>
         <Table
@@ -252,8 +252,8 @@ export default function SecurityConfig() {
   ) : null
 
   const tabItems = [
-    { key: 'scan', label: t('nav.sub.scanConfig', { defaultValue: '扫描配置' }), children: scanTab },
-    { key: 'intercept', label: t('nav.sub.interceptConfig', { defaultValue: '拦截配置' }), children: interceptTab },
+    { key: 'scan', label: t('settings.securityTab.scan'), children: scanTab },
+    { key: 'intercept', label: t('settings.securityTab.intercept'), children: interceptTab },
   ]
 
   return (

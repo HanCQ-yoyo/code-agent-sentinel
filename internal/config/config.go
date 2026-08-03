@@ -132,7 +132,7 @@ type ScheduleCfg struct {
 }
 
 func DefaultConfig() *Config {
-	return &Config{Bind: "127.0.0.1", Port: 0, MaxBackups: 20}
+	return &Config{Bind: "127.0.0.1", Port: 15921, MaxBackups: 20}
 }
 
 // DefaultPath 返回 ~/.claude-sentinel/config.yaml。

@@ -60,7 +60,7 @@ func newRootCmd() *cobra.Command {
 	}
 	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.claude-sentinel/config.yaml)")
 	cmd.Flags().StringVar(&bindFlag, "bind", "", "覆盖 bind 地址")
-	cmd.Flags().IntVar(&portFlag, "port", 0, "覆盖端口(0=随机)")
+	cmd.Flags().IntVar(&portFlag, "port", 15921, "监听端口")
 	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "不自动打开浏览器")
 	cmd.Flags().BoolVar(&risky, "i-know-its-risky", false, "非 loopback 且无白名单时强制启动(危险)")
 	cmd.Flags().StringVar(&homeFlag, "home", "", "覆盖 home 目录(调试)")
@@ -126,9 +126,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	if bindFlag != "" {
 		cfg.Bind = bindFlag
 	}
-	if portFlag != 0 {
-		cfg.Port = portFlag
-	}
+	cfg.Port = portFlag
 	if err := api.ValidateBindPolicy(cfg, risky); err != nil {
 		return err
 	}

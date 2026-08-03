@@ -21,7 +21,7 @@ export default function GeneralSettings() {
       {/* 个性化配置: 主题 + 语言,标题在左控件在右 */}
       <Card title={t('settings.personalization', { defaultValue: '个性化配置' })} size="small">
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <span style={{ fontSize: 'var(--fs-sm)' }}>{t('topbar.theme')}</span>
             <Switch
               size="small"
@@ -32,7 +32,7 @@ export default function GeneralSettings() {
               aria-label={t('topbar.theme')}
             />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <span style={{ fontSize: 'var(--fs-sm)' }}>{t('topbar.language')}</span>
             <Select
               value={i18n.language === 'zh' ? 'zh' : 'en'}
@@ -54,7 +54,7 @@ export default function GeneralSettings() {
       </Card>
 
       {/* Code Agents(原 SettingsAgents 内容) */}
-      <Card title={t('settings.agentsTab')}>
+      <Card title={t('settings.agentsTab')} size="small">
         <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)', marginBottom: 'var(--space-md)', color: 'var(--color-muted)', fontSize: 'var(--fs-sm)' }}>
           <InfoCircleOutlined style={{ color: 'var(--color-dim)' }} />
           <span>{t('settings.agentsReadonlyHint')}</span>

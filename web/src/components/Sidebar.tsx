@@ -46,37 +46,40 @@ export function Sidebar() {
   const { t } = useTranslation()
   const items = useNavItems()
 
-  // selectedKeys: 当前路径(面包屑对齐)
   const selected = loc.pathname === '/' ? '/dashboard' : loc.pathname
 
   return (
-    <Sider width={208} breakpoint="lg" collapsedWidth={0} style={{ background: 'var(--color-paper-2)', display: 'flex', flexDirection: 'column', height: '100vh' }}>
-      {/* 品牌 */}
-      <div data-testid="brand" style={{ display: 'flex', alignItems: 'center', padding: 'var(--space-xl) var(--space-2xl)' }}>
-        <span style={{ color: 'var(--color-accent)', fontWeight: 700, fontSize: 'var(--fs-md)', lineHeight: '20px', letterSpacing: '-0.01em' }}>
-          Code Agent Sentinel
-        </span>
-      </div>
-      {/* 菜单: flex:1 撑满剩余 */}
-      <Menu
-        mode="inline"
-        selectedKeys={[selected]}
-        defaultOpenKeys={selected.startsWith('/settings') ? ['/settings'] : undefined}
-        onClick={({ key }) => nav(key)}
-        items={items}
-        style={{ background: 'var(--color-paper-2)', borderInlineEnd: 'none', flex: 1, overflow: 'auto' }}
-      />
-      {/* 底部: 主题切换 */}
-      <div style={{ padding: 'var(--space-md) var(--space-xl)', borderTop: '1px solid var(--color-rule)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--color-muted)' }}>{t('topbar.theme')}</span>
-        <Switch
-          size="small"
-          checked={theme === 'dark'}
-          onChange={toggle}
-          checkedChildren={t('topbar.dark')}
-          unCheckedChildren={t('topbar.light')}
-          aria-label={t('topbar.theme')}
+    <Sider width={208} breakpoint="lg" collapsedWidth={0} style={{ background: 'var(--color-paper-2)', height: '100vh', position: 'sticky', top: 0, overflow: 'hidden' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+        {/* 品牌 */}
+        <div data-testid="brand" style={{ flexShrink: 0, display: 'flex', alignItems: 'center', padding: 'var(--space-xl) var(--space-2xl)' }}>
+          <span style={{ color: 'var(--color-accent)', fontWeight: 700, fontSize: 'var(--fs-md)', lineHeight: '20px', letterSpacing: '-0.01em' }}>
+            Code Agent Sentinel
+          </span>
+        </div>
+
+        {/* 菜单: flex:1 撑满中间空白 */}
+        <Menu
+          mode="inline"
+          selectedKeys={[selected]}
+          defaultOpenKeys={selected.startsWith('/settings') ? ['/settings'] : undefined}
+          onClick={({ key }) => nav(key)}
+          items={items}
+          style={{ background: 'var(--color-paper-2)', borderInlineEnd: 'none', flex: 1, overflow: 'auto' }}
         />
+
+        {/* 主题切换: 贴底, 分隔线与菜单独立 */}
+        <div style={{ flexShrink: 0, borderTop: '1px solid var(--color-rule)', padding: 'var(--space-md) var(--space-xl)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--color-muted)' }}>{t('topbar.theme')}</span>
+          <Switch
+            size="small"
+            checked={theme === 'dark'}
+            onChange={toggle}
+            checkedChildren={t('topbar.dark')}
+            unCheckedChildren={t('topbar.light')}
+            aria-label={t('topbar.theme')}
+          />
+        </div>
       </div>
     </Sider>
   )

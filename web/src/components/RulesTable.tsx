@@ -1,7 +1,7 @@
 import { useState, useMemo, useEffect, type HTMLAttributes } from 'react'
 import { Table, Segmented, Empty, Typography, Card, Tooltip, Tag, Space, Switch, Button, Popconfirm } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { EditOutlined, ForkOutlined, DeleteOutlined } from '@ant-design/icons'
+import { EditOutlined, ForkOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import type { Severity, RuleDTO, RuleDomain } from '../types'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
@@ -31,6 +31,7 @@ const SOURCE_OPTIONS = ['builtin', 'custom'] as const
 
 interface RulesTableProps {
   domain: RuleDomain
+  onCreate?: () => void
   onEdit?: (r: RuleDTO) => void
   onFork?: (r: RuleDTO) => void
 }
@@ -39,7 +40,7 @@ interface RulesTableProps {
 // 操作列:启停 Switch(custom/builtin 都可)+ custom 规则的 Edit/Delete + builtin 规则的 Fork。
 // onEdit/onFork 回调由 Settings 页传入(Task 17 接 Segmented 域切换 + Task 16 接 RuleDrawer 编辑模式)。
 // Task 15:Settings 暂硬编码 domain="detect",onEdit/onFork 为 no-op(占位,Task 16/17 接线)。
-export function RulesTable({ domain, onEdit, onFork }: RulesTableProps) {
+export function RulesTable({ domain, onCreate, onEdit, onFork }: RulesTableProps) {
   const { t } = useTranslation()
   const [sev, setSev] = useState<Severity | 'all'>('all')
   const [src, setSrc] = useState<string>('all')
@@ -91,7 +92,7 @@ export function RulesTable({ domain, onEdit, onFork }: RulesTableProps) {
   // RuleDTO 无 detector/syntax/valid 字段(旧 FlatRule 才有),故去掉检测器列与规则语法列。
   // 行可点击 → 打开规则详情抽屉(只读,Task 16 改编辑模式)。
   const columns: ColumnsType<RuleDTO> = [
-    { title: t('ruleTable.colRuleId'), width: 260, dataIndex: 'id', render: (id: string) => <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }}>{id}</Typography.Text> },
+    { title: t('ruleTable.colRuleId'), width: 400, dataIndex: 'id', render: (id: string) => <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }}>{id}</Typography.Text> },
     {
       title: t('ruleTable.colRuleName'), ellipsis: true, render: (_: unknown, r: RuleDTO) => {
         // 规则名称取双语名(ruleName:先 i18n rules.<id>,回退 r.description 后端原文)。
@@ -119,7 +120,7 @@ export function RulesTable({ domain, onEdit, onFork }: RulesTableProps) {
     {
       // 操作列:启停 Switch + custom→Edit/Delete + builtin→Fork。
       // rulesManage.* i18n key 由 Task 17 添加,缺失时 t() 返回 key 字符串(可接受,build 不受影响)。
-      title: t('rulesManage.actions'), key: 'actions', width: 220, render: (_: unknown, r: RuleDTO) => (
+      title: t('rulesManage.actions'), key: 'actions', width: 136, render: (_: unknown, r: RuleDTO) => (
         <Space size="small" onClick={(e) => e.stopPropagation()}>
           <Switch
             size="small"
@@ -152,6 +153,7 @@ export function RulesTable({ domain, onEdit, onFork }: RulesTableProps) {
       {/* 筛选工具栏行(design.md #2:统一模式——框在结果 Card 内顶部 + 底部 hairline 分隔)。
           来源 + 级别两组筛选同一行(flex-wrap),复用 sev-seg 配色,组合:来源 → 级别。 */}
       <div className="filter-toolbar">
+        {onCreate ? <Button type="primary" size="small" icon={<PlusOutlined />} onClick={onCreate} style={{ boxShadow: '0 2px 6px rgba(0,0,0,0.15)', borderRadius: 6 }}>{t('rulesManage.create')}</Button> : null}
         <Segmented
           className="sev-seg"
           value={src}

@@ -714,7 +714,7 @@ test('Settings 拦截配置面板展示 Mode 单选(Stage R3)', async ({ page })
   await expect(page.getByRole('radio', { name: /严格/ })).toBeVisible({ timeout: 10000 })
   await expect(page.getByRole('radio', { name: /宽松/ })).toBeVisible({ timeout: 10000 })
   // 放行清单启用开关也平铺在页面上(Form.Item)。
-  await expect(page.getByText('放行清单启用', { exact: true })).toBeVisible({ timeout: 5000 })
+  await expect(page.getByText('白名单启用', { exact: true })).toBeVisible({ timeout: 5000 })
 })
 
 // Task 8: 侧栏系统设置子菜单展开并选中回归测试。

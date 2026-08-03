@@ -1,11 +1,9 @@
 import { useState } from 'react'
-import { useTranslation } from 'react-i18next'
 import type { RuleDTO } from '../../types'
 import { RulesTable } from '../../components/RulesTable'
 import { RuleDrawer } from '../../components/RuleDrawer'
 
 export default function ScanRules() {
-  const { t } = useTranslation()
   const [editingRule, setEditingRule] = useState<RuleDTO | null>(null)
   const [drawerMode, setDrawerMode] = useState<'view' | 'edit' | 'create'>('view')
 
