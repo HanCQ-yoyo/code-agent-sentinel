@@ -1,9 +1,8 @@
 {
   "nav": { "dashboard": "Dashboard", "assets": "Assets", "findings": "Findings", "history": "Scan Tasks", "intercept": "Intercept Log", "settings": "Settings",
     "sub.general": "General",
-    "sub.scanConfig": "Scan Config",
+    "sub.securityConfig": "Security",
     "sub.scanRules": "Scan Rules",
-    "sub.interceptConfig": "Intercept Config",
     "sub.interceptRules": "Intercept Rules"
   },
   "topbar": { "rescan": "Security Scan", "scanning": "Scanning…", "language": "Language", "theme": "Theme", "leafAsset": "Asset Details", "leafScan": "Scan Details", "dark": "Dark", "light": "Light" },
