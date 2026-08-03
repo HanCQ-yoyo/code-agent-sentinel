@@ -15,7 +15,7 @@ export function antdTheme(mode: Mode): ThemeConfig {
       colorBgBase: t.paper,
       colorBgContainer: t.paper2,
       colorBgElevated: t.paper2,
-      colorBgLayout: t.paper,
+      colorBgLayout: t.paper2,
       colorText: t.ink,
       colorTextSecondary: t.muted,
       colorTextTertiary: t.dim,
@@ -45,7 +45,7 @@ export function antdTheme(mode: Mode): ThemeConfig {
       wireframe: false,
     },
     components: {
-      Layout: { headerBg: t.paper2, siderBg: t.paper2, bodyBg: t.paper },
+      Layout: { headerBg: t.paper2, siderBg: t.paper2, bodyBg: t.paper2 },
       Menu: {
         itemBg: t.paper2,
         itemSelectedBg: t.accentSoft,

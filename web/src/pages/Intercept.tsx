@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
 import { Card, Table, Tag, Drawer, Select, Button, Space, Tooltip, Empty, Spin, Popconfirm, Typography, message, Modal, Input, Form } from 'antd'
-import { ReloadOutlined, DeleteOutlined } from '@ant-design/icons'
+import { ReloadOutlined, DeleteOutlined, PlusOutlined } from '@ant-design/icons'
 import type { ColumnsType } from 'antd/es/table'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
 import type { InterceptRecord, RuleDTO } from '../types'
 import { formatDateTime } from '../lib/format'
+import { AgentIcon } from '../components/AgentIcon'
+import { agentMetaById } from '../lib/agents'
 
 // 转义正则元字符:拦截名单按精确命令匹配,但新建规则用 regex,需转义命令中的特殊字符。
 function escapeRegex(s: string): string {
@@ -114,10 +116,19 @@ export default function Intercept() {
       ),
     },
     {
+      title: t('intercept.agentColumn', { defaultValue: 'Agent' }),
+      dataIndex: 'agent_protocol',
+      width: 130,
+      render: (protocol: string) => {
+        const m = agentMetaById(protocol)
+        return <span style={{ whiteSpace: 'nowrap' }}><AgentIcon id={protocol} /> {m.label}</span>
+      },
+    },
+    {
       title: t('intercept.outcome'),
       dataIndex: 'outcome',
       width: 90,
-      render: (v: string) => <Tag style={{ background: outcomeColor[v] ?? 'var(--color-rule-2)', color: 'var(--badge-text)', border: 'none' }}>{v}</Tag>,
+      render: (v: string) => <Tag style={{ background: outcomeColor[v] ?? 'var(--color-rule-2)', color: 'var(--badge-text)', border: 'none' }}>{t(`intercept.outcome${v.charAt(0).toUpperCase() + v.slice(1)}`, { defaultValue: v })}</Tag>,
     },
     {
       title: t('intercept.command'),
@@ -140,20 +151,20 @@ export default function Intercept() {
       title: t('intercept.severity'),
       dataIndex: 'severity',
       width: 90,
-      render: (v?: string) => v ? <Tag>{v}</Tag> : <Typography.Text type="secondary">—</Typography.Text>,
+      render: (v?: string) => v ? <Tag>{t(`severity.${v}`, { defaultValue: v })}</Tag> : <Typography.Text type="secondary">—</Typography.Text>,
     },
     {
       title: t('intercept.confidence'),
       dataIndex: 'confidence',
       width: 110,
       render: (v?: string) => v ? (
-        <Tag style={{ background: confidenceColor[v] ?? 'var(--color-rule-2)', color: 'var(--badge-text)', border: 'none' }}>{v}</Tag>
+        <Tag style={{ background: confidenceColor[v] ?? 'var(--color-rule-2)', color: 'var(--badge-text)', border: 'none' }}>{t(`intercept.confidence${v.charAt(0).toUpperCase() + v.slice(1)}`, { defaultValue: v })}</Tag>
       ) : <Typography.Text type="secondary">—</Typography.Text>,
     },
     {
       title: t('intercept.colAction', { defaultValue: '操作' }), width: 180, render: (_: unknown, r: InterceptRecord) => (
         <Space size="small" onClick={(e) => e.stopPropagation()}>
-          <Button size="small" onClick={() => openDispose(r)}>{t('intercept.dispose', { defaultValue: '处置' })}</Button>
+          <Button type="text" size="small" icon={<PlusOutlined />} onClick={() => openDispose(r)} aria-label={t('intercept.dispose', { defaultValue: '处置' })} />
           <Popconfirm
             title={t('intercept.confirmDelete')}
             okText={t('intercept.delete')}
@@ -215,13 +226,13 @@ export default function Intercept() {
             {/* 决策 + 严重度 + 置信度(三列同行,重要度高) */}
             <div style={{ display: 'flex', gap: 16 }}>
               <Form.Item label={t('intercept.outcomeLabel', { defaultValue: '决策' })} style={{ flex: 1 }}>
-                <Tag style={{ background: outcomeColor[detail.outcome] ?? 'var(--color-rule-2)', color: 'var(--badge-text)', border: 'none' }}>{detail.outcome}</Tag>
+                <Tag style={{ background: outcomeColor[detail.outcome] ?? 'var(--color-rule-2)', color: 'var(--badge-text)', border: 'none' }}>{t(`intercept.outcome${detail.outcome.charAt(0).toUpperCase() + detail.outcome.slice(1)}`, { defaultValue: detail.outcome })}</Tag>
               </Form.Item>
               <Form.Item label={t('intercept.severityLabel', { defaultValue: '严重度' })} style={{ flex: 1 }}>
-                {detail.severity ? <Tag>{detail.severity}</Tag> : <Typography.Text type="secondary">—</Typography.Text>}
+                {detail.severity ? <Tag>{t(`severity.${detail.severity}`, { defaultValue: detail.severity })}</Tag> : <Typography.Text type="secondary">—</Typography.Text>}
               </Form.Item>
               <Form.Item label={t('intercept.confidenceLabel', { defaultValue: '置信度' })} style={{ flex: 1 }}>
-                {detail.confidence ? <Tag style={{ background: confidenceColor[detail.confidence] ?? 'var(--color-rule-2)', color: 'var(--badge-text)', border: 'none' }}>{detail.confidence}</Tag> : <Typography.Text type="secondary">—</Typography.Text>}
+                {detail.confidence ? <Tag style={{ background: confidenceColor[detail.confidence] ?? 'var(--color-rule-2)', color: 'var(--badge-text)', border: 'none' }}>{t(`intercept.confidence${detail.confidence.charAt(0).toUpperCase() + detail.confidence.slice(1)}`, { defaultValue: detail.confidence })}</Tag> : <Typography.Text type="secondary">—</Typography.Text>}
               </Form.Item>
             </div>
             {/* 原因(文字可能多,独立行) */}

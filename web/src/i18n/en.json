@@ -160,7 +160,15 @@
     "ruleBgTitle": "Rule Context",
     "packId": "Rule Pack",
     "envTitle": "Execution Env",
-    "protocol": "Protocol"
+    "protocol": "Protocol",
+    "agentColumn": "Agent",
+    "outcomeDeny": "Deny",
+    "outcomeWarn": "Warn",
+    "outcomeAsk": "Ask",
+    "outcomeAllow": "Allow",
+    "confidenceHigh": "High",
+    "confidenceLow": "Low",
+    "confidenceUnknown": "Unknown"
   },
   "settings": {
     "binaryPath": "Binary path",

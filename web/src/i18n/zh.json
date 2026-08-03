@@ -160,7 +160,15 @@
     "ruleBgTitle": "规则背景",
     "packId": "规则包",
     "envTitle": "执行环境",
-    "protocol": "协议"
+    "protocol": "协议",
+    "agentColumn": "Agent",
+    "outcomeDeny": "拒绝",
+    "outcomeWarn": "警告",
+    "outcomeAsk": "询问",
+    "outcomeAllow": "放行",
+    "confidenceHigh": "高",
+    "confidenceLow": "低",
+    "confidenceUnknown": "未知"
   },
   "settings": {
     "binaryPath": "二进制路径",

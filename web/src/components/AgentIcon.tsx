@@ -24,7 +24,7 @@ interface Props {
 }
 
 export function AgentIcon({ id, size = '1em', style }: Props) {
-  if (id === 'claude-code') {
+  if (id === 'claude-code' || id === 'claude') {
     return (
       <svg
         height={size}

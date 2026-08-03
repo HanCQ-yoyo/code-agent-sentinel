@@ -108,7 +108,7 @@ export default function History() {
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16 }}>
               {batchSiblings.map((sib) => {
                 const aid = sib.agent_id ?? ''
-                const m = agentMetaById(aid)
+                const m = agentMetaById(aid, agents?.agents)
                 return (
                   <Link key={sib.id} to={`/history/${sib.id}`} style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
                     <AgentIcon id={aid} /> {m.label}
@@ -123,7 +123,7 @@ export default function History() {
         <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'stretch' }}>
           {batchRecords.map((r) => {
             const aid = r.agent_id ?? ''
-            const m = agentMetaById(aid)
+            const m = agentMetaById(aid, agents?.agents)
             return (
               <HealthScoreCard key={r.id} h={r.health_score} agentId={aid} agentName={m.label} />
             )
@@ -150,7 +150,7 @@ export default function History() {
 
   const columns: ColumnsType<ScanSummary> = [
     { title: t('history.colTime'), dataIndex: 'started_at', width: 150, render: (time: string, h: ScanSummary) => <Link to={`/history/${h.id}`}><span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-sm)' }}>{formatDateTimeShort(time)}</span></Link> },
-    { title: t('history.agent'), dataIndex: 'agent_id', width: 120, render: (id: string) => { const m = agentMetaById(id ?? ''); return id ? <span style={{ whiteSpace: 'nowrap' }}><AgentIcon id={id} /> {m.label}</span> : '-' } },
+    { title: t('history.agent'), dataIndex: 'agent_id', width: 120, render: (id: string) => { const m = agentMetaById(id ?? '', agents?.agents); return id ? <span style={{ whiteSpace: 'nowrap' }}><AgentIcon id={id} /> {m.label}</span> : '-' } },
     { title: t('history.colRiskScore'), width: 90, render: (_: unknown, h: ScanSummary) => (
       <span title={h.band} style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: riskColor(h.health_score) }}>{h.health_score}</span>
     ) },
@@ -208,7 +208,7 @@ export default function History() {
           placeholder={t('history.filterAgent')}
           style={{ width: 180 }}
           value={agentFilter || undefined}
-          options={(agents?.agents ?? []).map(a => ({ value: a.id, label: a.name }))}
+          options={(agents?.agents ?? []).map(a => ({ value: a.id, label: <span style={{ whiteSpace: 'nowrap' }}><AgentIcon id={a.id} /> {a.name}</span> }))}
           onChange={(v) => setAgentFilter(v ?? '')}
         />
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--color-muted)', fontSize: 'var(--fs-sm)' }}>

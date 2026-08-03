@@ -5,6 +5,8 @@ import { DeleteOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
 import type { ScheduleStatus } from '../types'
+import { AgentIcon } from '../components/AgentIcon'
+import { agentMetaById } from '../lib/agents'
 
 export function SettingsSchedules() {
   const { t } = useTranslation()
@@ -37,7 +39,10 @@ export function SettingsSchedules() {
     {
       title: t('settings.agentName'),
       dataIndex: 'agent_id',
-      render: (id: string) => agentList.find(a => a.id === id)?.name ?? id,
+      render: (id: string) => {
+        const m = agentMetaById(id, agentList)
+        return <span style={{ whiteSpace: 'nowrap' }}><AgentIcon id={id} /> {m.label}</span>
+      },
     },
     {
       title: t('settings.interval'),
@@ -88,25 +93,24 @@ export function SettingsSchedules() {
   ]
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-      <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
-        <Button type="primary" size="small" onClick={openModal} disabled={availableAgents.length === 0}>
-          {t('settings.addSchedule')}
-        </Button>
-      </div>
-      <Card>
-        {schedules.length === 0 ? (
-          <Empty description={t('settings.noSchedules')} />
-        ) : (
-          <Table<ScheduleStatus>
-            size="small"
-            dataSource={schedules}
-            rowKey="agent_id"
-            pagination={false}
-            columns={columns}
-          />
-        )}
-      </Card>
+    <>
+    <Card title={t('settings.schedulesTab')} size="small" extra={
+      <Button type="primary" size="small" onClick={openModal} disabled={availableAgents.length === 0}>
+        {t('settings.addSchedule')}
+      </Button>
+    }>
+      {schedules.length === 0 ? (
+        <Empty description={t('settings.noSchedules')} />
+      ) : (
+        <Table<ScheduleStatus>
+          size="small"
+          dataSource={schedules}
+          rowKey="agent_id"
+          pagination={false}
+          columns={columns}
+        />
+      )}
+    </Card>
       <Modal
         title={t('settings.addSchedule')}
         open={modalOpen}
@@ -125,7 +129,7 @@ export function SettingsSchedules() {
               onChange={setNewAgent}
               style={{ width: '100%' }}
               placeholder={t('settings.agentName')}
-              options={availableAgents.map(a => ({ value: a.id, label: a.name }))}
+              options={availableAgents.map(a => ({ value: a.id, label: <span style={{ whiteSpace: 'nowrap' }}><AgentIcon id={a.id} /> {a.name}</span> }))}
             />
           </div>
           <div>
@@ -138,6 +142,6 @@ export function SettingsSchedules() {
           </div>
         </div>
       </Modal>
-    </div>
+    </>
   )
 }
