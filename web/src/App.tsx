@@ -10,9 +10,8 @@ import Findings from './pages/Findings'
 import History from './pages/History'
 import Intercept from './pages/Intercept'
 import GeneralSettings from './pages/settings/GeneralSettings'
-import ScanConfig from './pages/settings/ScanConfig'
+import SecurityConfig from './pages/settings/SecurityConfig'
 import ScanRules from './pages/settings/ScanRules'
-import InterceptConfig from './pages/settings/InterceptConfig'
 import InterceptRules from './pages/settings/InterceptRules'
 import AssetDetail from './components/AssetDetail'
 import { AuthGate } from './components/AuthGate'
@@ -57,9 +56,8 @@ export default function App() {
                 <Route path="/intercept" element={<Intercept />} />
                 <Route path="/settings" element={<Navigate to="/settings/general" replace />} />
                 <Route path="/settings/general" element={<GeneralSettings />} />
-                <Route path="/settings/scan-config" element={<ScanConfig />} />
+                <Route path="/settings/security" element={<SecurityConfig />} />
                 <Route path="/settings/scan-rules" element={<ScanRules />} />
-                <Route path="/settings/intercept-config" element={<InterceptConfig />} />
                 <Route path="/settings/intercept-rules" element={<InterceptRules />} />
                 <Route path="*" element={<div className="text-text-muted">页面不存在</div>} />
               </Routes>
