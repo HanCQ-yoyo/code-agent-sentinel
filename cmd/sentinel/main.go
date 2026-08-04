@@ -27,7 +27,6 @@ import (
 	"code-agent-sentinel/internal/scan"
 	"code-agent-sentinel/internal/scheduler"
 	"code-agent-sentinel/internal/security"
-	"code-agent-sentinel/internal/security/findingstate"
 	"code-agent-sentinel/internal/storage"
 )
 
@@ -270,23 +269,6 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	istore := intercept.NewStore(db)
 	// Stage R3:运行时拦截放行清单(sqlite allowlist_entries 表)。
 	allowlist := config.NewAllowlistStore(db)
-
-	// 一次性迁移:baseline.json + suppressions.yaml → finding_states.yaml(Task 11)。
-	// statesPath 已存在则跳过(不覆盖用户已有处置);旧文件重命名 .legacy 保留回滚。
-	// 迁移失败不阻塞启动(用户可手动修复后重启),仅打 stderr 提示。
-	baselinePath := filepath.Join(home, ".claude-sentinel", "baseline.json")
-	suppPath := filepath.Join(home, ".claude-sentinel", "suppressions.yaml")
-	statesPath := filepath.Join(home, ".claude-sentinel", "finding_states.yaml")
-	migRep, migErr := findingstate.MigrateFromLegacy(baselinePath, suppPath, statesPath)
-	if migErr != nil {
-		fmt.Fprintf(os.Stderr, "迁移处置状态失败: %v\n", migErr)
-	} else if migRep.BaselineCount > 0 || migRep.InlineCount > 0 {
-		fmt.Printf("已迁移处置状态: %d baseline + %d inline → finding_states.yaml", migRep.BaselineCount, migRep.InlineCount)
-		if migRep.GlobalRuleDropped > 0 {
-			fmt.Printf("; %d 条规则级全局抑制未迁移(请到规则配置禁用对应规则)", migRep.GlobalRuleDropped)
-		}
-		fmt.Println()
-	}
 
 	// editor 绑定到首个 agent 的 Engine(engAgents[0]):P2 写编辑仅针对 Claude 建模,
 	// editable.go 的 findAsset/preview/commit 走 e.Engine.Discover()。在 Codex 排首位的混合

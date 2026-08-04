@@ -6,7 +6,7 @@ import (
 	"time"
 )
 
-// InterceptRecord 是单条命令的拦截决策事件。存 ~/.claude-sentinel/intercept/<id>.json。
+// InterceptRecord 是单条命令的拦截决策事件。存 sentinel.db 的 intercept_records 表。
 // 精简:砍 exit_code/parent_command_id/hostname/allowlist_layer/bypass_code
 // (v1 纯 deny 无 allowlist)。加 ToolName(UI 筛选用)。
 // 命名空间:AgentProtocol 由 R3 协议探测动态填(claude/codex);R2 写死 "claude"。

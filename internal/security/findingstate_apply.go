@@ -45,7 +45,7 @@ func applyFindingState(f *Finding, fp string, states *findingstate.States) {
 }
 
 // ApplyFindingStateBatch 对一批 finding 做读路径统一处理:
-//  1. 调 applyFindingState 把 finding_states.yaml 的处置状态合并进每条 finding(含 resolved/false_positive → Suppressed)。
+//  1. 调 applyFindingState 把处置生命周期状态合并进每条 finding(含 resolved/false_positive → Suppressed)。
 //  2. 附 StartedAt(来自所属 ScanRecord)。
 //  3. 附 SourcePath(通过 assetSourcePath 回调按 AssetID 查 ScanRecord.Inventory 快照)。
 //

@@ -29,7 +29,7 @@ type Server struct {
 	ConfigPath      string // 配置文件路径(/api/dir-tags 回写用)
 	Token           string
 	History         *history.Store
-	Intercept       *intercept.Store       // Stage R2:运行时拦截记录(~/.claude-sentinel/intercept)
+	Intercept       *intercept.Store       // Stage R2:运行时拦截记录(sqlite intercept_records 表)
 	Allowlist       *config.AllowlistStore // Stage R3:运行时拦截放行清单(sqlite allowlist_entries 表)
 	Agents          []configengine.Agent
 	SelectedAgentID string

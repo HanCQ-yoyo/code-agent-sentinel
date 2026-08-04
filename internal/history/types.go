@@ -10,7 +10,7 @@ import (
 
 // ScanRecord 是一次完整扫描的持久化记录(含资产快照)。
 type ScanRecord struct {
-	ID          string                    `json:"id"`                 // 时间戳+8hex,与文件名一致
+	ID          string                    `json:"id"`                 // 时间戳+8hex,主键
 	AgentID     string                    `json:"agent_id"`           // 扫描的 code agent ID(多 agent 后区分)
 	BatchID     string                    `json:"batch_id,omitempty"` // 同一次重扫(多 agent)共享
 	StartedAt   time.Time                 `json:"started_at"`
