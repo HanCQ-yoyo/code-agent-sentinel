@@ -233,7 +233,7 @@ export default function History() {
                   </Tag>
                 ) : null}
                 <span style={{ fontWeight: 600, color: 'var(--color-ink)' }}>
-                  {g.batchId ? t('history.batchNAgents', { count: agentCount }) : g.rows[0].id}
+                  {g.batchId ? t('history.batchNAgents', { count: agentCount }) : (() => { const r = g.rows[0]; const m = agentMetaById(r.agent_id ?? '', agents?.agents); return <><AgentIcon id={r.agent_id ?? ''} /> {m.label}</> })()}
                 </span>
                 <span style={{ color: 'var(--color-dim)', fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', fontVariantNumeric: 'tabular-nums' }}>
                   {formatDateTimeShort(t0)}
