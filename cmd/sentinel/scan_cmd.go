@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"time"
@@ -13,6 +14,7 @@ import (
 	"code-agent-sentinel/internal/history"
 	"code-agent-sentinel/internal/scan"
 	"code-agent-sentinel/internal/security"
+	"code-agent-sentinel/internal/storage"
 )
 
 // newScanCmd 构造 `sentinel scan` 子命令:一次性扫描(发现→扫描→写历史),
@@ -77,7 +79,19 @@ func runScanCmd(cmd *cobra.Command, cfgPath, detectorsFlag, agentFlag string) er
 	r.Register(security.NewSecretDetector(cfg.Detectors))
 	r.Register(security.NewDependencyDetector(cfg.Detectors))
 	orch := &security.Orchestrator{Registry: r}
-	hist := history.NewStore(filepath.Join(home, ".claude-sentinel", "history"))
+	dbPath := filepath.Join(home, ".claude-sentinel", "sentinel.db")
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
+		return fmt.Errorf("create db dir: %w", err)
+	}
+	db, dbErr := storage.Open(dbPath)
+	if dbErr != nil {
+		return fmt.Errorf("open db: %w", dbErr)
+	}
+	defer db.Close()
+	if err := storage.RunMigrations(db); err != nil {
+		return fmt.Errorf("run migrations: %w", err)
+	}
+	hist := history.NewStore(db)
 	runner := scan.NewRunner(engAgents, orch, hist)
 
 	var ids []string

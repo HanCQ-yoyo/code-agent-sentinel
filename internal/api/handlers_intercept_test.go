@@ -12,6 +12,7 @@ import (
 
 	"code-agent-sentinel/internal/config"
 	"code-agent-sentinel/internal/intercept"
+	"code-agent-sentinel/internal/storage"
 )
 
 // newTestConfig 返回带 Guard 非-nil 默认配置(guard/intercept handler 测试用)。
@@ -27,7 +28,16 @@ func newTestConfig() *config.Config {
 func newTestInterceptServer(t *testing.T) *Server {
 	t.Helper()
 	dir := t.TempDir()
-	s := &Server{Intercept: intercept.NewStore(filepath.Join(dir, "intercept"))}
+	dbPath := filepath.Join(dir, "test.db")
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := storage.RunMigrations(db); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+	s := &Server{Intercept: intercept.NewStore(db)}
 	s.Config = newTestConfig()
 	s.ConfigPath = filepath.Join(dir, "config.yaml")
 	return s

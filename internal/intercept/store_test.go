@@ -5,11 +5,28 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"code-agent-sentinel/internal/storage"
 )
 
-func TestStoreSaveGetDelete(t *testing.T) {
+// newTestInterceptStore 在临时目录创建 sqlite db 并跑迁移,返回 *Store。
+func newTestInterceptStore(t *testing.T) *Store {
+	t.Helper()
 	dir := t.TempDir()
-	s := NewStore(dir)
+	dbPath := filepath.Join(dir, "test.db")
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := storage.RunMigrations(db); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+	return NewStore(db)
+}
+
+func TestStoreSaveGetDelete(t *testing.T) {
+	s := newTestInterceptStore(t)
 	rec := InterceptRecord{
 		ID: "20260728-abc", Timestamp: time.Now(), AgentProtocol: "claude",
 		Outcome: "deny", Command: "rm -rf /",
@@ -24,7 +41,6 @@ func TestStoreSaveGetDelete(t *testing.T) {
 	if got.Command != "rm -rf /" {
 		t.Fatalf("Get 内容不对: %+v", got)
 	}
-	// 文件落在 dir 下
 	if _, err := s.Get("nonexistent"); err != ErrNotFound {
 		t.Fatalf("不存在应返回 ErrNotFound, got %v", err)
 	}
@@ -37,8 +53,7 @@ func TestStoreSaveGetDelete(t *testing.T) {
 }
 
 func TestStoreListOrder(t *testing.T) {
-	dir := t.TempDir()
-	s := NewStore(dir)
+	s := newTestInterceptStore(t)
 	base := time.Date(2026, 7, 28, 12, 0, 0, 0, time.UTC)
 	for i, off := range []int{2, 0, 1} {
 		s.Append(InterceptRecord{

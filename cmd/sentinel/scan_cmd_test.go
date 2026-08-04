@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"code-agent-sentinel/internal/storage"
 )
 
 func TestScanCmdRegistered(t *testing.T) {
@@ -37,10 +39,15 @@ func TestScanCmdWritesHistory(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("scan 执行失败: %v", err)
 	}
-	// history 目录应有 1 条记录
-	entries, _ := os.ReadDir(filepath.Join(home, ".claude-sentinel", "history"))
-	if len(entries) != 1 {
-		t.Errorf("history 应 1 条,got %d", len(entries))
+	// history DB 应有 1 条记录
+	db, err := storage.Open(filepath.Join(home, ".claude-sentinel", "sentinel.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	rows, _ := storage.ListHistorySummaries(db)
+	if len(rows) != 1 {
+		t.Errorf("history 应 1 条,got %d", len(rows))
 	}
 }
 
@@ -63,9 +70,14 @@ func TestScanCmdAcceptsAgentFlag(t *testing.T) {
 	if err := cmd.Execute(); err != nil {
 		t.Fatalf("scan --agent 应跑通: %v", err)
 	}
-	// history 目录应有 1 条记录(与无 --agent 一致)
-	entries, _ := os.ReadDir(filepath.Join(home, ".claude-sentinel", "history"))
-	if len(entries) != 1 {
-		t.Errorf("history 应 1 条,got %d", len(entries))
+	// history DB 应有 1 条记录
+	db, err := storage.Open(filepath.Join(home, ".claude-sentinel", "sentinel.db"))
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	rows, _ := storage.ListHistorySummaries(db)
+	if len(rows) != 1 {
+		t.Errorf("history 应 1 条,got %d", len(rows))
 	}
 }

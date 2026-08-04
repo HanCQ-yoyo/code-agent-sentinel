@@ -2,99 +2,132 @@
 package intercept
 
 import (
-	"encoding/json"
 	"errors"
-	"os"
-	"path/filepath"
-	"sort"
-	"strings"
+	"fmt"
+	"time"
+
+	"code-agent-sentinel/internal/storage"
 )
 
 // ErrNotFound 表示指定 ID 的拦截记录不存在。
 var ErrNotFound = errors.New("intercept: record not found")
 
-// Store 把拦截记录以 JSON 文件持久化到 dir(镜像 history.Store)。
-// 纯文件 I/O,不碰 ~/.claude;dir 由调用方注入(生产 ~/.claude-sentinel/intercept)。
-type Store struct{ dir string }
+// Store 把拦截记录持久化到 sqlite intercept_records 表。
+type Store struct{ db *storage.DB }
 
-func NewStore(dir string) *Store { return &Store{dir: dir} }
+// NewStore 返回指向 db 的 Store。db 为 nil 时所有操作返回错误 (fail-open 空内核可退化)。
+func NewStore(db *storage.DB) *Store { return &Store{db: db} }
 
-func (s *Store) path(id string) string { return filepath.Join(s.dir, id+".json") }
-
-// Append 原子写一条记录(临时文件 + rename,防崩溃半写)。
+// Append 写入一条拦截记录。
 func (s *Store) Append(rec InterceptRecord) error {
+	if s.db == nil {
+		return errors.New("intercept: nil db")
+	}
 	if rec.ID == "" {
 		return errors.New("intercept: empty ID")
 	}
-	if err := os.MkdirAll(s.dir, 0o755); err != nil {
-		return err
+	row := storage.InterceptRow{
+		ID:             rec.ID,
+		Timestamp:      rec.Timestamp.Format(time.RFC3339Nano),
+		AgentProtocol:  rec.AgentProtocol,
+		WorkingDir:     rec.WorkingDir,
+		Command:        rec.Command,
+		Outcome:        rec.Outcome,
+		RuleID:         rec.RuleID,
+		PackID:         rec.PackID,
+		Severity:       rec.Severity,
+		Reason:         rec.Reason,
+		EvalDurationUS: rec.EvalDurationUS,
+		SessionID:      rec.SessionID,
+		ToolName:       rec.ToolName,
+		Confidence:     rec.Confidence,
+		MatchedSpan:    rec.MatchedSpan,
 	}
-	data, err := json.Marshal(rec)
-	if err != nil {
-		return err
-	}
-	tmp, err := os.CreateTemp(s.dir, "tmp-*.json")
-	if err != nil {
-		return err
-	}
-	tmpName := tmp.Name()
-	defer os.Remove(tmpName)
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	return os.Rename(tmpName, s.path(rec.ID))
+	return storage.InsertIntercept(s.db, row)
 }
 
+// Get 取单条记录。不存在返回 ErrNotFound。
 func (s *Store) Get(id string) (*InterceptRecord, error) {
-	data, err := os.ReadFile(s.path(id))
-	if os.IsNotExist(err) {
-		return nil, ErrNotFound
+	if s.db == nil {
+		return nil, fmt.Errorf("intercept: nil db")
 	}
+	row, found, err := storage.GetIntercept(s.db, id)
 	if err != nil {
 		return nil, err
 	}
-	var rec InterceptRecord
-	if err := json.Unmarshal(data, &rec); err != nil {
-		return nil, err
+	if !found {
+		return nil, ErrNotFound
 	}
-	return &rec, nil
+	ts, err := time.Parse(time.RFC3339Nano, row.Timestamp)
+	if err != nil {
+		return nil, fmt.Errorf("intercept: parse timestamp %q: %w", row.Timestamp, err)
+	}
+	return &InterceptRecord{
+		ID:             row.ID,
+		Timestamp:      ts,
+		AgentProtocol:  row.AgentProtocol,
+		WorkingDir:     row.WorkingDir,
+		Command:        row.Command,
+		Outcome:        row.Outcome,
+		RuleID:         row.RuleID,
+		PackID:         row.PackID,
+		Severity:       row.Severity,
+		Reason:         row.Reason,
+		EvalDurationUS: row.EvalDurationUS,
+		SessionID:      row.SessionID,
+		ToolName:       row.ToolName,
+		Confidence:     row.Confidence,
+		MatchedSpan:    row.MatchedSpan,
+	}, nil
 }
 
 // List 返回所有记录,按 Timestamp 倒序(最新在前)。
 func (s *Store) List() ([]InterceptRecord, error) {
-	entries, err := os.ReadDir(s.dir)
-	if os.IsNotExist(err) {
-		return nil, nil
+	if s.db == nil {
+		return nil, fmt.Errorf("intercept: nil db")
 	}
+	rows, err := storage.ListIntercepts(s.db)
 	if err != nil {
 		return nil, err
 	}
-	var out []InterceptRecord
-	for _, e := range entries {
-		if e.IsDir() || filepath.Ext(e.Name()) != ".json" || strings.HasPrefix(e.Name(), "tmp-") {
-			continue
+	out := make([]InterceptRecord, 0, len(rows))
+	for _, row := range rows {
+		ts, tsErr := time.Parse(time.RFC3339Nano, row.Timestamp)
+		if tsErr != nil {
+			return nil, fmt.Errorf("intercept: parse timestamp %q: %w", row.Timestamp, tsErr)
 		}
-		data, err := os.ReadFile(filepath.Join(s.dir, e.Name()))
-		if err != nil {
-			continue
-		}
-		var rec InterceptRecord
-		if err := json.Unmarshal(data, &rec); err == nil {
-			out = append(out, rec)
-		}
+		out = append(out, InterceptRecord{
+			ID:             row.ID,
+			Timestamp:      ts,
+			AgentProtocol:  row.AgentProtocol,
+			WorkingDir:     row.WorkingDir,
+			Command:        row.Command,
+			Outcome:        row.Outcome,
+			RuleID:         row.RuleID,
+			PackID:         row.PackID,
+			Severity:       row.Severity,
+			Reason:         row.Reason,
+			EvalDurationUS: row.EvalDurationUS,
+			SessionID:      row.SessionID,
+			ToolName:       row.ToolName,
+			Confidence:     row.Confidence,
+			MatchedSpan:    row.MatchedSpan,
+		})
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Timestamp.After(out[j].Timestamp) })
 	return out, nil
 }
 
+// Delete 删除单条记录。不存在返回 ErrNotFound。
 func (s *Store) Delete(id string) error {
-	err := os.Remove(s.path(id))
-	if os.IsNotExist(err) {
+	if s.db == nil {
+		return fmt.Errorf("intercept: nil db")
+	}
+	found, err := storage.DeleteIntercept(s.db, id)
+	if err != nil {
+		return err
+	}
+	if !found {
 		return ErrNotFound
 	}
-	return err
+	return nil
 }

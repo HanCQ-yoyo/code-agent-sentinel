@@ -9,6 +9,7 @@ import (
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/history"
 	"code-agent-sentinel/internal/security"
+	"code-agent-sentinel/internal/storage"
 )
 
 // writeScanFile 是扫描测试辅助:写文件(自动建父目录)。
@@ -22,6 +23,22 @@ func writeScanFile(t *testing.T, p, c string) {
 	}
 }
 
+// newTestDB 在临时目录创建 sqlite db + 跑迁移 + t.Cleanup 关闭,返回 *storage.DB。
+func newTestDB(t *testing.T) *storage.DB {
+	t.Helper()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := storage.RunMigrations(db); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+	return db
+}
+
 // newTestRunner 构造单 agent Runner(root 指向 fixture)。
 func newTestRunner(t *testing.T, home string) *Runner {
 	t.Helper()
@@ -29,7 +46,7 @@ func newTestRunner(t *testing.T, home string) *Runner {
 	r := security.NewRegistry()
 	r.Register(security.NewRulesDetector(home, nil, nil))
 	orch := &security.Orchestrator{Registry: r}
-	hist := history.NewStore(filepath.Join(home, "..", "history"))
+	hist := history.NewStore(newTestDB(t))
 	return NewRunner(agents, orch, hist)
 }
 
@@ -46,7 +63,7 @@ func TestRunnerRunScanWritesHistory(t *testing.T) {
 	r := security.NewRegistry()
 	r.Register(security.NewRulesDetector(dir, nil, nil))
 	orch := &security.Orchestrator{Registry: r}
-	hist := history.NewStore(filepath.Join(dir, "history"))
+	hist := history.NewStore(newTestDB(t))
 	runner := NewRunner(agents, orch, hist)
 
 	res, err := runner.RunScan(context.Background(), "", ScanScope{Type: "global"}, nil, "")
@@ -288,8 +305,7 @@ func TestRunScanBackfillsAgentID(t *testing.T) {
 		{ID: "agent-a", Name: "A", RootDir: filepath.Join(home, ".claude"), ClaudeJSON: filepath.Join(home, ".claude.json"), HomeDir: home},
 		{ID: "agent-b", Name: "B", RootDir: filepath.Join(home, ".claude"), ClaudeJSON: filepath.Join(home, ".claude.json"), HomeDir: home},
 	}
-	histDir := t.TempDir()
-	hist := history.NewStore(histDir)
+	hist := history.NewStore(newTestDB(t))
 	emptyReg := security.NewRegistry()
 	orch := &security.Orchestrator{Registry: emptyReg}
 	r := NewRunner(agents, orch, hist)
@@ -323,8 +339,7 @@ func TestRunScanWritesBatchID(t *testing.T) {
 	agents := []configengine.Agent{
 		{ID: "a1", Name: "A1", RootDir: filepath.Join(home, ".claude"), ClaudeJSON: filepath.Join(home, ".claude.json"), HomeDir: home},
 	}
-	histDir := t.TempDir()
-	hist := history.NewStore(histDir)
+	hist := history.NewStore(newTestDB(t))
 	orch := &security.Orchestrator{Registry: security.NewRegistry()}
 	r := NewRunner(agents, orch, hist)
 	_, err := r.RunScan(context.Background(), "a1", ScanScope{}, nil, "batch-xyz")

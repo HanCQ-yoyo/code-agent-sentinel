@@ -79,7 +79,7 @@ func newTestServer(t *testing.T, home string) *Server {
 	r := security.NewRegistry()
 	r.Register(security.NewRulesDetector(home, nil, db))
 	orch := &security.Orchestrator{Registry: r}
-	hist := history.NewStore(filepath.Join(home, "..", "history")) // 历史目录与 .claude 同级,在 home 之外
+	hist := history.NewStore(db)
 	ed := editor.New(eng, "", 0)
 	return NewServer(eng, orch, config.DefaultConfig(), "tok", hist, configengine.DefaultAgents(home, ""), ed, db)
 }
@@ -97,7 +97,7 @@ func newTestServerWithAgents(t *testing.T, eng *configengine.Engine, agents []co
 	r := security.NewRegistry()
 	r.Register(security.NewRulesDetector(eng.HomeDir, nil, db))
 	orch := &security.Orchestrator{Registry: r}
-	hist := history.NewStore(filepath.Join(eng.HomeDir, "..", "history"))
+	hist := history.NewStore(db)
 	ed := editor.New(eng, "", 0)
 	return NewServer(eng, orch, config.DefaultConfig(), "tok", hist, agents, ed, db)
 }

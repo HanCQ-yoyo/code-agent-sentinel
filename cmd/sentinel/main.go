@@ -265,11 +265,9 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	if token == "" {
 		token = genToken()
 	}
-	histPath := filepath.Join(home, ".claude-sentinel", "history")
-	hist := history.NewStore(histPath)
-	// Stage R2:运行时拦截记录目录(与 history 同级,在 .claude 之外避免被扫到)。
-	interceptPath := filepath.Join(home, ".claude-sentinel", "intercept")
-	istore := intercept.NewStore(interceptPath)
+	hist := history.NewStore(db)
+	// Stage R2:运行时拦截记录持久化到 sqlite intercept_records 表(与 history 共用 db)。
+	istore := intercept.NewStore(db)
 	// Stage R3:运行时拦截放行清单(sqlite allowlist_entries 表)。
 	allowlist := config.NewAllowlistStore(db)
 

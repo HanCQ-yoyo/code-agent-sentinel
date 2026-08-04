@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"io"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -14,19 +13,6 @@ import (
 	"code-agent-sentinel/internal/security/ruleengine"
 	"code-agent-sentinel/internal/storage"
 )
-
-// readDirNames 返回 dir 下文件名列表(忽略错误时返回 nil),供拦截记录落盘断言。
-func readDirNames(dir string) ([]string, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, err
-	}
-	var names []string
-	for _, e := range entries {
-		names = append(names, e.Name())
-	}
-	return names, nil
-}
 
 // helper:跑 guard,返回 stdout + stderr
 func runGuardForTest(t *testing.T, stdin string, cfg *config.Config) (stdout, stderr string) {
@@ -217,13 +203,21 @@ func TestGuardWritesInterceptRecord(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.EnsureGuard()
 	home := t.TempDir()
+	dbPath := filepath.Join(home, "test.db")
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	defer db.Close()
+	if err := storage.RunMigrations(db); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
 	var out, errbuf bytes.Buffer
-	_ = runGuard(strings.NewReader(stdin), &out, &errbuf, cfg, home, nil, false)
-	// 拦截记录应落盘 ~/.claude-sentinel/intercept/*.json
-	dir := filepath.Join(home, ".claude-sentinel", "intercept")
-	entries, err := readDirNames(dir)
-	if err != nil || len(entries) == 0 {
-		t.Fatalf("应写拦截记录到 %s, err=%v", dir, err)
+	_ = runGuard(strings.NewReader(stdin), &out, &errbuf, cfg, home, db, false)
+	// 拦截记录应落盘到 sqlite intercept_records 表
+	rows, err := storage.ListIntercepts(db)
+	if err != nil || len(rows) == 0 {
+		t.Fatalf("应写拦截记录到 sqlite, err=%v, rows=%d", err, len(rows))
 	}
 }
 

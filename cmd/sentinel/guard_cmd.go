@@ -128,7 +128,7 @@ func runGuard(stdin io.Reader, stdout, stderr io.Writer, cfg *config.Config, hom
 	}
 
 	start := time.Now()
-	store := intercept.NewStore(filepath.Join(home, ".claude-sentinel", "intercept"))
+	store := intercept.NewStore(db)
 
 	// 协议探测(① 的延伸):按 stdin 的 tool_name + turn_id 消歧 Claude/Codex。
 	// 评估管线对两协议完全相同,仅 ⑩ 输出形态不同(见 WriteDecision 的 proto 参数)。

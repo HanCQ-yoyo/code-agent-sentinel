@@ -4,16 +4,34 @@ package history
 import (
 	"errors"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/security"
+	"code-agent-sentinel/internal/storage"
 )
 
+// newTestHistoryStore 在临时目录创建 sqlite db 并跑迁移,返回 *Store。
+func newTestHistoryStore(t *testing.T) *Store {
+	t.Helper()
+	dir := t.TempDir()
+	dbPath := filepath.Join(dir, "test.db")
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := storage.RunMigrations(db); err != nil {
+		t.Fatalf("run migrations: %v", err)
+	}
+	return NewStore(db)
+}
+
 func TestSaveGetLatest(t *testing.T) {
-	s := NewStore(t.TempDir())
+	s := newTestHistoryStore(t)
 	rec := ScanRecord{
 		ID:        "2026-07-06-14-30-05-a1b2c3d4",
 		StartedAt: time.Date(2026, 7, 6, 14, 30, 5, 0, time.UTC),
@@ -43,7 +61,7 @@ func TestSaveGetLatest(t *testing.T) {
 }
 
 func TestListOrderAndEmpty(t *testing.T) {
-	s := NewStore(t.TempDir())
+	s := newTestHistoryStore(t)
 	got, err := s.List()
 	if err != nil {
 		t.Fatalf("空目录 List: %v", err)
@@ -75,7 +93,7 @@ func TestListOrderAndEmpty(t *testing.T) {
 }
 
 func TestDeleteAndNotFound(t *testing.T) {
-	s := NewStore(t.TempDir())
+	s := newTestHistoryStore(t)
 	rec := ScanRecord{ID: "del-me", StartedAt: time.Now().UTC()}
 	if err := s.Save(rec); err != nil {
 		t.Fatal(err)
@@ -95,7 +113,7 @@ func TestDeleteAndNotFound(t *testing.T) {
 }
 
 func TestSameSecondNoConflict(t *testing.T) {
-	s := NewStore(t.TempDir())
+	s := newTestHistoryStore(t)
 	ts := time.Date(2026, 7, 6, 14, 30, 5, 0, time.UTC)
 	for i := 0; i < 3; i++ {
 		rec := ScanRecord{ID: fmt.Sprintf("2026-07-06-14-30-05-%08d", i), StartedAt: ts}
@@ -113,7 +131,7 @@ func TestSameSecondNoConflict(t *testing.T) {
 }
 
 func TestListSummaryFields(t *testing.T) {
-	s := NewStore(t.TempDir())
+	s := newTestHistoryStore(t)
 	rec := ScanRecord{
 		ID:        "2026-07-06-14-30-05-a1b2c3d4",
 		StartedAt: time.Date(2026, 7, 6, 14, 30, 5, 0, time.UTC),
@@ -176,7 +194,7 @@ func TestScanSummaryHasAgentID(t *testing.T) {
 // 旧 detector_id="baseline" / "content.injection" 在 DetectorStatus 里仍保留
 // 中文名映射(Task 17),故此处不校验 detector 名,只校验 id 往返 + rule_id 前缀。
 func TestHistoryLegacyDetectorID(t *testing.T) {
-	s := NewStore(t.TempDir())
+	s := newTestHistoryStore(t)
 	rec := ScanRecord{
 		ID:        "2026-07-06-14-30-05-legacy01",
 		StartedAt: time.Date(2026, 7, 6, 14, 30, 5, 0, time.UTC),
@@ -233,7 +251,7 @@ func TestHistoryLegacyDetectorID(t *testing.T) {
 }
 
 func TestLatestForAgent(t *testing.T) {
-	s := NewStore(t.TempDir())
+	s := newTestHistoryStore(t)
 	// 两条不同 agent 的记录(同 StartedAt 不易构造,用不同时间)
 	recA := ScanRecord{ID: "a-1", AgentID: "a", StartedAt: time.Now().Add(-2 * time.Hour)}
 	recB := ScanRecord{ID: "b-1", AgentID: "b", StartedAt: time.Now().Add(-1 * time.Hour)}
@@ -262,8 +280,7 @@ func TestLatestForAgent(t *testing.T) {
 }
 
 func TestBatchIDRoundTrip(t *testing.T) {
-	dir := t.TempDir()
-	s := NewStore(dir)
+	s := newTestHistoryStore(t)
 	rec := ScanRecord{
 		ID:        "test-batch-1",
 		AgentID:   "claude-code",
@@ -283,8 +300,7 @@ func TestBatchIDRoundTrip(t *testing.T) {
 }
 
 func TestBatchIDEmptyBackwardCompat(t *testing.T) {
-	dir := t.TempDir()
-	s := NewStore(dir)
+	s := newTestHistoryStore(t)
 	// 旧 record 无 BatchID → 空串
 	rec := ScanRecord{ID: "old-record", AgentID: "claude-code", StartedAt: time.Now()}
 	if err := s.Save(rec); err != nil {
@@ -297,7 +313,7 @@ func TestBatchIDEmptyBackwardCompat(t *testing.T) {
 }
 
 func TestLatestForAgentPrefersGlobalScope(t *testing.T) {
-	s := NewStore(t.TempDir())
+	s := newTestHistoryStore(t)
 	// a 的 project scope 扫描(较新)+ global scope 扫描(较旧)
 	s.Save(ScanRecord{ID: "a-global", AgentID: "a", Scope: "global", StartedAt: time.Now().Add(-1 * time.Hour)})
 	s.Save(ScanRecord{ID: "a-proj", AgentID: "a", Scope: "project", ScopePath: "/p", StartedAt: time.Now()})
@@ -309,8 +325,7 @@ func TestLatestForAgentPrefersGlobalScope(t *testing.T) {
 }
 
 func TestLatestForAgents_MultiAgent(t *testing.T) {
-	dir := t.TempDir()
-	s := NewStore(dir)
+	s := newTestHistoryStore(t)
 	now := time.Now()
 	// agent-a 两条记录,取最新
 	s.Save(ScanRecord{ID: "a-old", AgentID: "agent-a", StartedAt: now.Add(-time.Hour), Scope: "global"})
@@ -339,8 +354,7 @@ func TestLatestForAgents_MultiAgent(t *testing.T) {
 // "传空或 []string{""} 表示所有 agent"。[]string{""} 来自空 query 的
 // strings.Split("", ",") 产物,必须按"所有 agent"处理,而非当作 AgentID==""。
 func TestLatestForAgents_EmptyStringMeansAll(t *testing.T) {
-	dir := t.TempDir()
-	s := NewStore(dir)
+	s := newTestHistoryStore(t)
 	now := time.Now()
 	// agent-a 与 agent-b 各一条 global scope 记录
 	s.Save(ScanRecord{ID: "a-rec", AgentID: "agent-a", StartedAt: now.Add(-time.Hour), Scope: "global"})
@@ -363,8 +377,7 @@ func TestLatestForAgents_EmptyStringMeansAll(t *testing.T) {
 }
 
 func TestListIncludesScopePath(t *testing.T) {
-	dir := t.TempDir()
-	st := NewStore(dir)
+	s := newTestHistoryStore(t)
 	rec := ScanRecord{
 		ID:        "20260727-120000-abcdef01",
 		AgentID:   "claude-code",
@@ -373,11 +386,11 @@ func TestListIncludesScopePath(t *testing.T) {
 		ScopePath: "/home/user/proj",
 		Findings:  []security.Finding{},
 	}
-	if err := st.Save(rec); err != nil {
+	if err := s.Save(rec); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
 
-	sums, err := st.List()
+	sums, err := s.List()
 	if err != nil {
 		t.Fatalf("List: %v", err)
 	}
