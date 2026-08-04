@@ -432,3 +432,112 @@ func TestPostScanMultiAgents_OneFails(t *testing.T) {
 		}
 	}
 }
+
+// TestPostScanAsyncProgress 验证异步扫描进度查询:提交扫描后 progress 端点
+// 返回正确的 TotalAgents(spyRunner 单 agent = 1)。
+func TestPostScanAsyncProgress(t *testing.T) {
+	dir := t.TempDir()
+	s := newTestServer(t, dir)
+	spy := &spyRunner{}
+	s.Runner = spy
+	r := s.Router()
+
+	// 提交异步扫描
+	req := httptest.NewRequest("POST", "/api/scan?agent=claude-code", nil)
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != 202 {
+		t.Fatalf("异步扫描应返回 202: got %d", w.Code)
+	}
+	var startResp struct {
+		BatchID string `json:"batch_id"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &startResp)
+	if startResp.BatchID == "" {
+		t.Fatal("响应应含 batch_id")
+	}
+
+	// 查进度
+	preq := httptest.NewRequest("GET", "/api/scan/progress?batch="+startResp.BatchID, nil)
+	preq.Host = "127.0.0.1"
+	preq.Header.Set("Authorization", "Bearer tok")
+	pw := httptest.NewRecorder()
+	r.ServeHTTP(pw, preq)
+	if pw.Code != 200 {
+		t.Fatalf("progress 应 200: got %d", pw.Code)
+	}
+	var snap ScanTaskSnapshot
+	json.Unmarshal(pw.Body.Bytes(), &snap)
+	if snap.TotalAgents != 1 {
+		t.Errorf("TotalAgents 应为 1: got %d", snap.TotalAgents)
+	}
+}
+
+// TestPostScanCancel 验证取消异步扫描:提交扫描后通过 POST /api/scan/cancel
+// 取消,响应 cancelled 字段为 true。
+func TestPostScanCancel(t *testing.T) {
+	dir := t.TempDir()
+	s := newTestServer(t, dir)
+	spy := &spyRunner{}
+	s.Runner = spy
+	r := s.Router()
+
+	req := httptest.NewRequest("POST", "/api/scan?agent=claude-code", nil)
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	var startResp struct {
+		BatchID string `json:"batch_id"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &startResp)
+
+	// 取消扫描
+	body, _ := json.Marshal(map[string]string{"batch_id": startResp.BatchID})
+	creq := httptest.NewRequest("POST", "/api/scan/cancel", bytes.NewReader(body))
+	creq.Host = "127.0.0.1"
+	creq.Header.Set("Authorization", "Bearer tok")
+	creq.Header.Set("Content-Type", "application/json")
+	cw := httptest.NewRecorder()
+	r.ServeHTTP(cw, creq)
+	if cw.Code != 200 {
+		t.Fatalf("cancel 应 200: got %d", cw.Code)
+	}
+	var cancelResp struct {
+		Cancelled bool `json:"cancelled"`
+	}
+	json.Unmarshal(cw.Body.Bytes(), &cancelResp)
+	if !cancelResp.Cancelled {
+		t.Error("cancelled 应为 true")
+	}
+}
+
+// TestPostScanProgressErrors 验证 progress 端点错误处理:缺少 batch 参数返回 400,
+// 不存在的 batch 返回 404。
+func TestPostScanProgressErrors(t *testing.T) {
+	dir := t.TempDir()
+	s := newTestServer(t, dir)
+	r := s.Router()
+
+	// 无 batch 参数 → 400
+	req := httptest.NewRequest("GET", "/api/scan/progress", nil)
+	req.Host = "127.0.0.1"
+	req.Header.Set("Authorization", "Bearer tok")
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != 400 {
+		t.Errorf("无 batch 应 400: got %d", w.Code)
+	}
+
+	// batch 不存在 → 404
+	req2 := httptest.NewRequest("GET", "/api/scan/progress?batch=nonexistent", nil)
+	req2.Host = "127.0.0.1"
+	req2.Header.Set("Authorization", "Bearer tok")
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	if w2.Code != 404 {
+		t.Errorf("不存在的 batch 应 404: got %d", w2.Code)
+	}
+}
