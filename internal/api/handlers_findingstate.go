@@ -3,8 +3,6 @@ package api
 import (
 	"context"
 	"net/http"
-	"path/filepath"
-	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -13,22 +11,6 @@ import (
 	"code-agent-sentinel/internal/security/findingstate"
 	"code-agent-sentinel/internal/security/ruleengine"
 )
-
-// findingStatePath 返回 finding_states.yaml 路径(在 home/.claude-sentinel/)。
-// 用 s.Engine.HomeDir(与 postBaseline 取路径方式一致),
-// 不用 s.Config.Resolve* —— finding_states.yaml 暂不接 config 覆盖(统一默认路径)。
-func (s *Server) findingStatePath() string {
-	return filepath.Join(s.Engine.HomeDir, ".claude-sentinel", "finding_states.yaml")
-}
-
-// statesMu 保护 finding_states.yaml 的并发读写(多请求同时处置)。
-var statesMu sync.Mutex
-
-// loadStates 读取 finding_states.yaml;文件不存在或解析失败返回 nil(nil 安全)。
-func (s *Server) loadStates() *findingstate.States {
-	st, _ := findingstate.Load(s.findingStatePath())
-	return st
-}
 
 // postFindingState 设置/更新单条处置状态。
 // POST /api/finding-state  body: {fingerprint, status, priority?, note?}
@@ -47,9 +29,7 @@ func (s *Server) postFindingState(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errorBody("bad_request", "fingerprint and status required"))
 		return
 	}
-	statesMu.Lock()
-	defer statesMu.Unlock()
-	st := s.loadStates()
+	st := s.FindingStates
 	if st == nil {
 		st = &findingstate.States{}
 	}
@@ -60,10 +40,7 @@ func (s *Server) postFindingState(c *gin.Context) {
 		Source:    findingstate.SourceManual,
 		UpdatedAt: nowUTC(),
 	})
-	if err := st.Save(s.findingStatePath()); err != nil {
-		c.JSON(http.StatusInternalServerError, errorBody("save_failed", err.Error()))
-		return
-	}
+	// Set 已实时写 db,无需额外 Save
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -71,7 +48,7 @@ func (s *Server) postFindingState(c *gin.Context) {
 // GET /api/finding-state/:fp
 func (s *Server) getFindingState(c *gin.Context) {
 	fp := c.Param("fp")
-	st := s.loadStates()
+	st := s.FindingStates
 	if st == nil {
 		c.JSON(http.StatusNotFound, errorBody("not_found", "no states"))
 		return
@@ -88,18 +65,13 @@ func (s *Server) getFindingState(c *gin.Context) {
 // DELETE /api/finding-state/:fp  (重置回 open = 删除记录)
 func (s *Server) deleteFindingState(c *gin.Context) {
 	fp := c.Param("fp")
-	statesMu.Lock()
-	defer statesMu.Unlock()
-	st := s.loadStates()
+	st := s.FindingStates
 	if st == nil {
 		c.JSON(http.StatusOK, gin.H{"ok": true})
 		return
 	}
 	st.Remove(fp)
-	if err := st.Save(s.findingStatePath()); err != nil {
-		c.JSON(http.StatusInternalServerError, errorBody("save_failed", err.Error()))
-		return
-	}
+	// Remove 已实时写 db,无需额外 Save
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
@@ -118,17 +90,12 @@ func (s *Server) postBulkAccept(c *gin.Context) {
 	if req.Source != "" {
 		src = findingstate.Source(req.Source)
 	}
-	statesMu.Lock()
-	defer statesMu.Unlock()
-	st := s.loadStates()
+	st := s.FindingStates
 	if st == nil {
 		st = &findingstate.States{}
 	}
 	st.BulkAccept(req.Fingerprints, src, nowUTC())
-	if err := st.Save(s.findingStatePath()); err != nil {
-		c.JSON(http.StatusInternalServerError, errorBody("save_failed", err.Error()))
-		return
-	}
+	// BulkAccept 内部调 Set 已实时写 db,无需额外 Save
 	c.JSON(http.StatusOK, gin.H{"ok": true, "count": len(req.Fingerprints)})
 }
 
@@ -140,7 +107,7 @@ func (s *Server) getPruneReport(c *gin.Context) {
 	if activeCSV != "" {
 		active = splitCSV(activeCSV)
 	}
-	st := s.loadStates()
+	st := s.FindingStates
 	if st == nil {
 		c.JSON(http.StatusOK, gin.H{"orphans": []any{}})
 		return
@@ -158,7 +125,7 @@ func attachCategory(findings []security.Finding) []security.Finding {
 	return findings
 }
 
-// postBaseline 跑一次全量扫描,把所有非空 fingerprint 批量接受(accepted)到 finding_states.yaml。
+// postBaseline 跑一次全量扫描,把所有非空 fingerprint 批量接受(accepted)到 finding_states。
 // 语义变更(Task 11):旧实现 union 到 baseline.json(已删);新实现调 findingstate.BulkAccept,
 // 与 POST /api/finding-state/bulk-accept 一致。agent 化:Discover 经选中 agent 的 Engine 跑。
 func (s *Server) postBaseline(c *gin.Context) {
@@ -192,20 +159,15 @@ func (s *Server) postBaseline(c *gin.Context) {
 		fps = append(fps, fp)
 	}
 
-	statesMu.Lock()
-	defer statesMu.Unlock()
-	st := s.loadStates()
+	st := s.FindingStates
 	if st == nil {
 		st = &findingstate.States{}
 	}
 	st.BulkAccept(fps, findingstate.SourceBulkAccept, nowUTC())
-	if err := st.Save(s.findingStatePath()); err != nil {
-		c.JSON(http.StatusInternalServerError, errorBody("save_failed", err.Error()))
-		return
-	}
+	// BulkAccept 内部调 Set 已实时写 db,无需额外 Save
 
 	c.JSON(http.StatusOK, gin.H{
-		"states_path":    s.findingStatePath(),
+		"states_path":    "finding_states (sqlite)",
 		"accepted_count": len(fps),
 		"scan_findings":  len(res.Findings),
 	})

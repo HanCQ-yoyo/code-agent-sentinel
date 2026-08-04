@@ -18,6 +18,7 @@ import (
 	"code-agent-sentinel/internal/scan"
 	"code-agent-sentinel/internal/scheduler"
 	"code-agent-sentinel/internal/security"
+	"code-agent-sentinel/internal/security/findingstate"
 	"code-agent-sentinel/internal/storage"
 )
 
@@ -29,12 +30,13 @@ type Server struct {
 	Token           string
 	History         *history.Store
 	Intercept       *intercept.Store       // Stage R2:运行时拦截记录(~/.claude-sentinel/intercept)
-	Allowlist       *config.AllowlistStore // Stage R3:运行时拦截放行清单(~/.claude-sentinel/allowlist.yaml)
+	Allowlist       *config.AllowlistStore // Stage R3:运行时拦截放行清单(sqlite allowlist_entries 表)
 	Agents          []configengine.Agent
 	SelectedAgentID string
 	Editor          *editor.Editor
-	Runner          ScanRunner         // HTTP/scheduler/CLI 共用的扫描路径(接口可注入 spy 测试)
-	ScheduleManager *scheduler.Manager // 多任务调度管理器(/api/schedules CRUD + /api/scheduler deprecated 转发)
+	Runner          ScanRunner              // HTTP/scheduler/CLI 共用的扫描路径(接口可注入 spy 测试)
+	ScheduleManager *scheduler.Manager      // 多任务调度管理器(/api/schedules CRUD + /api/scheduler deprecated 转发)
+	FindingStates   *findingstate.States    // 处置生命周期状态(sqlite 持久化,注入后 handlers_findingstate 直接引用)
 	// 规则库 sqlite 句柄(nil 表示不可用 → 检测器/guard 已 fail-open 回退 LoadForScan)。
 	// Task 12 起 NewServer 直接注入(main.go Task 10 曾用构造后赋值 srv.DB=db)。
 	DB *storage.DB
@@ -59,7 +61,7 @@ func NewServer(eng *configengine.Engine, orch *security.Orchestrator, cfg *confi
 	}
 	// Task 8:Runner 持真实 agents 列表(由 main.go 从 config 解析传入),
 	// 内部按 agentID 池化 Engine,扫描时按请求/调度选 agent。
-	return &Server{Engine: eng, Orchestrator: orch, Config: cfg, Token: token, History: hist, Agents: agents, SelectedAgentID: current, Editor: ed, Runner: scan.NewRunner(agents, orch, hist), DB: db}
+	return &Server{Engine: eng, Orchestrator: orch, Config: cfg, Token: token, History: hist, Agents: agents, SelectedAgentID: current, Editor: ed, Runner: scan.NewRunner(agents, orch, hist), FindingStates: findingstate.NewStates(db), DB: db}
 }
 
 func (s *Server) Router() *gin.Engine {

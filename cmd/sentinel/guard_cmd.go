@@ -76,22 +76,27 @@ func guardMain(stdin io.Reader, stdout, stderr io.Writer, cfgPath, deadlineFlag 
 		}
 	}
 	home, _ := os.UserHomeDir()
-	allowlistPath := filepath.Join(home, ".claude-sentinel", "allowlist.yaml")
-	allowlist := config.NewAllowlistStore(allowlistPath)
 	dbPath := filepath.Join(home, ".claude-sentinel", "sentinel.db")
-	return runGuard(stdin, stdout, stderr, cfg, home, dbPath, allowlist, debug)
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		db = nil // fail-open: DB 不可用时用 builtin 规则,allowlist 为空
+	}
+	if db != nil {
+		defer db.Close()
+	}
+	return runGuard(stdin, stdout, stderr, cfg, home, db, debug)
 }
 
-// runGuard 是 7 步管线核心(纯函数,可测:注入 stdin/stdout/stderr/cfg/home/dbPath/allowlist)。
+// runGuard 是 7 步管线核心(纯函数,可测:注入 stdin/stdout/stderr/cfg/home/db/debug)。
 // 步骤:① 解析 → ② 递归短路 → ③ quick-reject → ④ normalize → ⑤ 链式拆分 + 片段评估
 //
 //	→ ⑤' heredoc 兜底 → ⑦ allowlist 双匹配 → ⑧ 决策聚合 → ⑨ 超时兜底 → ⑩ 输出+记录。
 //
 // R3 重构:evaluate 从「单命令 wholeSafe」改为「片段级 span+语义+正则+confidence」(I1 闭合)。
-// Task 9:规则来源从 LoadBuiltin 改为优先读 sqlite 拦截规则(dbPath 指向 sentinel.db);
+// Task 9:规则来源从 LoadBuiltin 改为优先读 sqlite 拦截规则(db 指向 sentinel.db);
 // db 打不开/读失败/空 → fail-open 回退 LoadBuiltin(铁律:存储故障不致检测失效、不误 deny)。
 // R3 evaluateSegment pipeline(span+confidence+Mode+allowlist)不变,只改规则加载来源。
-func runGuard(stdin io.Reader, stdout, stderr io.Writer, cfg *config.Config, home, dbPath string, allowlist *config.AllowlistStore, debug bool) error {
+func runGuard(stdin io.Reader, stdout, stderr io.Writer, cfg *config.Config, home string, db *storage.DB, debug bool) error {
 	guard := cfg.Guard
 	if !guard.EnabledEffective() {
 		// 拦截关闭 → allow 全部(空 stdout)
@@ -144,11 +149,8 @@ func runGuard(stdin io.Reader, stdout, stderr io.Writer, cfg *config.Config, hom
 	// 即便某路径异常 panic,guardMain 顶层 recover 兜底 fail-open allow(铁律双保险)。
 	var rules []ruleengine.Rule
 	var loadErrs []ruleengine.RuleLoadError
-	if dbPath != "" {
-		if gdb, openErr := storage.Open(dbPath); openErr == nil {
-			defer gdb.Close()
-			rules, loadErrs = ruleengine.LoadInterceptRules(gdb)
-		}
+	if db != nil {
+		rules, loadErrs = ruleengine.LoadInterceptRules(db)
 	}
 	if len(rules) == 0 {
 		// fail-open 回退 builtin(db 无/打不开/读空 → 用 embed 规则,不致检测失效)。
@@ -209,6 +211,7 @@ func runGuard(stdin io.Reader, stdout, stderr io.Writer, cfg *config.Config, hom
 
 	// ⑦ allowlist 双匹配(原始命令 + normalize 后命令,整条命令各 Matches 一次)
 	// 任一命中 → allow + 写 allow 记录。安全不变量:只精确整条匹配,不做通配/正则。
+	allowlist := config.NewAllowlistStore(db)
 	if guard.AllowlistEnabledOrDefault() && allowlist != nil {
 		normCmd := ruleengine.NormalizeCommand(cmd)
 		if allowlist.Matches(cmd) || allowlist.Matches(normCmd) {

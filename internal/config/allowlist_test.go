@@ -3,13 +3,28 @@ package config
 import (
 	"path/filepath"
 	"testing"
+
+	"code-agent-sentinel/internal/storage"
 )
 
+func newTestAllowlistStore(t *testing.T) *AllowlistStore {
+	t.Helper()
+	db, err := storage.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.RunMigrations(db); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return NewAllowlistStore(db)
+}
+
 func TestAllowlistLoadMissingFile(t *testing.T) {
-	s := NewAllowlistStore(filepath.Join(t.TempDir(), "allowlist.yaml"))
+	s := newTestAllowlistStore(t)
 	list, err := s.Load()
 	if err != nil {
-		t.Fatalf("文件不存在应 nil-safe: %v", err)
+		t.Fatalf("空 db 应 nil-safe: %v", err)
 	}
 	if list == nil {
 		t.Fatal("空清单应返回非 nil 切片")
@@ -20,7 +35,7 @@ func TestAllowlistLoadMissingFile(t *testing.T) {
 }
 
 func TestAllowlistSaveLoadRoundTrip(t *testing.T) {
-	s := NewAllowlistStore(filepath.Join(t.TempDir(), "allowlist.yaml"))
+	s := newTestAllowlistStore(t)
 	want := []string{"rm -rf node_modules", "git clean -fdx dist"}
 	if err := s.Save(want); err != nil {
 		t.Fatal(err)
@@ -29,13 +44,24 @@ func TestAllowlistSaveLoadRoundTrip(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(got) != 2 || got[0] != want[0] || got[1] != want[1] {
+	if len(got) != 2 {
 		t.Fatalf("round-trip 丢失: got %v want %v", got, want)
+	}
+	// DB 按 ORDER BY command 排序,故返回顺序为字母序而非插入序。
+	// 用 map 验证元素完整性,不依赖顺序。
+	gotMap := make(map[string]bool, len(got))
+	for _, g := range got {
+		gotMap[g] = true
+	}
+	for _, w := range want {
+		if !gotMap[w] {
+			t.Fatalf("round-trip 丢失 %q: got %v", w, got)
+		}
 	}
 }
 
 func TestAllowlistMatchesExact(t *testing.T) {
-	s := NewAllowlistStore(filepath.Join(t.TempDir(), "allowlist.yaml"))
+	s := newTestAllowlistStore(t)
 	if err := s.Save([]string{"rm -rf node_modules"}); err != nil {
 		t.Fatal(err)
 	}
@@ -51,7 +77,7 @@ func TestAllowlistMatchesExact(t *testing.T) {
 }
 
 func TestAllowlistMatchesTrimWhitespace(t *testing.T) {
-	s := NewAllowlistStore(filepath.Join(t.TempDir(), "allowlist.yaml"))
+	s := newTestAllowlistStore(t)
 	if err := s.Save([]string{"  rm -rf node_modules  "}); err != nil {
 		t.Fatal(err)
 	}
@@ -67,7 +93,7 @@ func TestAllowlistMatchesTrimWhitespace(t *testing.T) {
 }
 
 func TestAllowlistMatchesPanicFalse(t *testing.T) {
-	s := NewAllowlistStore(filepath.Join(t.TempDir(), "allowlist.yaml"))
+	s := newTestAllowlistStore(t)
 	if err := s.Save([]string{"rm -rf node_modules"}); err != nil {
 		t.Fatal(err)
 	}

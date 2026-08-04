@@ -4,7 +4,95 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"code-agent-sentinel/internal/storage"
 )
+
+func newTestStates(t *testing.T) *States {
+	t.Helper()
+	db, err := storage.Open(filepath.Join(t.TempDir(), "t.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.RunMigrations(db); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	return NewStates(db)
+}
+
+func TestNewStatesEmpty(t *testing.T) {
+	s := newTestStates(t)
+	if s == nil {
+		t.Fatal("NewStates 应非 nil")
+	}
+	if s.Items == nil {
+		t.Fatal("Items 应初始化")
+	}
+	if len(s.Items) != 0 {
+		t.Fatalf("空 db 应有空 Items: got %d", len(s.Items))
+	}
+}
+
+func TestNewStatesSetAndMatch(t *testing.T) {
+	s := newTestStates(t)
+	s.Set("abc", State{Status: StatusAccepted, Priority: "P1", Note: "test", Source: SourceManual, UpdatedAt: "t1"})
+	got, ok := s.Match("abc")
+	if !ok {
+		t.Fatal("Set 后 Match 应命中")
+	}
+	if got.Status != StatusAccepted || got.Priority != "P1" || got.Note != "test" {
+		t.Errorf("字段不匹配: %+v", got)
+	}
+}
+
+func TestNewStatesSetPersisted(t *testing.T) {
+	s := newTestStates(t)
+	s.Set("abc", State{Status: StatusAccepted, Source: SourceManual, UpdatedAt: "t1"})
+
+	// 重新从 db 加载,验证持久化
+	s2 := NewStates(s.db)
+	got, ok := s2.Match("abc")
+	if !ok {
+		t.Fatal("reload 后 Match 应命中")
+	}
+	if got.Status != StatusAccepted {
+		t.Errorf("Status 不匹配: %+v", got)
+	}
+}
+
+func TestNewStatesRemove(t *testing.T) {
+	s := newTestStates(t)
+	s.Set("abc", State{Status: StatusAccepted, Source: SourceManual, UpdatedAt: "t1"})
+	if !s.Remove("abc") {
+		t.Error("Remove 应返回 true")
+	}
+	if _, ok := s.Match("abc"); ok {
+		t.Error("Remove 后 Match 应不命中")
+	}
+	// 重新加载确认 db 中也删了
+	s2 := NewStates(s.db)
+	if _, ok := s2.Match("abc"); ok {
+		t.Error("reload 后 Match 应不命中(db 也应删了)")
+	}
+}
+
+func TestNewStatesBulkAccept(t *testing.T) {
+	s := newTestStates(t)
+	s.Set("keep", State{Status: StatusResolved, Source: SourceManual, UpdatedAt: "old"})
+	s.BulkAccept([]string{"a", "b", "keep"}, SourceBulkAccept, "now")
+	// keep 已是 resolved,BulkAccept 不应覆盖已有非 open 状态
+	if got, _ := s.Match("keep"); got.Status != StatusResolved {
+		t.Errorf("keep overwritten: %+v", got)
+	}
+	// 新 fingerprint 写 accepted
+	for _, fp := range []string{"a", "b"} {
+		got, ok := s.Match(fp)
+		if !ok || got.Status != StatusAccepted || got.Source != SourceBulkAccept || got.UpdatedAt != "now" {
+			t.Errorf("%s = %+v ok=%v", fp, got, ok)
+		}
+	}
+}
 
 func TestLoadSaveRoundTrip(t *testing.T) {
 	dir := t.TempDir()

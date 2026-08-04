@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"code-agent-sentinel/internal/config"
+	"code-agent-sentinel/internal/storage"
 )
 
 // newAllowlistTestServer 构造仅 Allowlist + Config 就绪的 Server(handler 单测足够;
@@ -17,9 +18,17 @@ import (
 func newAllowlistTestServer(t *testing.T) *Server {
 	t.Helper()
 	dir := t.TempDir()
+	db, err := storage.Open(filepath.Join(dir, "allowlist.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.RunMigrations(db); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
 	s := &Server{}
 	s.Config = newTestConfig()
-	s.Allowlist = config.NewAllowlistStore(filepath.Join(dir, "allowlist.yaml"))
+	s.Allowlist = config.NewAllowlistStore(db)
 	return s
 }
 
@@ -49,13 +58,23 @@ func TestPutAllowlistFullReplace(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("PUT status=%d body=%s", w.Code, w.Body.String())
 	}
-	// 验证落盘
+	// 验证落盘(DB 按 ORDER BY command 排序,故列表为字母序)
 	list, err := s.Allowlist.Load()
 	if err != nil {
 		t.Fatalf("Load err: %v", err)
 	}
-	if len(list) != 2 || list[0] != "rm -rf node_modules" {
+	if len(list) != 2 {
 		t.Fatalf("未落盘: %v", list)
+	}
+	// 元素验证(顺序为字母序)
+	found := make(map[string]bool, len(list))
+	for _, l := range list {
+		found[l] = true
+	}
+	for _, want := range []string{"rm -rf node_modules", "git clean -fdx dist"} {
+		if !found[want] {
+			t.Fatalf("缺失 %q: %v", want, list)
+		}
 	}
 }
 

@@ -1,6 +1,6 @@
 // Package findingstate 实现处置生命周期覆盖层(取代 baseline + suppressions)。
 //
-// 一份 fingerprint→处置状态 的映射,持久化为 ~/.claude-sentinel/finding_states.yaml。
+// 一份 fingerprint→处置状态 的映射,持久化到 sqlite finding_states 表。
 // 与扫描快照分离:扫描确定性地报 finding,处置状态按 fingerprint 键挂覆盖层。
 // 资产/规则未变则 fingerprint 稳定 → 覆盖层自动重新 attach,已处置状态保留。
 //
@@ -13,8 +13,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"gopkg.in/yaml.v3"
+
+	"code-agent-sentinel/internal/storage"
 )
 
 // Status 是处置生命周期状态。
@@ -48,12 +51,46 @@ type State struct {
 	UpdatedAt   string `yaml:"updated_at,omitempty" json:"updated_at,omitempty"`
 }
 
-// States 是处置状态集合。
+// States 是处置状态集合。持有 sqlite 句柄(db)用于持久化,Items 是内存副本
+// 供 Match/BulkAccept/PruneReport 操作。Set/Remove 同步写 db 和内存。
 type States struct {
+	db    *storage.DB
 	Items []State `yaml:"items"`
 }
 
-// Load 从 YAML 文件加载处置状态。文件不存在时返回 (nil, nil)。
+// NewStates 构造 States 并从 db 加载内存副本。db 为 nil 时 Items 为空,
+// Set/Remove 仅操作内存(Save 为 no-op),兼容旧测试及 Load() 静态路径。
+func NewStates(db *storage.DB) *States {
+	s := &States{db: db}
+	s.reload()
+	return s
+}
+
+// reload 从 db 重新加载内存副本。
+func (s *States) reload() {
+	if s.db == nil {
+		return
+	}
+	rows, err := storage.ListFindingStates(s.db)
+	if err != nil {
+		return
+	}
+	items := make([]State, 0, len(rows))
+	for _, r := range rows {
+		items = append(items, State{
+			Fingerprint: r.Fingerprint,
+			Status:      Status(r.Status),
+			Priority:    r.Priority,
+			Note:        r.Note,
+			Source:      Source(r.Source),
+			UpdatedAt:   r.UpdatedAt,
+		})
+	}
+	s.Items = items
+}
+
+// Load 从 YAML 文件加载处置状态(静态函数,供 MigrateFromLegacy 等旧路径用)。
+// 文件不存在时返回 (nil, nil)。
 func Load(path string) (*States, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -70,6 +107,7 @@ func Load(path string) (*States, error) {
 }
 
 // Save 以 YAML 写入指定路径(文件权限 0o600,父目录 0o700)。
+// 保留供 MigrateFromLegacy 使用。
 func (s *States) Save(path string) error {
 	data, err := yaml.Marshal(s)
 	if err != nil {
@@ -97,9 +135,18 @@ func (s *States) Match(fp string) (State, bool) {
 	return State{}, false
 }
 
-// Set 插入或更新(upsert)一条处置状态。同 fingerprint 覆盖。
+// Set 插入或更新(upsert)一条处置状态:同步写 db 和内存副本。
+// db 为 nil 时仅写内存(兼容未注入 db 的旧调用路径)。
 func (s *States) Set(fp string, st State) {
 	st.Fingerprint = fp
+	if st.UpdatedAt == "" {
+		st.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	// 写 db(nil-safe:db 为 nil 时跳过持久化,仅内存)
+	if s.db != nil {
+		_ = storage.UpsertFindingState(s.db, fp, string(st.Status), st.Priority, st.Note, string(st.Source), st.UpdatedAt)
+	}
+	// 同步内存副本
 	for i := range s.Items {
 		if s.Items[i].Fingerprint == fp {
 			s.Items[i] = st
@@ -136,8 +183,17 @@ func (s *States) PruneReport(activeFps []string) []State {
 	return orphans
 }
 
-// Remove 删除一条处置状态。存在并删除返回 true,不存在返回 false。
+// Remove 删除一条处置状态:同步删 db 和内存。存在并删除返回 true,不存在返回 false。
+// db 为 nil 时仅删内存。
 func (s *States) Remove(fp string) bool {
+	// 删 db(nil-safe)
+	if s.db != nil {
+		deleted, _ := storage.DeleteFindingState(s.db, fp)
+		if !deleted {
+			// db 中不存在,但内存仍可能匹配(如 db 为 nil),继续走内存删。
+		}
+	}
+	// 删内存
 	for i := range s.Items {
 		if s.Items[i].Fingerprint == fp {
 			s.Items = append(s.Items[:i], s.Items[i+1:]...)

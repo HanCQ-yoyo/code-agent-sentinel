@@ -37,35 +37,47 @@ func runGuardForTest(t *testing.T, stdin string, cfg *config.Config) (stdout, st
 	}
 	var out, errbuf bytes.Buffer
 	home := t.TempDir()
-	if err := runGuard(strings.NewReader(stdin), &out, &errbuf, cfg, home, "", nil, true); err != nil {
+	if err := runGuard(strings.NewReader(stdin), &out, &errbuf, cfg, home, nil, true); err != nil {
 		t.Fatalf("runGuard 错误: %v\nstderr: %s", err, errbuf.String())
 	}
 	return out.String(), errbuf.String()
 }
 
-// runGuardWithAllowlist 是 R3 的带 allowlist 版本测试 helper。
-// 传入 allowlist 非空时管线 ⑦ 做精确双匹配放行;传 nil 则跳过放行。
-func runGuardWithAllowlist(stdin io.Reader, stdout, stderr io.Writer, cfg *config.Config, home string, allowlist *config.AllowlistStore, debug bool) error {
-	return runGuard(stdin, stdout, stderr, cfg, home, "", allowlist, debug)
+// runGuardWithDB 是带 db 注入版本测试 helper(注入 sqlite 句柄供管线读拦截规则和放行清单)。
+// db 为 nil → fail-open 回退 builtin。
+func runGuardWithDB(stdin io.Reader, stdout, stderr io.Writer, cfg *config.Config, home string, db *storage.DB, debug bool) error {
+	return runGuard(stdin, stdout, stderr, cfg, home, db, debug)
 }
 
-// runGuardWithDB 是 Task 9 的带 dbPath 版本测试 helper(注入 sqlite 拦截规则 db 路径,
-// 避免每次都走生产路径 ~/.claude-sentinel/sentinel.db)。dbPath 空串 → fail-open 回退 builtin。
-func runGuardWithDB(stdin io.Reader, stdout, stderr io.Writer, cfg *config.Config, home, dbPath string, allowlist *config.AllowlistStore, debug bool) error {
-	return runGuard(stdin, stdout, stderr, cfg, home, dbPath, allowlist, debug)
+// dbWithAllowlist 构造一个已写入放行清单的 test db(返回已打开的 DB,调用方 Close)。
+func dbWithAllowlist(t *testing.T, commands []string) *storage.DB {
+	t.Helper()
+	db, err := storage.Open(filepath.Join(t.TempDir(), "allowlist.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := storage.RunMigrations(db); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	al := config.NewAllowlistStore(db)
+	if err := al.Save(commands); err != nil {
+		t.Fatal(err)
+	}
+	return db
 }
 
-// dbWithInterceptBuiltin 构造一个已同步 builtin 拦截规则的 db(返回路径,db 已 Close)。
+// dbWithInterceptBuiltin 构造一个已同步 builtin 拦截规则的 db(返回已打开的 DB,调用方 Close)。
 // 与生产 syncBuiltinRules 对齐:intercept 域只同步 destructive_commands.yaml 的规则
 // (LoadInterceptBuiltin),验证 guard 能从 db 读到 rm -rf 拦截规则。
-func dbWithInterceptBuiltin(t *testing.T) string {
+func dbWithInterceptBuiltin(t *testing.T) *storage.DB {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "guard.db")
 	db, err := storage.Open(path)
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	t.Cleanup(func() { db.Close() })
 	if err := storage.RunMigrations(db); err != nil {
 		t.Fatal(err)
 	}
@@ -81,7 +93,7 @@ func dbWithInterceptBuiltin(t *testing.T) string {
 	if _, err := storage.SyncBuiltin(db, storage.DomainIntercept, stored, nil, "v1"); err != nil {
 		t.Fatal(err)
 	}
-	return path
+	return db
 }
 
 func TestGuardDenyRmRfRoot(t *testing.T) {
@@ -206,7 +218,7 @@ func TestGuardWritesInterceptRecord(t *testing.T) {
 	cfg.EnsureGuard()
 	home := t.TempDir()
 	var out, errbuf bytes.Buffer
-	_ = runGuard(strings.NewReader(stdin), &out, &errbuf, cfg, home, "", nil, false)
+	_ = runGuard(strings.NewReader(stdin), &out, &errbuf, cfg, home, nil, false)
 	// 拦截记录应落盘 ~/.claude-sentinel/intercept/*.json
 	dir := filepath.Join(home, ".claude-sentinel", "intercept")
 	entries, err := readDirNames(dir)
@@ -252,13 +264,10 @@ func TestGuardAllowlistExactMatch(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.EnsureGuard()
 	home := t.TempDir()
-	al := config.NewAllowlistStore(filepath.Join(home, ".claude-sentinel", "allowlist.yaml"))
-	if err := al.Save([]string{"rm -rf node_modules"}); err != nil {
-		t.Fatalf("allowlist save: %v", err)
-	}
+	db := dbWithAllowlist(t, []string{"rm -rf node_modules"})
 	var out, errbuf bytes.Buffer
-	_ = runGuardWithAllowlist(strings.NewReader(`{"tool_input":{"command":"rm -rf node_modules"}}`),
-		&out, &errbuf, cfg, home, al, false)
+	_ = runGuardWithDB(strings.NewReader(`{"tool_input":{"command":"rm -rf node_modules"}}`),
+		&out, &errbuf, cfg, home, db, false)
 	if out.String() != "" {
 		t.Fatalf("allowlist 精确命中应 allow: %q", out.String())
 	}
@@ -270,13 +279,10 @@ func TestGuardAllowlistNormalizeMatch(t *testing.T) {
 	cfg := &config.Config{}
 	cfg.EnsureGuard()
 	home := t.TempDir()
-	al := config.NewAllowlistStore(filepath.Join(home, ".claude-sentinel", "allowlist.yaml"))
-	if err := al.Save([]string{"rm -rf node_modules"}); err != nil {
-		t.Fatalf("allowlist save: %v", err)
-	}
+	db := dbWithAllowlist(t, []string{"rm -rf node_modules"})
 	var out, errbuf bytes.Buffer
-	_ = runGuardWithAllowlist(strings.NewReader(`{"tool_input":{"command":"sudo rm -rf node_modules"}}`),
-		&out, &errbuf, cfg, home, al, false)
+	_ = runGuardWithDB(strings.NewReader(`{"tool_input":{"command":"sudo rm -rf node_modules"}}`),
+		&out, &errbuf, cfg, home, db, false)
 	if out.String() != "" {
 		t.Fatalf("normalize 后 allowlist 匹配应 allow: %q", out.String())
 	}
@@ -322,13 +328,13 @@ func TestGuardHeredocChainDeny(t *testing.T) {
 func TestGuardReadsInterceptRulesFromDB(t *testing.T) {
 	// 1. db 正常(已同步 builtin 拦截规则)→ 读 intercept_rules → rm -rf / 应被 deny。
 	// 证明 guard 规则来源已切到 db(用户自定义拦截规则的生效前提)。
-	dbPath := dbWithInterceptBuiltin(t)
-	home := filepath.Dir(dbPath)
+	db := dbWithInterceptBuiltin(t)
+	home := t.TempDir()
 	stdin := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"rm -rf /"},"session_id":"s","turn_id":"t1"}`)
 	var stdout, stderr bytes.Buffer
 	cfg := config.DefaultConfig()
 	cfg.EnsureGuard()
-	err := runGuardWithDB(stdin, &stdout, &stderr, cfg, home, dbPath, nil, false)
+	err := runGuardWithDB(stdin, &stdout, &stderr, cfg, home, db, false)
 	if err != nil {
 		t.Fatalf("runGuard: %v\nstderr: %s", err, stderr.String())
 	}
@@ -339,14 +345,14 @@ func TestGuardReadsInterceptRulesFromDB(t *testing.T) {
 }
 
 func TestGuardFailOpenWhenDBMissing(t *testing.T) {
-	// 2. db 不存在 → fail-open 回退 builtin → builtin 拦截仍生效(rm -rf / 仍应 deny)。
+	// 2. db 为 nil → fail-open 回退 builtin → builtin 拦截仍生效(rm -rf / 仍应 deny)。
 	// 铁律:存储故障不致检测失效;危险命令仍被 builtin 兜底拦截。
 	home := t.TempDir()
 	stdin := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"rm -rf /"},"session_id":"s","turn_id":"t1"}`)
 	var stdout, stderr bytes.Buffer
 	cfg := config.DefaultConfig()
 	cfg.EnsureGuard()
-	err := runGuardWithDB(stdin, &stdout, &stderr, cfg, home, filepath.Join(home, "nonexistent.db"), nil, false)
+	err := runGuardWithDB(stdin, &stdout, &stderr, cfg, home, nil, false)
 	if err != nil {
 		t.Fatalf("runGuard: %v\nstderr: %s", err, stderr.String())
 	}
@@ -356,17 +362,15 @@ func TestGuardFailOpenWhenDBMissing(t *testing.T) {
 }
 
 func TestGuardFailOpenWhenDBCorrupt(t *testing.T) {
-	// 3. db 损坏(非 sqlite 文件)→ fail-open 回退 builtin → 不因存储故障误拦安全命令。
+	// 3. db 为 nil(调用方打开失败)→ fail-open 回退 builtin → 不因存储故障误拦安全命令。
 	// echo hello 是安全命令,即便回退 builtin 也不应 deny(fail-open = allow,不误 deny)。
 	home := t.TempDir()
-	dbPath := filepath.Join(home, "corrupt.db")
-	writeFile(t, dbPath, []byte("not a sqlite file"))
 	stdin := strings.NewReader(`{"tool_name":"Bash","tool_input":{"command":"echo hello"},"session_id":"s","turn_id":"t1"}`)
 	var stdout, stderr bytes.Buffer
 	cfg := config.DefaultConfig()
 	cfg.EnsureGuard()
-	_ = runGuardWithDB(stdin, &stdout, &stderr, cfg, home, dbPath, nil, false)
+	_ = runGuardWithDB(stdin, &stdout, &stderr, cfg, home, nil, false)
 	if strings.Contains(stdout.String(), "deny") {
-		t.Fatalf("corrupt db should fail-open (allow echo), got: %s", stdout.String())
+		t.Fatalf("nil db should fail-open (allow echo), got: %s", stdout.String())
 	}
 }

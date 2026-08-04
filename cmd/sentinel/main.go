@@ -270,9 +270,8 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	// Stage R2:运行时拦截记录目录(与 history 同级,在 .claude 之外避免被扫到)。
 	interceptPath := filepath.Join(home, ".claude-sentinel", "intercept")
 	istore := intercept.NewStore(interceptPath)
-	// Stage R3:运行时拦截放行清单(独立文件,与 config.yaml 解耦)。
-	allowlistPath := filepath.Join(home, ".claude-sentinel", "allowlist.yaml")
-	allowlist := config.NewAllowlistStore(allowlistPath)
+	// Stage R3:运行时拦截放行清单(sqlite allowlist_entries 表)。
+	allowlist := config.NewAllowlistStore(db)
 
 	// 一次性迁移:baseline.json + suppressions.yaml → finding_states.yaml(Task 11)。
 	// statesPath 已存在则跳过(不覆盖用户已有处置);旧文件重命名 .legacy 保留回滚。

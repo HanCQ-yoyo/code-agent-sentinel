@@ -38,7 +38,7 @@ func (s *Server) getFindings(c *gin.Context) {
 			out = append(out, f)
 		}
 	}
-	states := s.loadStates()
+	states := s.FindingStates
 	security.ApplyFindingStateBatch(out, states, latest.StartedAt, assetSourcePathFromInventory(latest.Inventory))
 	c.JSON(http.StatusOK, attachCategory(out))
 }
@@ -52,7 +52,7 @@ func (s *Server) getFindingsAggregated(c *gin.Context, agentIDs []string) {
 	asset := c.Query("asset")
 	latestScans, _ := s.History.LatestForAgents(agentIDs)
 	out := []security.Finding{}
-	states := s.loadStates()
+	states := s.FindingStates
 	for _, id := range agentIDs {
 		rec, ok := latestScans[id]
 		if !ok || rec == nil {

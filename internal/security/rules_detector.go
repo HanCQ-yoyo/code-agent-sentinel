@@ -87,19 +87,13 @@ func NewRulesDetector(home string, cfg *config.DetectorsConfig, db *storage.DB) 
 	return d
 }
 
-// loadStates 加载 ~/.claude-sentinel/finding_states.yaml 处置状态到 d.states。
-// 文件不存在 → (nil,nil) 安全降级(applyFindingState 见 nil 直接 return)。
-// 加载错误 → 记 loadErr(不致命,作 load-error finding 暴露)。
-// 旧 baseline.json/suppressions.yaml 经 main.go 迁移触发重命名为 .legacy,
-// 本检测器不再读它们(迁移逻辑在 findingstate.MigrateFromLegacy,一次性)。
+// loadStates 从 sqlite db 加载处置状态到 d.states。
+// db 为 nil 时 states 为 nil(applyFindingState 见 nil 安全降级为 Status="open")。
+// 加载失败(err 非 nil)记 loadErr(不致命,作 load-error finding 暴露)。
 func (d *RulesDetector) loadStates() {
-	statesPath := filepath.Join(d.home, ".claude-sentinel", "finding_states.yaml")
-	s, err := findingstate.Load(statesPath)
-	if err != nil {
-		d.loadErrs = append(d.loadErrs, ruleengine.RuleLoadError{
-			Source: "findingstate", Reason: fmt.Sprintf("load finding_states: %v", err),
-		})
-		return
+	s := findingstate.NewStates(d.db)
+	if s == nil {
+		s = &findingstate.States{}
 	}
 	d.states = s
 }
