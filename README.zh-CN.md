@@ -10,7 +10,7 @@
 - **发现补齐与跨资产组合规则**:Claude L1-L5——`managed-mcp.json`(企业模式提示)、全局 `.mcp.json`、项目 `hooks/` 目录、项目 `keybindings.json`、`skip_dangerous_mode_permission_prompt` 字段;Codex C2/C3——项目级 `.codex/config.toml` + `[hooks.state]` 建模;Codex C4/L6——`auth.json` 凭据 + 项目根敏感文件。**6 条跨资产组合规则**(skip-perm+Bash(*) / Codex danger+never / 凭据外发等)经统一规则引擎新增 `ComboRule` 第二遍求值。Codex 项目级发现改读 code-agent-sentinel 的 `known_projects` 清单(独立于 `~/.claude.json`)。
 - **安全检测**:统一规则引擎(256 条内置规则 + 6 条跨资产组合规则)+ 提示注入扫描(含反混淆)+ 密钥扫描(gitleaks)+ 依赖漏洞(govulncheck / npm-audit)。子进程缺失时优雅降级。
 - **规则可配置化(sqlite 存储)**:检测/拦截两域规则统一存于单个 sqlite db(`~/.code-agent-sentinel/sentinel.db`,WAL 模式,`0o600`)——三表:`rules` / `overrides`(启停覆盖,JOIN 派生 `enabled`)/ `combos`。内置规则启动时从 embed 同步进 db(旧 `~/.code-agent-sentinel/rules/*.yaml` 自动迁入);拦截域只同步 `destructive_commands.yaml`(运行时拦截只用破坏性命令规则,baseline/injection/skill 留在检测侧)。自定义规则可经设置页(`RuleDrawer`)与对称的 `/api/{detect|intercept}-rules` CRUD + `/validate` 端点新建 / 编辑 / 从内置 fork / 启停 / 删除;内置规则只读(POST 覆盖 builtin id → 409)。`RulesDetector` 扫描时实时读 db(热重载,无需重启);`code-agent-sentinel guard` 从 db 读拦截规则,db 故障 fail-open 回退内置。文件路径与 db 路径规则求值等价性已验证(按 asset_type)。
-- **统一处置生命周期**:塌缩旧 `baseline.json` + `suppressions.yaml` 为单一 `finding_states.yaml` overlay(`findingstate` 包:Status / Priority / Note / Category / ContributingRuleIDs)。`sentinel baseline --create` 批量接受全部当前未处置 finding;`--prune` 打印清理报告。旧文件自动迁移(重命名 `.legacy`,不删除)。已接受 finding 不再拉低健康分。
+- **统一处置生命周期**:塌缩旧 `baseline.json` + `suppressions.yaml` 为单一 `finding_states.yaml` overlay(`findingstate` 包:Status / Priority / Note / Category / ContributingRuleIDs)。`code-agent-sentinel baseline --create` 批量接受全部当前未处置 finding;`--prune` 打印清理报告。旧文件自动迁移(重命名 `.legacy`,不删除)。已接受 finding 不再拉低健康分。
 - **健康分**:`Score = 100 × (1 − Σ(R(asset)·w(asset)) / (Rmax · Σ w(asset)))`,Rmax=10,0–100 五档,可解释 / 单调 / 可还原。
 - **配置编辑**:原子写入 + 自动备份与迁移(`internal/editor`);configengine 保持只读。
 - **定时扫描**:进程内 scheduler(`scan_interval` / `scan_enabled`)持续刷新历史;`code-agent-sentinel scan` 一次性扫描不启 server。
@@ -42,7 +42,7 @@ make build          # 构建 web(npm run build)+ Go 二进制 -> bin/code-agent-
 # Token 打印到 stdout,经 URL fragment(#token=...)传递。
 
 # 不启 server 的一次性扫描:
-sentinel scan
+code-agent-sentinel scan
 
 # 远程开发机(服务仍仅绑 loopback,端口通过隧道转发):
 ssh -L <port>:127.0.0.1:<port> <devhost>

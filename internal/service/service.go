@@ -19,7 +19,7 @@ type UnitSpec struct {
 	Port     int    // port
 	// LogPath 日志文件路径。非空 → launchd StandardOutPath/StandardErrorPath 指向它,
 	// systemd 加 StandardOutput=append:<path> + StandardError=append:<path>;空 → 平台默认
-	// (launchd 回退 <home>/.code-agent-sentinel/sentinel.log,systemd 走 journal)。
+	// (launchd 回退 <home>/.code-agent-sentinel/code-agent-sentinel.log,systemd 走 journal)。
 	LogPath string
 }
 
@@ -72,7 +72,7 @@ func generateLaunchd(spec UnitSpec) (string, string, error) {
 	if !spec.UserMode {
 		unitPath = "/Library/LaunchDaemons/com.code-agent-sentinel.code-agent-sentinel.plist"
 	}
-	// Task 14:LogPath 非空 → StandardOutPath/StandardErrorPath 指向它;空 → 回退默认 sentinel.log。
+	// Task 14:LogPath 非空 → StandardOutPath/StandardErrorPath 指向它;空 → 回退默认 code-agent-sentinel.log。
 	logPath := spec.LogPath
 	if logPath == "" {
 		logPath = filepath.Join(spec.Home, ".code-agent-sentinel", "code-agent-sentinel.log")

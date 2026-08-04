@@ -16,13 +16,19 @@ type codexConfig struct {
 	Profiles       map[string]codexProfileEntry `toml:"profiles"`
 	// Hooks 对应 [hooks] 表;其 State 子字段对应 [hooks.state] 表(规格 §3.2:name→trusted)。
 	//
-	// 落地偏差:计划与控制器补充决议原用扁平 `HooksState map[string]string \`toml:"hooks_state"\``,
+	// Hooks 对应 [hooks] 表;其 State 子字段对应 [hooks.state] 表(规格 §3.2)。
+	//
+	// 落地偏差#1:计划与控制器补充决议原用扁平 `HooksState map[string]string \`toml:"hooks_state"\``,
 	// 但 go-toml/v2 把表头 `hooks.state` 按点号拆成嵌套表,扁平字段 + tag 无法捕获
 	// (实测:tag=`hooks_state` 时 HooksState 读到空 map;必须用嵌套 struct 才能读到值)。
-	// 故改用 `Hooks struct { State map[string]string \`toml:"state"\` } \`toml:"hooks"\``。
-	// 控制器补充决议已预判此偏差并要求在代码注释说明(参考 CLAUDE.md「落地偏差」约定)。
+	// 故改用 `Hooks struct { State map[string]... \`toml:"state"\` } \`toml:"hooks"\``。
+	//
+	// 落地偏差#2:原建模 hooks.state 值为 string(如 "trusted"/"untrusted"),
+	// 但 Codex 实际格式每个 hooks.state 键是一个表 {enabled: bool, trusted_hash: string},
+	// 非简单 string。原 map[string]string 导致 go-toml 报 "unhandled kv part: string"
+	// (表值无法放入 string 槽位)。改用 map[string]codexHookStateEntry 匹配实际格式。
 	Hooks struct {
-		State map[string]string `toml:"state"`
+		State map[string]codexHookStateEntry `toml:"state"`
 	} `toml:"hooks"`
 }
 
@@ -37,6 +43,14 @@ type codexProfileEntry struct {
 	Model          string `toml:"model"`
 	ApprovalPolicy string `toml:"approval_policy"`
 	SandboxMode    string `toml:"sandbox_mode"`
+}
+
+// codexHookStateEntry 对应 [hooks.state.<key>] 子表(Codex 实际格式)。
+// 原建模误用 map[string]string,但 Codex 的 hooks.state 值是一个表
+// {enabled: bool, trusted_hash: string},非简单字符串。
+type codexHookStateEntry struct {
+	Enabled     bool   `toml:"enabled"`
+	TrustedHash string `toml:"trusted_hash"`
 }
 
 // parseCodexConfig 解析 ~/.codex/config.toml,产出 settings + mcp_server + profile 资产。
@@ -74,12 +88,19 @@ func parseCodexConfig(path string, scope Scope) ([]Asset, error) {
 	if cfg.SandboxMode != "" {
 		base.Fields["sandbox_mode"] = cfg.SandboxMode
 	}
-	// [hooks.state] 非空时建模到 Fields["hooks_state"](map[string]string)。
-	// baseline 检测器可据此匹配未受信 hook;空时不写键,避免 Fields 出现 nil 值。
-	// 字段类型经 codexConfig.Hooks.State 嵌套 struct 捕获(见结构体注释的落地偏差说明)。
-	if len(cfg.Hooks.State) > 0 {
-		base.Fields["hooks_state"] = cfg.Hooks.State
-	}
+		// [hooks.state] 非空时建模到 Fields["hooks_state"]。
+		// 每个 entry 是 {enabled: bool, trusted_hash: string} 而非简单 string。
+		// baseline 检测器可据此匹配未受信 hook;空时不写键,避免 Fields 出现 nil 值。
+		if len(cfg.Hooks.State) > 0 {
+			hs := make(map[string]any, len(cfg.Hooks.State))
+			for k, v := range cfg.Hooks.State {
+				hs[k] = map[string]any{
+					"enabled":      v.Enabled,
+					"trusted_hash": v.TrustedHash,
+				}
+			}
+			base.Fields["hooks_state"] = hs
+		}
 	fillHash(&base)
 	out = append(out, base)
 
