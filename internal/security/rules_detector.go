@@ -82,7 +82,7 @@ func NewRulesDetector(home string, cfg *config.DetectorsConfig, db *storage.DB) 
 	d.loadErrs = append(d.loadErrs, errs...)
 	d.loadErrs = append(d.loadErrs, comboErrs...)
 
-	// 处置生命周期状态(finding_states.yaml,仍文件,本次不迁)。
+	// 处置生命周期状态(SQLite finding_states 表,通过 NewStates(db) 加载)。
 	d.loadStates()
 	return d
 }

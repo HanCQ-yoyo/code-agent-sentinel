@@ -53,6 +53,9 @@ type State struct {
 
 // States 是处置状态集合。持有 sqlite 句柄(db)用于持久化,Items 是内存副本
 // 供 Match/BulkAccept/PruneReport 操作。Set/Remove 同步写 db 和内存。
+//
+// 持久化模型:Set/Remove/BulkAccept 在 db 非 nil 时立即写 db,调用方无需调额外
+// 的 Save() 方法。Save(path) 保留仅用于 MigrateFromLegacy(YAML 迁移路径)。
 type States struct {
 	db    *storage.DB
 	Items []State `yaml:"items"`

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"path/filepath"
 	"testing"
 )
@@ -229,8 +228,9 @@ func TestBulkAcceptDoesNotOverwriteResolved(t *testing.T) {
 	}
 }
 
-// TestPostBaselineBulkAccept 验证 POST /api/baseline 跑全量扫描 → 批量接受 fingerprint 到 finding_states.yaml。
-// 语义变更(Task 11):旧实现 union 到 baseline.json(已删);新实现调 BulkAccept 写 finding_states.yaml。
+// TestPostBaselineBulkAccept 验证 POST /api/baseline 跑全量扫描 → 批量接受 fingerprint 到 finding_states (sqlite)。
+// 语义变更(Task 11):旧实现 union 到 baseline.json(已删);新实现调 BulkAccept 写 finding_states 表。
+// Task 3 fix:handler 使用 s.FindingStates(sqlite 持久化),验证通过 API 而非读 YAML 文件。
 func TestPostBaselineBulkAccept(t *testing.T) {
 	dir := t.TempDir()
 	// 创建触发规则的资产(dangerous settings.json)
@@ -249,14 +249,37 @@ func TestPostBaselineBulkAccept(t *testing.T) {
 		t.Fatalf("POST /api/baseline got %d: %s", w.Code, w.Body.String())
 	}
 
-	// 验证 finding_states.yaml 已写入(至少 1 条 accepted)
-	statesPath := filepath.Join(dir, ".claude-sentinel", "finding_states.yaml")
-	data, err := os.ReadFile(statesPath)
-	if err != nil {
-		t.Fatalf("读 finding_states.yaml: %v", err)
+	// 验证响应含 accepted_count(handler 返回计数)
+	var resp map[string]any
+	json.Unmarshal(w.Body.Bytes(), &resp)
+	ac, _ := resp["accepted_count"].(float64)
+	scanFindings, _ := resp["scan_findings"].(float64)
+	if ac < 1 {
+		t.Errorf("accepted_count = %v, 期望 >= 1(scan_findings=%v)", ac, scanFindings)
 	}
-	if !contains(string(data), "accepted") {
-		t.Errorf("finding_states.yaml 不含 accepted: %s", data)
+
+	// 验证 finding_states 表已写入:prune-report 不带 active 参数时应返回已处置状态
+	req2 := httptest.NewRequest("GET", "/api/finding-state/prune-report", nil)
+	req2.Host = "127.0.0.1"
+	req2.Header.Set("Authorization", "Bearer tok")
+	w2 := httptest.NewRecorder()
+	r.ServeHTTP(w2, req2)
+	if w2.Code != http.StatusOK {
+		t.Fatalf("GET /api/finding-state/prune-report got %d", w2.Code)
+	}
+	var pr struct {
+		Orphans []map[string]any `json:"orphans"`
+	}
+	json.Unmarshal(w2.Body.Bytes(), &pr)
+	if len(pr.Orphans) == 0 {
+		t.Error("prune-report 应返回至少 1 条已处置状态(不带 active 参数所有状态均为孤儿)")
+	} else {
+		for _, o := range pr.Orphans {
+			if o["status"] == "accepted" {
+				return // 找到了,验证通过
+			}
+		}
+		t.Error("prune-report 返回的状态中应含 accepted 状态")
 	}
 }
 

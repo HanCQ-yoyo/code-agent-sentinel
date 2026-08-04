@@ -4,19 +4,19 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/history"
 	"code-agent-sentinel/internal/security"
+	"code-agent-sentinel/internal/security/findingstate"
 )
 
 // findingsStateAndMetaSetup 构造单 agent fixture 用于验证 /api/findings 读路径
 // apply state/meta。返回 (server, fingerprint, startedAt),供单 agent 与聚合路径
 // 两个测试共用。fixture 细节见 TestGetFindingsAppliesStateAndMeta 注释。
+// Task 3 fix:直接 seed s.FindingStates(sqlite)替代写 YAML 文件。
 func findingsStateAndMetaSetup(t *testing.T) (s *Server, fp string, started time.Time) {
 	t.Helper()
 	dir := t.TempDir()
@@ -47,15 +47,8 @@ func findingsStateAndMetaSetup(t *testing.T) (s *Server, fp string, started time
 		t.Fatalf("save rec: %v", err)
 	}
 
-	// 写 finding_states.yaml:{ items: [{ fingerprint: fp-test-123, status: resolved }] }
-	statesPath := filepath.Join(dir, ".claude-sentinel", "finding_states.yaml")
-	yaml := "items:\n  - fingerprint: " + fp + "\n    status: resolved\n"
-	if err := os.MkdirAll(filepath.Dir(statesPath), 0o700); err != nil {
-		t.Fatalf("mkdir: %v", err)
-	}
-	if err := os.WriteFile(statesPath, []byte(yaml), 0o600); err != nil {
-		t.Fatalf("write finding_states.yaml: %v", err)
-	}
+	// 直接 seed s.FindingStates(sqlite),无需写 YAML 文件
+	s.FindingStates.Set(fp, findingstate.State{Status: findingstate.StatusResolved})
 	return s, fp, started
 }
 
@@ -87,12 +80,12 @@ func assertFindingStateAndMeta(t *testing.T, findings []security.Finding, starte
 
 // TestGetFindingsAppliesStateAndMeta 验证 /api/findings 单 agent 读路径
 // (?agent=claude-code,经 getFindings)在过滤后调 security.ApplyFindingStateBatch:
-// 合并 finding_states.yaml 的处置状态(命中 resolved → Suppressed=true + Status=resolved),
+// 合并 finding_states 表的处置状态(命中 resolved → Suppressed=true + Status=resolved),
 // 并附 StartedAt(来自 ScanRecord)与 SourcePath(来自 ScanRecord.Inventory 快照)。
 //
 // fixture 模式参考 TestGetFindingsAgentAll(aggregate_test.go):直接向 s.History
 // 注入一条 ScanRecord(已知 fingerprint + Inventory + StartedAt),绕开扫描触发,
-// 使 fingerprint 可控;finding_states.yaml 手写到 home/.claude-sentinel/ 下。
+// 使 fingerprint 可控;处置状态通过 s.FindingStates.Set 直接写入 sqlite。
 func TestGetFindingsAppliesStateAndMeta(t *testing.T) {
 	s, _, started := findingsStateAndMetaSetup(t)
 

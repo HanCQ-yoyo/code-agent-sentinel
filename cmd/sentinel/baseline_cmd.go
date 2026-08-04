@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"fmt"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -11,15 +13,16 @@ import (
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/security"
 	"code-agent-sentinel/internal/security/findingstate"
+	"code-agent-sentinel/internal/storage"
 )
 
 // newBaselineCmd 构造 `sentinel baseline` 子命令(--create / --prune)。
 //
-// Task 11 语义变更:旧实现写 baseline.json(已删);新实现统一到 finding_states.yaml:
+// Task 11 语义变更:旧实现写 baseline.json(已删);新实现统一到 finding_states 表(SQLite):
 //   - --create:跑全量扫描,把所有 Finding 的 fingerprint 批量接受(accepted),与 API POST /api/baseline 一致。
-//   - --prune:重新扫描,删掉 finding_states.yaml 中已不复现的孤儿状态(PruneReport + Remove)。
+//   - --prune:重新扫描,删掉 finding_states 表中已不复现的孤儿状态(PruneReport + Remove)。
 //
-// 路径解析:finding_states.yaml 在 <home>/.claude-sentinel/(不接 config 覆盖,统一默认路径)。
+// 持久化:sqlite sentinel.db,路径 <home>/.claude-sentinel/sentinel.db。
 // 扫描逻辑镜像 main.go run():构建 Engine + Registry + Orchestrator,跑全量 Scan。
 func newBaselineCmd() *cobra.Command {
 	var (
@@ -45,14 +48,15 @@ func newBaselineCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.claude-sentinel/config.yaml)")
-	cmd.Flags().BoolVar(&create, "create", false, "跑全量扫描并把指纹批量接受到 finding_states.yaml")
-	cmd.Flags().BoolVar(&prune, "prune", false, "重新扫描并删除 finding_states.yaml 中已不复现的孤儿状态")
+	cmd.Flags().BoolVar(&create, "create", false, "跑全量扫描并把指纹批量接受到 finding_states (sqlite)")
+	cmd.Flags().BoolVar(&prune, "prune", false, "重新扫描并删除 finding_states 表中已不复现的孤儿状态")
 	return cmd
 }
 
 // runFullScan 镜像 main.go run() 的扫描设置,跑一次全量扫描返回 findings。
 // 不启动 HTTP server。用传入的 cfg 解析路径(供未来 detector 读 cfg)。
-func runFullScan(cfg *config.Config, home string) (*security.ScanResult, error) {
+// db 为规则库 sqlite 句柄,注入 RulesDetector(替代 Task 8 的临时 nil)。
+func runFullScan(cfg *config.Config, home string, db *storage.DB) (*security.ScanResult, error) {
 	claudeDir := cfg.ResolveClaudeDir(home)
 	eng := configengine.NewEngine(home, claudeDir)
 	// #2:发现范围桥接(config 不导入 configengine,在此转 []AssetType)
@@ -67,7 +71,7 @@ func runFullScan(cfg *config.Config, home string) (*security.ScanResult, error) 
 	}
 	cfg.EnsureDetectors() // 与 main.go 一致:检测器持 cfg.Detectors 指针
 	r := security.NewRegistry()
-	r.Register(security.NewRulesDetector(home, cfg.Detectors, nil)) // db 临时 nil,Task 10 注入真 db
+	r.Register(security.NewRulesDetector(home, cfg.Detectors, db))
 	r.Register(security.NewSecretDetector(cfg.Detectors))
 	r.Register(security.NewDependencyDetector(cfg.Detectors))
 	orch := &security.Orchestrator{Registry: r}
@@ -94,34 +98,35 @@ func collectFingerprints(res *security.ScanResult) []string {
 	return fps
 }
 
-// runBaselineCreateCmd 执行 --create:全量扫描 → 批量接受 fingerprint → 保存 finding_states.yaml。
+// runBaselineCreateCmd 执行 --create:全量扫描 → 批量接受 fingerprint → 持久化到 sqlite。
 func runBaselineCreateCmd(cmd *cobra.Command, cfg *config.Config, home string) error {
 	out, err := runBaselineCreate(cfg, home)
 	fmt.Fprint(cmd.OutOrStdout(), out)
 	return err
 }
 
-// runBaselineCreate 跑全量扫描,把全部 Finding 的 fingerprint 批量接受到 finding_states.yaml。
+// runBaselineCreate 跑全量扫描,把全部 Finding 的 fingerprint 批量接受到 finding_states 表(sqlite)。
 // 已有非 open 状态(resolved/false_positive/accepted/in_progress)不覆盖,尊重既有处置。
 // 返回可读输出。
 func runBaselineCreate(cfg *config.Config, home string) (string, error) {
-	res, err := runFullScan(cfg, home)
+	db, err := openBaselineDB(home)
+	if err != nil {
+		return "", err
+	}
+	defer db.Close()
+
+	res, err := runFullScan(cfg, home, db)
 	if err != nil {
 		return "", err
 	}
 	fps := collectFingerprints(res)
-	statesPath := statesPathFor(home)
 
-	st, _ := findingstate.Load(statesPath)
-	if st == nil {
-		st = &findingstate.States{}
-	}
+	st := findingstate.NewStates(db)
 	st.BulkAccept(fps, findingstate.SourceBulkAccept, time.Now().UTC().Format(time.RFC3339))
-	if err := st.Save(statesPath); err != nil {
-		return "", fmt.Errorf("保存 finding_states 失败: %w", err)
-	}
-	return fmt.Sprintf("处置状态已批量接受: %s\n  扫描产出 %d 条 finding, 批量接受 %d 条指纹\n",
-		statesPath, len(res.Findings), len(fps)), nil
+	// BulkAccept 内部调 Set 已实时写 db,无需额外 Save
+
+	return fmt.Sprintf("处置状态已批量接受: finding_states (sqlite)\n  扫描产出 %d 条 finding, 批量接受 %d 条指纹\n",
+		len(res.Findings), len(fps)), nil
 }
 
 // runBaselinePruneCmd 执行 --prune:加载 finding_states → 重新扫描 → 删已不复现指纹 → 保存。
@@ -131,18 +136,20 @@ func runBaselinePruneCmd(cmd *cobra.Command, cfg *config.Config, home string) er
 	return err
 }
 
-// runBaselinePrune 重新扫描,删除 finding_states.yaml 中已不复现的指纹。
+// runBaselinePrune 重新扫描,删除 finding_states 表中已不复现的指纹。
 // 返回可读输出。
 func runBaselinePrune(cfg *config.Config, home string) (string, error) {
-	statesPath := statesPathFor(home)
-	st, err := findingstate.Load(statesPath)
+	db, err := openBaselineDB(home)
 	if err != nil {
-		return "", fmt.Errorf("加载 finding_states 失败: %w", err)
+		return "", err
 	}
-	if st == nil {
-		return "", fmt.Errorf("finding_states 文件不存在: %s(请先 --create)", statesPath)
+	defer db.Close()
+
+	st := findingstate.NewStates(db)
+	if len(st.Items) == 0 {
+		return "", fmt.Errorf("finding_states 表为空(请先 --create)")
 	}
-	res, err := runFullScan(cfg, home)
+	res, err := runFullScan(cfg, home, db)
 	if err != nil {
 		return "", err
 	}
@@ -153,15 +160,35 @@ func runBaselinePrune(cfg *config.Config, home string) (string, error) {
 	for _, o := range orphans {
 		st.Remove(o.Fingerprint)
 	}
-	if err := st.Save(statesPath); err != nil {
-		return "", fmt.Errorf("保存 pruned finding_states 失败: %w", err)
-	}
+	// Remove 已实时写 db,无需额外 Save
+
 	remain := len(st.Items)
-	return fmt.Sprintf("处置状态已清理: %s\n  保留 %d 条, 删除 %d 条已不复现\n",
-		statesPath, remain, len(orphans)), nil
+	return fmt.Sprintf("处置状态已清理: finding_states (sqlite)\n  保留 %d 条, 删除 %d 条已不复现\n",
+		remain, len(orphans)), nil
 }
 
-// statesPathFor 返回 <home>/.claude-sentinel/finding_states.yaml。
-func statesPathFor(home string) string {
-	return config.DefaultConfig().ResolveStatesPath(home)
+// openBaselineDB 打开 sqlite 规则库,建表,同步 builtin 规则(用于 baseline 子命令)。
+// 路径: <home>/.claude-sentinel/sentinel.db(与 main.go 一致)。
+func openBaselineDB(home string) (*storage.DB, error) {
+	dbPath := filepath.Join(home, ".claude-sentinel", "sentinel.db")
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
+		return nil, fmt.Errorf("创建 db 目录: %w", err)
+	}
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("打开规则库: %w", err)
+	}
+	initialized, initErr := storage.SchemaInitialized(db)
+	if initErr != nil {
+		db.Close()
+		return nil, fmt.Errorf("检查规则库 schema: %w", initErr)
+	}
+	if !initialized {
+		if err := storage.RunMigrations(db); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("建表: %w", err)
+		}
+	}
+	syncBuiltinRules(db)
+	return db, nil
 }

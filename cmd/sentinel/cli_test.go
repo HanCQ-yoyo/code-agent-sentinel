@@ -113,9 +113,10 @@ func TestRulesListReadsFromDB(t *testing.T) {
 	}
 }
 
-// TestBaselineCreate 验证 sentinel baseline --create 能跑全量扫描并把指纹批量接受到 finding_states.yaml。
-// Task 11 语义变更:旧实现 union 到 baseline.json(已删);新实现调 BulkAccept 写 finding_states.yaml。
+// TestBaselineCreate 验证 sentinel baseline --create 能跑全量扫描并把指纹批量接受到 finding_states 表(sqlite)。
+// Task 11 语义变更:旧实现 union 到 baseline.json(已删);新实现调 BulkAccept 写 finding_states 表。
 // BulkAccept 不覆盖已有非 open 状态:预置一条 resolved 状态,验证 --create 后仍为 resolved(不被 accepted 覆盖)。
+// Task 3 fix:使用 findingstate.NewStates(db) 替代 YAML 文件 I/O。
 func TestBaselineCreate(t *testing.T) {
 	home := t.TempDir()
 	// 构造一个会触发 baseline.wildcard-bash 的 settings.json
@@ -129,31 +130,41 @@ func TestBaselineCreate(t *testing.T) {
 	}
 
 	cfg := config.DefaultConfig()
-	statesPath := cfg.ResolveStatesPath(home)
 
 	// 预置一条不会在本次扫描复现的假指纹(resolved 状态,模拟之前已处置的旧 finding)
-	preseed := &findingstate.States{Items: []findingstate.State{
-		{Fingerprint: "preseed-resolved-fp", Status: findingstate.StatusResolved, Note: "之前已修复"},
-	}}
-	if err := preseed.Save(statesPath); err != nil {
-		t.Fatalf("预置 finding_states 失败: %v", err)
+	// 直接写入 sqlite(与 runBaselineCreate 使用同一 db 文件)。
+	dbPath := filepath.Join(home, ".claude-sentinel", "sentinel.db")
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
+		t.Fatal(err)
 	}
+	db, err := storage.Open(dbPath)
+	if err != nil {
+		t.Fatalf("打开 db: %v", err)
+	}
+	if err := storage.RunMigrations(db); err != nil {
+		db.Close()
+		t.Fatalf("建表: %v", err)
+	}
+	// 同步 builtin 规则进 db(使 runBaselineCreate 的 RulesDetector 能从 db 读规则)。
+	// 不提前同步 → NewRulesDetector(db) 的 LoadDetectRules 读到空表,扫描无 finding。
+	syncBuiltinRules(db)
+	preseed := findingstate.NewStates(db)
+	preseed.Set("preseed-resolved-fp", findingstate.State{Status: findingstate.StatusResolved, Note: "之前已修复"})
+	db.Close()
 
 	out, err := runBaselineCreate(cfg, home)
 	if err != nil {
 		t.Fatalf("baseline create error: %v\noutput: %s", err, out)
 	}
-	// finding_states.yaml 应存在
-	if _, err := os.ReadFile(statesPath); err != nil {
-		t.Fatalf("finding_states.yaml 应存在: %v", err)
-	}
 
-	// 验证:预置的 resolved 状态保留(不被 BulkAccept 覆盖为 accepted)
-	loaded, err := findingstate.Load(statesPath)
+	// 重新打开 db 验证
+	db2, err := storage.Open(dbPath)
 	if err != nil {
-		t.Fatalf("加载 finding_states 失败: %v", err)
+		t.Fatalf("重新打开 db: %v", err)
 	}
-	if loaded == nil {
+	defer db2.Close()
+	loaded := findingstate.NewStates(db2)
+	if len(loaded.Items) == 0 {
 		t.Fatal("finding_states 为空")
 	}
 	var preseedKept bool
@@ -178,6 +189,7 @@ func TestBaselineCreate(t *testing.T) {
 }
 
 // TestBaselinePrune 验证 sentinel baseline --prune 删除已不复现的孤儿状态。
+// Task 3 fix:使用 findingstate.NewStates(db) 替代 YAML 文件 I/O。
 func TestBaselinePrune(t *testing.T) {
 	home := t.TempDir()
 	claudeDir := filepath.Join(home, ".claude")
@@ -190,35 +202,38 @@ func TestBaselinePrune(t *testing.T) {
 	}
 
 	cfg := config.DefaultConfig()
-	statesPath := cfg.ResolveStatesPath(home)
+	dbPath := filepath.Join(home, ".claude-sentinel", "sentinel.db")
 
 	// (1) 先 create 生成 finding_states(含 baseline.wildcard-bash 的 fingerprint)
 	if _, err := runBaselineCreate(cfg, home); err != nil {
 		t.Fatalf("baseline create error: %v", err)
 	}
-	st, err := findingstate.Load(statesPath)
+	db, err := storage.Open(dbPath)
 	if err != nil {
-		t.Fatalf("加载 finding_states 失败: %v", err)
+		t.Fatalf("打开 db: %v", err)
 	}
+	st := findingstate.NewStates(db)
 	if len(st.Items) == 0 {
+		db.Close()
 		t.Fatal("baseline create 应产出处置状态")
 	}
 	countBefore := len(st.Items)
 
 	// (2) 塞一条假指纹(模拟已不复现的旧 finding,accepted 状态)
+	// Set 实时写 db,无需额外 Save
 	st.Set("fake-stale-fingerprint", findingstate.State{Status: findingstate.StatusAccepted, Source: findingstate.SourceManual})
-	if err := st.Save(statesPath); err != nil {
-		t.Fatal(err)
-	}
+	db.Close()
 
 	// (3) prune:应删掉假指纹(本轮未检出),保留真实指纹
 	if _, err := runBaselinePrune(cfg, home); err != nil {
 		t.Fatalf("baseline prune error: %v", err)
 	}
-	st2, err := findingstate.Load(statesPath)
+	db2, err := storage.Open(dbPath)
 	if err != nil {
-		t.Fatalf("加载 pruned finding_states 失败: %v", err)
+		t.Fatalf("重新打开 db: %v", err)
 	}
+	defer db2.Close()
+	st2 := findingstate.NewStates(db2)
 	if len(st2.Items) != countBefore {
 		t.Fatalf("prune 后应剩 %d 条(=复现的), got %d", countBefore, len(st2.Items))
 	}
