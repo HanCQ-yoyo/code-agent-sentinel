@@ -22,7 +22,7 @@ import (
 //   - --create:跑全量扫描,把所有 Finding 的 fingerprint 批量接受(accepted),与 API POST /api/baseline 一致。
 //   - --prune:重新扫描,删掉 finding_states 表中已不复现的孤儿状态(PruneReport + Remove)。
 //
-// 持久化:sqlite sentinel.db,路径 <home>/.claude-sentinel/sentinel.db。
+// 持久化:sqlite sentinel.db,路径 <home>/.code-agent-sentinel/sentinel.db。
 // 扫描逻辑镜像 main.go run():构建 Engine + Registry + Orchestrator,跑全量 Scan。
 func newBaselineCmd() *cobra.Command {
 	var (
@@ -47,7 +47,7 @@ func newBaselineCmd() *cobra.Command {
 			return runBaselinePruneCmd(cmd, cfg, home)
 		},
 	}
-	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.claude-sentinel/config.yaml)")
+	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.code-agent-sentinel/config.yaml)")
 	cmd.Flags().BoolVar(&create, "create", false, "跑全量扫描并把指纹批量接受到 finding_states (sqlite)")
 	cmd.Flags().BoolVar(&prune, "prune", false, "重新扫描并删除 finding_states 表中已不复现的孤儿状态")
 	return cmd
@@ -168,9 +168,9 @@ func runBaselinePrune(cfg *config.Config, home string) (string, error) {
 }
 
 // openBaselineDB 打开 sqlite 规则库,建表,同步 builtin 规则(用于 baseline 子命令)。
-// 路径: <home>/.claude-sentinel/sentinel.db(与 main.go 一致)。
+// 路径: <home>/.code-agent-sentinel/sentinel.db(与 main.go 一致)。
 func openBaselineDB(home string) (*storage.DB, error) {
-	dbPath := filepath.Join(home, ".claude-sentinel", "sentinel.db")
+	dbPath := filepath.Join(home, ".code-agent-sentinel", "sentinel.db")
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
 		return nil, fmt.Errorf("创建 db 目录: %w", err)
 	}

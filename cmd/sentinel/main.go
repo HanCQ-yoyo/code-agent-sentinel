@@ -57,7 +57,7 @@ func newRootCmd() *cobra.Command {
 			return run(cmd.Context(), cfgPath, bindFlag, portFlag, noBrowser, risky, homeFlag, tokenFlag, claudeDirFlag, logPathFlag, daemonFlag)
 		},
 	}
-	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.claude-sentinel/config.yaml)")
+	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.code-agent-sentinel/config.yaml)")
 	cmd.Flags().StringVar(&bindFlag, "bind", "", "覆盖 bind 地址")
 	cmd.Flags().IntVar(&portFlag, "port", 15921, "监听端口")
 	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "不自动打开浏览器")
@@ -87,7 +87,7 @@ func newRootCmd() *cobra.Command {
 	cmd.AddCommand(newScanCmd())
 	// Task 11:setup 子命令(huh TUI 交互式配置 code agent)
 	cmd.AddCommand(newSetupCmd())
-	// Task 22:uninstall 子命令(清理 ~/.claude-sentinel 数据目录)
+	// Task 22:uninstall 子命令(清理 ~/.code-agent-sentinel 数据目录)
 	cmd.AddCommand(newUninstallCmd())
 	// Task 20:service 子命令(install/uninstall/status 管理系统服务)
 	cmd.AddCommand(newServiceCmd())
@@ -200,7 +200,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 		}
 	}
 
-	// Task 10:启动 sqlite 规则库。打开 ~/.claude-sentinel/sentinel.db → 建表 →
+	// Task 10:启动 sqlite 规则库。打开 ~/.code-agent-sentinel/sentinel.db → 建表 →
 	// (首次)迁移旧 rules/*.yaml 为 custom 行 + 重命名 .legacy → 同步 builtin 两域
 	// (detect + intercept)→ 注入 RulesDetector 与 Server。
 	//
@@ -208,7 +208,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	// RulesDetector 的 nil-db 回退(loadRulesForScan 走 LoadForScan 文件路径)与 guard 的
 	// fail-open(回退 LoadBuiltin)都能在 db 不可用时维持检测能力,故 db 故障不致服务不可用。
 	// 与 guard 铁律一致:存储故障不致检测失效、不误 deny。
-	dbPath := filepath.Join(home, ".claude-sentinel", "sentinel.db")
+	dbPath := filepath.Join(home, ".code-agent-sentinel", "sentinel.db")
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
 		// 目录创建失败通常是权限/磁盘问题,日志都写不进去,直接报错退出。
 		return fmt.Errorf("create db dir: %w", err)
@@ -232,7 +232,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 				db.Close()
 				db = nil
 			} else {
-				// 首次建表:迁移旧 ~/.claude-sentinel/rules/*.yaml 为 custom 行(两域)+ 重命名 .legacy。
+				// 首次建表:迁移旧 ~/.code-agent-sentinel/rules/*.yaml 为 custom 行(两域)+ 重命名 .legacy。
 				// 仅在首次(未初始化)时跑,避免每次启动都扫旧目录(.legacy 文件已不在 *.yaml 通配)。
 				migrateLegacyRulesFiles(home, db)
 			}

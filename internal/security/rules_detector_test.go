@@ -80,12 +80,12 @@ func rulesFixtureAssets() []configengine.Asset {
 	return assets
 }
 
-// newRulesHome 构造一个空临时 home 目录(无 ~/.claude-sentinel/ 配置),
+// newRulesHome 构造一个空临时 home 目录(无 ~/.code-agent-sentinel/ 配置),
 // 让 NewRulesDetector 不读真实用户配置。
 func newRulesHome(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(dir, ".claude-sentinel"), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Join(dir, ".code-agent-sentinel"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	return dir
@@ -199,7 +199,7 @@ func TestRulesDetectorLoadErrorNotInHealth(t *testing.T) {
 	}
 
 	// (2) 损坏 home:全局规则目录有 YAML 语法错
-	globalDir := filepath.Join(home, ".claude-sentinel", "rules")
+	globalDir := filepath.Join(home, ".code-agent-sentinel", "rules")
 	if err := os.MkdirAll(globalDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -322,7 +322,7 @@ func TestRulesDetectorProjectRuleScoped(t *testing.T) {
 
 // TestRulesFindingLocationsPropagated 验证 RulesDetector 透传 ruleengine.EvalResult.Locations
 // 到 Finding.Locations(content regex_match 命中应带行位置,供 UI Monaco 高亮)。
-// 规则经全局规则目录(.claude-sentinel/rules/)注入(沿用 TestRulesDetectorLoadErrorNotInHealth
+// 规则经全局规则目录(.code-agent-sentinel/rules/)注入(沿用 TestRulesDetectorLoadErrorNotInHealth
 // 的构造模式);MatchNode.raw 未导出,security 包无法直构 Rule,必走 YAML 加载路径。
 //
 // 注:content=`rm -rf /` 同时命中 destructive.filesystem.rm-rf-root-home(经 review Important #1
@@ -333,7 +333,7 @@ func TestRulesFindingLocationsPropagated(t *testing.T) {
 	home := newRulesHome(t)
 
 	// 写一条 content regex 规则到全局规则目录,NewRulesDetector 会经 LoadForScan 加载
-	globalDir := filepath.Join(home, ".claude-sentinel", "rules")
+	globalDir := filepath.Join(home, ".code-agent-sentinel", "rules")
 	if err := os.MkdirAll(globalDir, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -1109,12 +1109,12 @@ func TestManagedMCPPresentInfoRule(t *testing.T) {
 //   - 同规则命中不同资产 → 不合并(各一条)
 
 // newTestDetector 构造一个注入指定规则 YAML 的 RulesDetector(测试专用)。
-// 在 <home>/.claude-sentinel/rules/test.yaml 写入 rulesYAML,NewRulesDetector 经
+// 在 <home>/.code-agent-sentinel/rules/test.yaml 写入 rulesYAML,NewRulesDetector 经
 // LoadForScan 加载。沿用 newRulesHome + 写文件 + NewRulesDetector 既有模式。
 func newTestDetector(t *testing.T, rulesYAML string) *RulesDetector {
 	t.Helper()
 	home := newRulesHome(t)
-	rulesDir := filepath.Join(home, ".claude-sentinel", "rules")
+	rulesDir := filepath.Join(home, ".code-agent-sentinel", "rules")
 	if err := os.MkdirAll(rulesDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

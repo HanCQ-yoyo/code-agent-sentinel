@@ -47,7 +47,7 @@ func TestGetDirTagsReturnsDefaults(t *testing.T) {
 // 重新 Load 后覆盖仍在。
 func TestPutDirTagsPersistsToFile(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, ".claude-sentinel", "config.yaml")
+	cfgPath := filepath.Join(dir, ".code-agent-sentinel", "config.yaml")
 	s := newTestServer(t, dir)
 	s.ConfigPath = cfgPath
 
@@ -81,7 +81,7 @@ func TestPutDirTagsRejectsBadTag(t *testing.T) {
 // TestPutDirTagsReplacesNotMerges 验证整体替换语义:第二次 PUT 不含的 key 被移除。
 func TestPutDirTagsReplacesNotMerges(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, ".claude-sentinel", "config.yaml")
+	cfgPath := filepath.Join(dir, ".code-agent-sentinel", "config.yaml")
 	s := newTestServer(t, dir)
 	s.ConfigPath = cfgPath
 

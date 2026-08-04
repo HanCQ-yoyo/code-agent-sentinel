@@ -26,13 +26,13 @@ type Config struct {
 	// 空表示用户未自定义,全用默认。见 dir_tags.go。
 	DirTags    DirTags  `yaml:"dir_tags"`
 	Favorites  []string `yaml:"favorites"`   // 资产收藏/置顶 id 列表(跨会话保留;localStorage 受端口影响故改存配置)
-	BackupDir  string   `yaml:"backup_dir"`  // 空=默认 ~/.claude-sentinel/backups
+	BackupDir  string   `yaml:"backup_dir"`  // 空=默认 ~/.code-agent-sentinel/backups
 	MaxBackups int      `yaml:"max_backups"` // 0=默认 20
 
 	// Task 15:安全检测增强配置字段。空值=用默认路径/值,Resolve* 方法统一解析。
-	SentinelRulesDir    string  `yaml:"sentinel_rules_dir"`   // 空=默认 ~/.claude-sentinel/rules
-	SuppressPath        string  `yaml:"suppress_path"`        // 空=默认 ~/.claude-sentinel/suppressions.yaml
-	BaselinePath        string  `yaml:"baseline_path"`        // 空=默认 ~/.claude-sentinel/baseline.json
+	SentinelRulesDir    string  `yaml:"sentinel_rules_dir"`   // 空=默认 ~/.code-agent-sentinel/rules
+	SuppressPath        string  `yaml:"suppress_path"`        // 空=默认 ~/.code-agent-sentinel/suppressions.yaml
+	BaselinePath        string  `yaml:"baseline_path"`        // 空=默认 ~/.code-agent-sentinel/baseline.json
 	SuppressionDiscount float64 `yaml:"suppression_discount"` // 空/0=默认 0.3
 
 	// 检测器运行期配置(启用开关 + 二进制路径)。nil=全启用默认(向后兼容)。
@@ -58,7 +58,7 @@ type Config struct {
 	Token string `yaml:"token"`
 	// Task 14:日志文件路径。空=stderr(默认,前台交互场景)。
 	// --log-path flag > config.LogPath > 默认 stderr,run() 里统一解析。
-	// service install 生成的单元文件带 --log-path 指向 <home>/.claude-sentinel/sentinel.log,
+	// service install 生成的单元文件带 --log-path 指向 <home>/.code-agent-sentinel/sentinel.log,
 	// 亦允许用户在此显式配置自定义路径覆盖单元默认。
 	LogPath string `yaml:"log_path" json:"log_path"`
 	// #4:置顶项目列表
@@ -135,13 +135,13 @@ func DefaultConfig() *Config {
 	return &Config{Bind: "127.0.0.1", Port: 15921, MaxBackups: 20}
 }
 
-// DefaultPath 返回 ~/.claude-sentinel/config.yaml。
+// DefaultPath 返回 ~/.code-agent-sentinel/config.yaml。
 func DefaultPath() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".claude-sentinel", "config.yaml"), nil
+	return filepath.Join(home, ".code-agent-sentinel", "config.yaml"), nil
 }
 
 // Load 从 path 加载配置;文件不存在返回默认。
@@ -177,12 +177,12 @@ func Save(path string, c *Config) error {
 // SuppressionDiscount 为 0 或负值时用此默认。
 const DefaultSuppressionDiscount = 0.3
 
-// ResolveSentinelRulesDir 返回全局规则目录路径。空=默认 <home>/.claude-sentinel/rules。
+// ResolveSentinelRulesDir 返回全局规则目录路径。空=默认 <home>/.code-agent-sentinel/rules。
 func (c *Config) ResolveSentinelRulesDir(home string) string {
 	if c.SentinelRulesDir != "" {
 		return c.SentinelRulesDir
 	}
-	return filepath.Join(home, ".claude-sentinel", "rules")
+	return filepath.Join(home, ".code-agent-sentinel", "rules")
 }
 
 // ResolveClaudeDir 解析 .claude 目录绝对路径:非空用配置值,空回退 home/.claude。
@@ -263,27 +263,27 @@ func resolveDefault(v, def string) string {
 	return v
 }
 
-// ResolveSuppressPath 返回 suppressions 文件路径。空=默认 <home>/.claude-sentinel/suppressions.yaml。
+// ResolveSuppressPath 返回 suppressions 文件路径。空=默认 <home>/.code-agent-sentinel/suppressions.yaml。
 func (c *Config) ResolveSuppressPath(home string) string {
 	if c.SuppressPath != "" {
 		return c.SuppressPath
 	}
-	return filepath.Join(home, ".claude-sentinel", "suppressions.yaml")
+	return filepath.Join(home, ".code-agent-sentinel", "suppressions.yaml")
 }
 
-// ResolveBaselinePath 返回 baseline 文件路径。空=默认 <home>/.claude-sentinel/baseline.json。
+// ResolveBaselinePath 返回 baseline 文件路径。空=默认 <home>/.code-agent-sentinel/baseline.json。
 func (c *Config) ResolveBaselinePath(home string) string {
 	if c.BaselinePath != "" {
 		return c.BaselinePath
 	}
-	return filepath.Join(home, ".claude-sentinel", "baseline.json")
+	return filepath.Join(home, ".code-agent-sentinel", "baseline.json")
 }
 
-// ResolveStatesPath 返回 finding_states.yaml 路径。统一默认 <home>/.claude-sentinel/finding_states.yaml。
+// ResolveStatesPath 返回 finding_states.yaml 路径。统一默认 <home>/.code-agent-sentinel/finding_states.yaml。
 // 注:finding_states.yaml 暂不接 config 覆盖(与 baseline/suppressions 不同),统一默认路径
 // 简化迁移与多路径一致性问题。
 func (c *Config) ResolveStatesPath(home string) string {
-	return filepath.Join(home, ".claude-sentinel", "finding_states.yaml")
+	return filepath.Join(home, ".code-agent-sentinel", "finding_states.yaml")
 }
 
 // ResolveSuppressionDiscount 返回抑制折扣因子。0 或负值=默认 0.3。

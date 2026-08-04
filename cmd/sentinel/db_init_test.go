@@ -10,14 +10,14 @@ import (
 )
 
 // TestMigrateLegacyRulesFilesRenamesAndImports 验证 main.go 侧的迁移编排:
-// 旧 ~/.claude-sentinel/rules/*.yaml → db 的 custom 行(detect+intercept 两域)+ 文件重命名 .legacy。
+// 旧 ~/.code-agent-sentinel/rules/*.yaml → db 的 custom 行(detect+intercept 两域)+ 文件重命名 .legacy。
 //
 // 解耦后 MigrateLegacyRules(storage 包)只做 db 写入,重命名是 main.go 的职责,
 // 故 .legacy 重命名的验证在本 cmd 包测试里覆盖(storage 包的白盒测试只验 db 写入)。
 func TestMigrateLegacyRulesFilesRenamesAndImports(t *testing.T) {
 	home := t.TempDir()
 	// 造旧全局规则文件
-	oldDir := filepath.Join(home, ".claude-sentinel", "rules")
+	oldDir := filepath.Join(home, ".code-agent-sentinel", "rules")
 	if err := os.MkdirAll(oldDir, 0o755); err != nil {
 		t.Fatal(err)
 	}

@@ -8,7 +8,7 @@ import (
 //
 // 解耦设计(Task 10 final):本函数只做 db 写入(纯 storage 职责,不依赖 ruleengine)。
 // 调用方(main.go 的 migrateLegacyRulesFiles)负责:
-//  1. ruleengine.LoadDir(~/.claude-sentinel/rules, "global") 读旧文件;
+//  1. ruleengine.LoadDir(~/.code-agent-sentinel/rules, "global") 读旧文件;
 //  2. ruleengine.RuleToStoredRule 把每条 Rule 转 StoredRule;
 //  3. 调本函数把 StoredRule 写进 db 为 custom 行;
 //  4. 把旧 *.yaml/*.yml 重命名 .legacy(保留回滚,不删)。

@@ -153,7 +153,7 @@ func LoadForScan(home string, inventory *configengine.Inventory) (rules []Rule, 
 	builtin, builtinCombos, errs := LoadBuiltin()
 	combos = append(combos, builtinCombos...)
 
-	globalDir := filepath.Join(home, ".claude-sentinel", "rules")
+	globalDir := filepath.Join(home, ".code-agent-sentinel", "rules")
 	global, globalCombos, globalErrs := LoadDir(globalDir, "global")
 	errs = append(errs, globalErrs...)
 	combos = append(combos, globalCombos...)

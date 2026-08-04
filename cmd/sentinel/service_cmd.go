@@ -182,7 +182,7 @@ func runServiceUninstall(userMode bool) error {
 		exec.Command("systemctl", daemonReloadArgs(userMode)...).Run()
 	case "darwin":
 		home, _ := os.UserHomeDir()
-		unitPath := filepath.Join(home, "Library", "LaunchAgents", "com.claude-sentinel.sentinel.plist")
+		unitPath := filepath.Join(home, "Library", "LaunchAgents", "com.code-agent-sentinel.sentinel.plist")
 		exec.Command("launchctl", "unload", unitPath).Run()
 		os.Remove(unitPath)
 	case "windows":
@@ -216,7 +216,7 @@ func runServiceStatus(userMode bool) error {
 		cmd.Stderr = os.Stderr
 		cmd.Run()
 	case "darwin":
-		cmd := exec.Command("launchctl", "list", "com.claude-sentinel.sentinel")
+		cmd := exec.Command("launchctl", "list", "com.code-agent-sentinel.sentinel")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		cmd.Run()

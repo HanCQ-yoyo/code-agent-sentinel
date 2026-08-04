@@ -26,8 +26,8 @@ func TestNewEditorDefaults(t *testing.T) {
 	if e.MaxBackups != 20 {
 		t.Fatalf("default MaxBackups want 20 got %d", e.MaxBackups)
 	}
-	// BackupDir 空时默认 ~/.claude-sentinel/backups(home 之下 .claude-sentinel)
-	want := filepath.Join(eng.HomeDir, ".claude-sentinel", "backups")
+	// BackupDir 空时默认 ~/.code-agent-sentinel/backups(home 之下 .code-agent-sentinel)
+	want := filepath.Join(eng.HomeDir, ".code-agent-sentinel", "backups")
 	if e.BackupDir != want {
 		t.Fatalf("default BackupDir want %q got %q", want, e.BackupDir)
 	}

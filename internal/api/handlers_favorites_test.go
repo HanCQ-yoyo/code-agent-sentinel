@@ -47,7 +47,7 @@ func TestGetFavoritesEmpty(t *testing.T) {
 // 重新 Load 后收藏仍在(跨重启/跨端口的核心场景)。
 func TestPutFavoritesPersistsToFile(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, ".claude-sentinel", "config.yaml")
+	cfgPath := filepath.Join(dir, ".code-agent-sentinel", "config.yaml")
 	s := newTestServer(t, dir)
 	s.ConfigPath = cfgPath
 
@@ -72,7 +72,7 @@ func TestPutFavoritesPersistsToFile(t *testing.T) {
 // TestPutFavoritesReplacesNotMerges 验证整体替换语义:第二次 PUT 不含的 id 被移除。
 func TestPutFavoritesReplacesNotMerges(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, ".claude-sentinel", "config.yaml")
+	cfgPath := filepath.Join(dir, ".code-agent-sentinel", "config.yaml")
 	s := newTestServer(t, dir)
 	s.ConfigPath = cfgPath
 

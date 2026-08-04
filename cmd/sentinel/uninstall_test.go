@@ -22,7 +22,7 @@ func TestUninstallCmdRegistered(t *testing.T) {
 
 func TestUninstallRemovesDataDir(t *testing.T) {
 	home := t.TempDir()
-	dataDir := filepath.Join(home, ".claude-sentinel")
+	dataDir := filepath.Join(home, ".code-agent-sentinel")
 	os.MkdirAll(filepath.Join(dataDir, "history"), 0o755)
 	os.WriteFile(filepath.Join(dataDir, "config.yaml"), []byte("home_dir: "+home), 0o600)
 	os.WriteFile(filepath.Join(dataDir, "baseline.json"), []byte("{}"), 0o600)
@@ -45,7 +45,7 @@ func TestUninstallRemovesDataDir(t *testing.T) {
 
 func TestUninstallKeepConfig(t *testing.T) {
 	home := t.TempDir()
-	dataDir := filepath.Join(home, ".claude-sentinel")
+	dataDir := filepath.Join(home, ".code-agent-sentinel")
 	os.MkdirAll(filepath.Join(dataDir, "history"), 0o755)
 	os.WriteFile(filepath.Join(dataDir, "config.yaml"), []byte("home_dir: "+home), 0o600)
 	os.WriteFile(filepath.Join(dataDir, "baseline.json"), []byte("{}"), 0o600)

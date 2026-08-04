@@ -27,7 +27,7 @@ func TestScanCmdWritesHistory(t *testing.T) {
 	os.MkdirAll(filepath.Join(home, ".claude"), 0o755)
 	os.WriteFile(filepath.Join(home, ".claude", "settings.json"),
 		[]byte(`{"permissions":{"allow":["Bash(*)"]}}`), 0o644)
-	cfgPath := filepath.Join(home, ".claude-sentinel", "config.yaml")
+	cfgPath := filepath.Join(home, ".code-agent-sentinel", "config.yaml")
 	os.MkdirAll(filepath.Dir(cfgPath), 0o755)
 	os.WriteFile(cfgPath, []byte("home_dir: "+home+"\n"), 0o600)
 
@@ -40,7 +40,7 @@ func TestScanCmdWritesHistory(t *testing.T) {
 		t.Fatalf("scan 执行失败: %v", err)
 	}
 	// history DB 应有 1 条记录
-	db, err := storage.Open(filepath.Join(home, ".claude-sentinel", "sentinel.db"))
+	db, err := storage.Open(filepath.Join(home, ".code-agent-sentinel", "sentinel.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}
@@ -58,7 +58,7 @@ func TestScanCmdAcceptsAgentFlag(t *testing.T) {
 	os.MkdirAll(filepath.Join(home, ".claude"), 0o755)
 	os.WriteFile(filepath.Join(home, ".claude", "settings.json"),
 		[]byte(`{"permissions":{"allow":["Bash(*)"]}}`), 0o644)
-	cfgPath := filepath.Join(home, ".claude-sentinel", "config.yaml")
+	cfgPath := filepath.Join(home, ".code-agent-sentinel", "config.yaml")
 	os.MkdirAll(filepath.Dir(cfgPath), 0o755)
 	os.WriteFile(cfgPath, []byte("home_dir: "+home+"\n"), 0o600)
 
@@ -71,7 +71,7 @@ func TestScanCmdAcceptsAgentFlag(t *testing.T) {
 		t.Fatalf("scan --agent 应跑通: %v", err)
 	}
 	// history DB 应有 1 条记录
-	db, err := storage.Open(filepath.Join(home, ".claude-sentinel", "sentinel.db"))
+	db, err := storage.Open(filepath.Join(home, ".code-agent-sentinel", "sentinel.db"))
 	if err != nil {
 		t.Fatalf("open db: %v", err)
 	}

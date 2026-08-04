@@ -71,9 +71,9 @@ func TestRulesListShowsBuiltin(t *testing.T) {
 // (fail-open 路径只显 builtin,显出 custom 即证走的是 db 路径)。
 func TestRulesListReadsFromDB(t *testing.T) {
 	home := t.TempDir()
-	// writeTestConfig 会建 ~/.claude-sentinel/config.yaml,但 db 路径是
-	// <home>/.claude-sentinel/sentinel.db(与 main.go 启动一致)。先建目录+建 db:
-	sentinelDir := filepath.Join(home, ".claude-sentinel")
+	// writeTestConfig 会建 ~/.code-agent-sentinel/config.yaml,但 db 路径是
+	// <home>/.code-agent-sentinel/sentinel.db(与 main.go 启动一致)。先建目录+建 db:
+	sentinelDir := filepath.Join(home, ".code-agent-sentinel")
 	if err := os.MkdirAll(sentinelDir, 0o700); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
@@ -133,7 +133,7 @@ func TestBaselineCreate(t *testing.T) {
 
 	// 预置一条不会在本次扫描复现的假指纹(resolved 状态,模拟之前已处置的旧 finding)
 	// 直接写入 sqlite(与 runBaselineCreate 使用同一 db 文件)。
-	dbPath := filepath.Join(home, ".claude-sentinel", "sentinel.db")
+	dbPath := filepath.Join(home, ".code-agent-sentinel", "sentinel.db")
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -202,7 +202,7 @@ func TestBaselinePrune(t *testing.T) {
 	}
 
 	cfg := config.DefaultConfig()
-	dbPath := filepath.Join(home, ".claude-sentinel", "sentinel.db")
+	dbPath := filepath.Join(home, ".code-agent-sentinel", "sentinel.db")
 
 	// (1) 先 create 生成 finding_states(含 baseline.wildcard-bash 的 fingerprint)
 	if _, err := runBaselineCreate(cfg, home); err != nil {
@@ -314,14 +314,14 @@ func execRulesValidate(home, file string) (string, error) {
 	return buf.String(), err
 }
 
-// writeTestConfig 在 home/.claude-sentinel/config.yaml 写一份最小配置(设 home_dir=home),
+// writeTestConfig 在 home/.code-agent-sentinel/config.yaml 写一份最小配置(设 home_dir=home),
 // 返回路径。让 loadCfgAndHome 用此 config 解析到正确的 home。
-// home 必须非空(否则 filepath.Join 退化成相对路径,会在 cwd 泄漏创建 .claude-sentinel/)。
+// home 必须非空(否则 filepath.Join 退化成相对路径,会在 cwd 泄漏创建 .code-agent-sentinel/)。
 func writeTestConfig(home string) string {
 	if home == "" {
-		panic("writeTestConfig: home must be non-empty to avoid leaking .claude-sentinel/ into cwd")
+		panic("writeTestConfig: home must be non-empty to avoid leaking .code-agent-sentinel/ into cwd")
 	}
-	dir := filepath.Join(home, ".claude-sentinel")
+	dir := filepath.Join(home, ".code-agent-sentinel")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		panic(err)
 	}

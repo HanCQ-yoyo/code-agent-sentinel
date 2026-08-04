@@ -26,7 +26,7 @@ func TestBackupCreatesVersionedFile(t *testing.T) {
 	if _, err := os.Stat(bp); err != nil {
 		t.Fatalf("backup file not created: %v", err)
 	}
-	// 备份目录在 ~/.claude-sentinel/backups 下,不在 ~/.claude
+	// 备份目录在 ~/.code-agent-sentinel/backups 下,不在 ~/.claude
 	if !strings.HasPrefix(bp, e.BackupDir) {
 		t.Fatalf("backup not under BackupDir: %q", bp)
 	}

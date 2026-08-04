@@ -45,7 +45,7 @@ type putFavoritesBody struct {
 //
 // 整体替换(非增量)语义与 dir-tags 一致:前端持有完整列表,增删后整体回写。
 // 校验:仅允许字符串元素,防 payload 写入非字符串污染配置。空元素与重复去重。
-// 持久化到 ~/.claude-sentinel/config.yaml(跨重启/跨端口保留,localStorage 受
+// 持久化到 ~/.code-agent-sentinel/config.yaml(跨重启/跨端口保留,localStorage 受
 // origin=host:port 影响在随机端口重启时丢失,故改存后端配置)。
 func (s *Server) putFavorites(c *gin.Context) {
 	var body putFavoritesBody

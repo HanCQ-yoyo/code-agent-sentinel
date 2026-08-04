@@ -39,7 +39,7 @@ func TestGenerateUnitMacOSLaunchd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(path, "Library/LaunchAgents/com.claude-sentinel.sentinel.plist") {
+	if !strings.Contains(path, "Library/LaunchAgents/com.code-agent-sentinel.sentinel.plist") {
 		t.Errorf("macOS 路径错: %s", path)
 	}
 	if !strings.Contains(content, "<string>/Users/u/sentinel</string>") {
@@ -83,7 +83,7 @@ func TestServiceUnitLogPath(t *testing.T) {
 		t.Errorf("launchd 单元应包含 LogPath: %s", launchdContent)
 	}
 	// 不应包含默认 sentinel.log(被自定义路径覆盖)
-	if strings.Contains(launchdContent, ".claude-sentinel/sentinel.log") {
+	if strings.Contains(launchdContent, ".code-agent-sentinel/sentinel.log") {
 		t.Errorf("launchd 自定义 LogPath 应覆盖默认 sentinel.log: %s", launchdContent)
 	}
 
@@ -122,7 +122,7 @@ func TestServiceUnitLogPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(launchdNoContent, "/Users/u/.claude-sentinel/sentinel.log") {
+	if !strings.Contains(launchdNoContent, "/Users/u/.code-agent-sentinel/sentinel.log") {
 		t.Errorf("launchd 空 LogPath 应回退默认 sentinel.log: %s", launchdNoContent)
 	}
 }

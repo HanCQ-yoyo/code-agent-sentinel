@@ -73,7 +73,7 @@ interface State {
   // 全选 → ?agent=all 聚合(返回拼接 []Finding,每条带 agent_id);多选 → ?agent=id1,id2。
   findings: Finding[]
   fetchFindings: (agentID?: string) => Promise<void>
-  // Task 12:Finding 治理字段 CRUD(/api/finding-state)。后端落盘到 ~/.claude-sentinel/finding_states.yaml,
+  // Task 12:Finding 治理字段 CRUD(/api/finding-state)。后端落盘到 ~/.code-agent-sentinel/finding_states.yaml,
   // API 读时把 status/priority/note 合并到 Finding 上(见 /api/findings 响应)。
   // 三个 action 成功后都 fetchFindings() 重拉(不带参 = 用当前 agentQuery,与 runScan 后刷新模式一致)。
   // setFindingState:POST /api/finding-state { fingerprint, status, priority?, note? } → upsert 单条。

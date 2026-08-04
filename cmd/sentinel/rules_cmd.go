@@ -16,15 +16,15 @@ import (
 // newRulesCmd 构造 `sentinel rules` 子命令,含 list / validate [file]。
 //
 // rules list:列出检测域全局规则(builtin + custom),含 id/severity/source/valid。
-//   - 优先读 sqlite(~/.claude-sentinel/sentinel.db,enabled 过滤);
+//   - 优先读 sqlite(~/.code-agent-sentinel/sentinel.db,enabled 过滤);
 //   - db 不可用/空 → fail-open 回退 builtin(与检测器 nil-db 语义一致)。
 //
 // rules validate [file]:校验单个规则文件(无参数则校验 builtin + custom 全量)。
 //   - 单文件模式用 LoadDir 临时目录,与 db 无关(校验文件本身);
 //   - 全量模式复用 loadRulesForCLI(db 优先,回退 builtin)。
 //
-// 路径解析:读 config(默认 ~/.claude-sentinel/config.yaml)取 home;db 路径固定
-// <home>/.claude-sentinel/sentinel.db(与 main.go server 启动一致)。
+// 路径解析:读 config(默认 ~/.code-agent-sentinel/config.yaml)取 home;db 路径固定
+// <home>/.code-agent-sentinel/sentinel.db(与 main.go server 启动一致)。
 func newRulesCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rules",
@@ -45,10 +45,10 @@ func newRulesCmd() *cobra.Command {
 // combo 暂不展示(_ 丢弃):rules 命令面向单资产规则,Task 8 范畴不扩 combo UI。
 //
 // cfg 保留在签名中以最小化调用点改动(未来可能接 cfg.SentinelRulesDir 做 db 路径覆盖);
-// 当前 db 路径固定为 <home>/.claude-sentinel/sentinel.db(与 main.go 一致)。
+// 当前 db 路径固定为 <home>/.code-agent-sentinel/sentinel.db(与 main.go 一致)。
 func loadRulesForCLI(cfg *config.Config, home string) ([]ruleengine.Rule, []ruleengine.RuleLoadError) {
 	_ = cfg // 预留:未来可从 cfg 读 db 路径覆盖;当前与 main.go 一致用 home 拼接。
-	dbPath := filepath.Join(home, ".claude-sentinel", "sentinel.db")
+	dbPath := filepath.Join(home, ".code-agent-sentinel", "sentinel.db")
 	if db, err := storage.Open(dbPath); err == nil {
 		defer db.Close()
 		rules, _, errs := ruleengine.LoadDetectRules(db, nil)
@@ -98,7 +98,7 @@ func newRulesListCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.claude-sentinel/config.yaml)")
+	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.code-agent-sentinel/config.yaml)")
 	return cmd
 }
 
@@ -145,7 +145,7 @@ func newRulesValidateCmd() *cobra.Command {
 			return reportValidate(out, rules, loadErrs, "检测域全局规则(db)")
 		},
 	}
-	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.claude-sentinel/config.yaml)")
+	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.code-agent-sentinel/config.yaml)")
 	return cmd
 }
 

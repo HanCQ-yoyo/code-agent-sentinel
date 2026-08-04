@@ -108,7 +108,7 @@ function AssetSection({ assetId, locations, agentId }: { assetId: string, locati
   )
 }
 
-// 处置弹框:对带 fingerprint 的 finding 设状态/优先级/备注,落盘到 ~/.claude-sentinel/finding_states.yaml。
+// 处置弹框:对带 fingerprint 的 finding 设状态/优先级/备注,落盘到 ~/.code-agent-sentinel/finding_states.yaml。
 // Task 9:由原 DispositionPanel(Radio.Group 内联表单)改为 Modal 弹框,状态/优先级改用带色
 // Tag.CheckableTag 选择器;由 FindingDrawer「立即处置」按钮 + Findings.tsx 列表操作列复用触发。
 //   - 旧 addSuppression/generateBaseline(Task 11/12 已删)

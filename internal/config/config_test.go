@@ -63,13 +63,13 @@ func TestConfigResolveDefaults(t *testing.T) {
 	c := DefaultConfig()
 	home := "/tmp/fake-home"
 
-	if got := c.ResolveSentinelRulesDir(home); got != filepath.Join(home, ".claude-sentinel", "rules") {
+	if got := c.ResolveSentinelRulesDir(home); got != filepath.Join(home, ".code-agent-sentinel", "rules") {
 		t.Errorf("ResolveSentinelRulesDir = %q", got)
 	}
-	if got := c.ResolveSuppressPath(home); got != filepath.Join(home, ".claude-sentinel", "suppressions.yaml") {
+	if got := c.ResolveSuppressPath(home); got != filepath.Join(home, ".code-agent-sentinel", "suppressions.yaml") {
 		t.Errorf("ResolveSuppressPath = %q", got)
 	}
-	if got := c.ResolveBaselinePath(home); got != filepath.Join(home, ".claude-sentinel", "baseline.json") {
+	if got := c.ResolveBaselinePath(home); got != filepath.Join(home, ".code-agent-sentinel", "baseline.json") {
 		t.Errorf("ResolveBaselinePath = %q", got)
 	}
 	if got := c.ResolveSuppressionDiscount(); got != DefaultSuppressionDiscount {

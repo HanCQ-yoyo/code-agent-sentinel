@@ -132,7 +132,7 @@ func TestLoadForScanMergesBuiltinGlobalProject(t *testing.T) {
 	home := t.TempDir()
 
 	// 全局规则
-	globalDir := filepath.Join(home, ".claude-sentinel", "rules")
+	globalDir := filepath.Join(home, ".code-agent-sentinel", "rules")
 	if err := os.MkdirAll(globalDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -255,7 +255,7 @@ func TestLoadForScanProjectIsolation(t *testing.T) {
 
 func TestLoadForScanOverrideBuiltinByGlobal(t *testing.T) {
 	home := t.TempDir()
-	globalDir := filepath.Join(home, ".claude-sentinel", "rules")
+	globalDir := filepath.Join(home, ".code-agent-sentinel", "rules")
 	if err := os.MkdirAll(globalDir, 0755); err != nil {
 		t.Fatal(err)
 	}

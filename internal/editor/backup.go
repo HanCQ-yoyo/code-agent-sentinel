@@ -15,7 +15,7 @@ import (
 
 // backup 把 content 作为 a.SourcePath 的一份版本化备份写入 BackupDir,返回备份路径。
 // 路径:<BackupDir>/<sanitized-sourcepath>/<ts>-<shorthash>.<ext>。滚动裁剪到 MaxBackups。
-// 目录 0o700、文件 0o600;BackupDir 默认 <home>/.claude-sentinel/backups,不污染 ~/.claude/。
+// 目录 0o700、文件 0o600;BackupDir 默认 <home>/.code-agent-sentinel/backups,不污染 ~/.claude/。
 func (e *Editor) backup(a configengine.Asset, content []byte) (string, error) {
 	sub := sanitizePath(a.SourcePath)
 	dir := filepath.Join(e.BackupDir, sub)

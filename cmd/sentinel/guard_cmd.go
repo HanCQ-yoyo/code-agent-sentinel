@@ -35,7 +35,7 @@ func newGuardCmd() *cobra.Command {
 			return guardMain(os.Stdin, os.Stdout, os.Stderr, cfgPath, deadlineFlag, debug)
 		},
 	}
-	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.claude-sentinel/config.yaml)")
+	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.code-agent-sentinel/config.yaml)")
 	cmd.Flags().StringVar(&deadlineFlag, "deadline", "", "覆盖评估预算(调试)")
 	cmd.Flags().BoolVar(&debug, "debug", false, "stderr 输出评估 trace")
 	return cmd
@@ -76,7 +76,7 @@ func guardMain(stdin io.Reader, stdout, stderr io.Writer, cfgPath, deadlineFlag 
 		}
 	}
 	home, _ := os.UserHomeDir()
-	dbPath := filepath.Join(home, ".claude-sentinel", "sentinel.db")
+	dbPath := filepath.Join(home, ".code-agent-sentinel", "sentinel.db")
 	db, err := storage.Open(dbPath)
 	if err != nil {
 		db = nil // fail-open: DB 不可用时用 builtin 规则,allowlist 为空

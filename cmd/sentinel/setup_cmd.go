@@ -31,7 +31,7 @@ func newSetupCmd() *cobra.Command {
 		},
 	}
 	cmd.Flags().StringVar(&homeFlag, "home", "", "覆盖 home 目录(调试)")
-	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.claude-sentinel/config.yaml)")
+	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.code-agent-sentinel/config.yaml)")
 	cmd.Flags().BoolVar(&allowMissing, "allow-missing", false, "允许配置路径不存在的 agent(预配置未安装的 agent)")
 	return cmd
 }

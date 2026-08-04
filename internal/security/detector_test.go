@@ -40,7 +40,7 @@ func TestRegistryRegisterAndList(t *testing.T) {
 }
 
 func TestDetectorMeta(t *testing.T) {
-	tmpHome := t.TempDir() // 空 home:NewRulesDetector 不读真实 ~/.claude-sentinel
+	tmpHome := t.TempDir() // 空 home:NewRulesDetector 不读真实 ~/.code-agent-sentinel
 	cases := []struct {
 		name        string
 		d           Detector

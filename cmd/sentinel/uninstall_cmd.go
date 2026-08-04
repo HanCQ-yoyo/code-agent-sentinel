@@ -34,20 +34,20 @@ func newUninstallCmd() *cobra.Command {
 	return cmd
 }
 
-// runUninstall 删除 ~/.claude-sentinel 数据目录。
+// runUninstall 删除 ~/.code-agent-sentinel 数据目录。
 // keepConfig=true 时保留 config.yaml,仅删 history/backups/baseline/suppressions。
-// 安全:校验路径非根、非空、以 .claude-sentinel 结尾,且不是根的直接子目录
-// (防 home="/" 解析出 /.claude-sentinel 后因目录不存在而静默返回 nil)。
+// 安全:校验路径非根、非空、以 .code-agent-sentinel 结尾,且不是根的直接子目录
+// (防 home="/" 解析出 /.code-agent-sentinel 后因目录不存在而静默返回 nil)。
 func runUninstall(home string, yes, keepConfig bool, out io.Writer) error {
-	dataDir := filepath.Clean(filepath.Join(home, ".claude-sentinel"))
+	dataDir := filepath.Clean(filepath.Join(home, ".code-agent-sentinel"))
 	// 路径安全校验
 	if dataDir == "/" || dataDir == "" {
 		return fmt.Errorf("拒绝:数据目录解析为根或空(%q)", dataDir)
 	}
-	if filepath.Base(dataDir) != ".claude-sentinel" {
-		return fmt.Errorf("拒绝:数据目录名不是 .claude-sentinel(%q)", dataDir)
+	if filepath.Base(dataDir) != ".code-agent-sentinel" {
+		return fmt.Errorf("拒绝:数据目录名不是 .code-agent-sentinel(%q)", dataDir)
 	}
-	// 强化:拒绝根的直接子目录(如 home="/" → dataDir="/.claude-sentinel")。
+	// 强化:拒绝根的直接子目录(如 home="/" → dataDir="/.code-agent-sentinel")。
 	// 否则当该路径不存在时会落入下面的"目录不存在"分支静默返回 nil,
 	// 违背"home 指向根 → 应拒绝"的测试意图。
 	if filepath.Dir(dataDir) == "/" {

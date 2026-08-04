@@ -43,7 +43,7 @@ type putPinnedBody struct {
 //
 // 整体替换(非增量)语义与 favorites / dir-tags 一致:前端持有完整列表,
 // 增删后整体回写。校验:颜色限定预设 6 色(防任意值),path 为空的条目跳过。
-// 持久化到 ~/.claude-sentinel/config.yaml。
+// 持久化到 ~/.code-agent-sentinel/config.yaml。
 func (s *Server) putPinnedProjects(c *gin.Context) {
 	var body putPinnedBody
 	if err := c.ShouldBindJSON(&body); err != nil {

@@ -4,8 +4,8 @@ import { writeFileSync, mkdirSync, unlinkSync } from 'fs'
 test.beforeAll(async () => {
   // 清理上次运行残留的 sentinel config(pinned_projects / favorites 跨运行持久化,
   // 不清理会导致置顶 / 收藏测试初始态非确定)。
-  // playwright.config.ts 的 webServer.command 传了 --config /tmp/sentinel-e2e-home/.claude-sentinel/config.yaml,
-  // 故 sentinel 实际读写该沙箱路径(不再碰开发者真实 ~/.claude-sentinel/config.yaml)。
+  // playwright.config.ts 的 webServer.command 传了 --config /tmp/sentinel-e2e-home/.code-agent-sentinel/config.yaml,
+  // 故 sentinel 实际读写该沙箱路径(不再碰开发者真实 ~/.code-agent-sentinel/config.yaml)。
   // unlinkSync 够得到该路径:每次 e2e 运行前清空上次残留;config.Load 对缺失文件返回默认空配置,
   // sentinel 启动不受影响。再叠加下面的 API PUT 清空 pinned_projects + favorites 作双保险。
   // API 清空是必需的:reuseExistingServer=true 时 sentinel 进程复用,unlink 磁盘配置不会让运行中
@@ -23,20 +23,20 @@ test.beforeAll(async () => {
       body: JSON.stringify({ favorites: [] }),
     })
   } catch { /* server 未就绪(webServer 尚未启动)*/ }
-  try { unlinkSync('/tmp/sentinel-e2e-home/.claude-sentinel/config.yaml') } catch { /* 首次运行无文件 */ }
+  try { unlinkSync('/tmp/sentinel-e2e-home/.code-agent-sentinel/config.yaml') } catch { /* 首次运行无文件 */ }
   mkdirSync('/tmp/sentinel-e2e-home/.claude', { recursive: true })
   writeFileSync('/tmp/sentinel-e2e-home/.claude/settings.json', JSON.stringify({ permissions: { allow: ['Bash(*)'] } }))
 
-  // Stage R2(Task 10):预写一条 deny 拦截记录到 ~/.claude-sentinel/intercept/<id>.json,
+  // Stage R2(Task 10):预写一条 deny 拦截记录到 ~/.code-agent-sentinel/intercept/<id>.json,
   // 供「拦截日志」页 e2e 断言。intercept API 只读(GET/DELETE,无 POST),不能经 API 造数据,
-  // 故直接落盘 JSON 文件(main.go L220:istore = NewStore(<home>/.claude-sentinel/intercept),
+  // 故直接落盘 JSON 文件(main.go L220:istore = NewStore(<home>/.code-agent-sentinel/intercept),
   // --home /tmp/sentinel-e2e-home → 服务读此目录)。schema 对齐 intercept.InterceptRecord
   // (record.go):id/timestamp/agent_protocol/working_dir/command/outcome/rule_id/severity/
   // reason/eval_duration_us/session_id/tool_name。每次 beforeAll 覆盖同一 id,避免跨运行堆积。
   // 命令选 "rm -rf /"(filesystem.rm-rf-root-home,severity=critical)——手动验证同款 deny。
-  mkdirSync('/tmp/sentinel-e2e-home/.claude-sentinel/intercept', { recursive: true })
+  mkdirSync('/tmp/sentinel-e2e-home/.code-agent-sentinel/intercept', { recursive: true })
   writeFileSync(
-    '/tmp/sentinel-e2e-home/.claude-sentinel/intercept/e2e-deny-rmrfroot.json',
+    '/tmp/sentinel-e2e-home/.code-agent-sentinel/intercept/e2e-deny-rmrfroot.json',
     JSON.stringify({
       id: 'e2e-deny-rmrfroot',
       timestamp: '2026-07-28T10:03:49.870595878+08:00',
@@ -57,7 +57,7 @@ test.beforeAll(async () => {
   // 验证前端 Intercept 页 confidence 列(Tag 渲染)与详情抽屉 matched_span 区可见。
   // 命令选 "git commit -m \"x\" && rm -rf /"(R3 I1 闭合经典样例:链式拆分后 rm -rf / 命中)。
   writeFileSync(
-    '/tmp/sentinel-e2e-home/.claude-sentinel/intercept/e2e-deny-chain-rmrfroot.json',
+    '/tmp/sentinel-e2e-home/.code-agent-sentinel/intercept/e2e-deny-chain-rmrfroot.json',
     JSON.stringify({
       id: 'e2e-deny-chain-rmrfroot',
       timestamp: '2026-07-29T09:12:15.123456789+08:00',
@@ -461,7 +461,7 @@ test('项目 tab 右键置顶 + 颜色 + 刷新保留', async ({ page }) => {
   await pinItem.click()
   // 置顶后该 tab 应移到全局之后(最左项目位)+ 置顶标记(Task 17:projectTabLabel 给置顶 span 打 data-pinned)。
   await expect(page.locator('.ant-tabs-tab').filter({ hasText: /^myproj$/ }).locator('[data-pinned="true"]')).toBeVisible({ timeout: 10000 })
-  // 刷新后保留(后端持久化到 ~/.claude-sentinel/config.yaml)。
+  // 刷新后保留(后端持久化到 ~/.code-agent-sentinel/config.yaml)。
   await page.reload()
   await expect(page.locator('.ant-tabs-tab').filter({ hasText: /^myproj$/ }).locator('[data-pinned="true"]')).toBeVisible({ timeout: 10000 })
 })

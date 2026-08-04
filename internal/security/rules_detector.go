@@ -32,7 +32,7 @@ import (
 //   - load-error Finding 用 SeverityInfo(系数 0.0),确保 ComputeHealth 不为其扣分
 //     (见 TestRulesDetectorLoadErrorNotInHealth 的数学验证)。
 //
-// Finding #5 闭合(Task 8):扫描侧不再硬编码 ~/.claude-sentinel 全局规则目录,统一读 db。
+// Finding #5 闭合(Task 8):扫描侧不再硬编码 ~/.code-agent-sentinel 全局规则目录,统一读 db。
 // 路径覆盖(用户在 config 改 sentinel_rules_dir)由写侧同步进 db(SyncBuiltin),扫描侧
 // 读 db 即自动生效,不再静默不生效。
 type RulesDetector struct {
@@ -67,7 +67,7 @@ type RulesDetector struct {
 // main.go 传 nil):LoadDetectRules(nil,...) 返回 "db is nil" 错误,Scan 无规则,只产
 // load-error finding(Severity=Info 不进健康分)。Task 10 注入真 db 后即正常。
 //
-// 顺带修 Finding #5:扫描侧不再硬编码 ~/.claude-sentinel 全局规则目录,统一读 db。
+// 顺带修 Finding #5:扫描侧不再硬编码 ~/.code-agent-sentinel 全局规则目录,统一读 db。
 func NewRulesDetector(home string, cfg *config.DetectorsConfig, db *storage.DB) *RulesDetector {
 	d := &RulesDetector{home: home, cfg: cfg, db: db}
 
@@ -104,7 +104,7 @@ func (d *RulesDetector) loadStates() {
 //     扫描即时生效)—— LoadDetectRules(db, projects) 读 builtin+custom(SQL 层过滤
 //     enabled=false)+ 叠加项目级 .sentinel/rules 文件规则 + Merge + Validate。
 //   - d.db == nil(临时态:main.go 未注入真 db / 旧测试传 nil):回退 legacy 文件路径
-//     LoadForScan(home, inv),保持迁移前既有行为(builtin embed + ~/.claude-sentinel/rules
+//     LoadForScan(home, inv),保持迁移前既有行为(builtin embed + ~/.code-agent-sentinel/rules
 //     全局文件规则 + 各项目 .sentinel/rules 项目规则)。这样 storage 未就绪时不静默关闭
 //     检测,既有测试不改即通过。
 //
@@ -116,7 +116,7 @@ func (d *RulesDetector) loadStates() {
 func (d *RulesDetector) loadRulesForScan(projects []configengine.Project) (rules []ruleengine.Rule, combos []ruleengine.ComboRule, errs []ruleengine.RuleLoadError) {
 	if d.db == nil {
 		// 临时 nil db(main.go 未注入 / 旧测试):回退文件路径,保持既有行为。
-		// LoadForScan(home, inv) = builtin embed + ~/.claude-sentinel/rules 全局文件规则;
+		// LoadForScan(home, inv) = builtin embed + ~/.code-agent-sentinel/rules 全局文件规则;
 		// inv.Projects 非空时还加载各项目 .sentinel/rules(与 db 路径项目规则加载语义一致)。
 		inv := &configengine.Inventory{}
 		if projects != nil {

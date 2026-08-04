@@ -54,10 +54,10 @@ type Editor struct {
 	MaxBackups int
 }
 
-// New 构造 Editor。backupDir 空则默认 <home>/.claude-sentinel/backups;maxBackups<=0 则 20。
+// New 构造 Editor。backupDir 空则默认 <home>/.code-agent-sentinel/backups;maxBackups<=0 则 20。
 func New(engine *configengine.Engine, backupDir string, maxBackups int) *Editor {
 	if backupDir == "" {
-		backupDir = filepath.Join(engine.HomeDir, ".claude-sentinel", "backups")
+		backupDir = filepath.Join(engine.HomeDir, ".code-agent-sentinel", "backups")
 	}
 	if maxBackups <= 0 {
 		maxBackups = 20

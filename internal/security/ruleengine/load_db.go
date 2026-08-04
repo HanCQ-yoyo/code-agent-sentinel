@@ -16,7 +16,7 @@ import (
 //  5. combos 从 detect_combos 读(builtin only)。
 //
 // 本函数取代文件加载路径 LoadForScan 用于 DB 模式(LoadForScan 暂留,Task 13 废弃)。
-// Finding #5(硬编码路径)随此闭合:统一读 db,不再假定 ~/.claude-sentinel。
+// Finding #5(硬编码路径)随此闭合:统一读 db,不再假定 ~/.code-agent-sentinel。
 //
 // 参数 projects(Task 8):项目级 .sentinel/rules 加载的项目列表(各项目规则带
 // ProjectPath=p.Path 标记)。传 nil 跳过项目级加载(builtin+custom 仍加载)。

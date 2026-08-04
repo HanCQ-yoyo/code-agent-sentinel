@@ -89,7 +89,7 @@ func combosToStoredRules(combos []ruleengine.ComboRule, version string) ([]stora
 	return out, nil
 }
 
-// migrateLegacyRulesFiles 把旧 ~/.claude-sentinel/rules/*.yaml 全局规则迁进 db 为 custom 行,
+// migrateLegacyRulesFiles 把旧 ~/.code-agent-sentinel/rules/*.yaml 全局规则迁进 db 为 custom 行,
 // 然后把旧文件重命名 .legacy(保留回滚,不删)。
 //
 // 这是解耦版 MigrateLegacyRules 的编排层(main.go 侧职责):
@@ -108,7 +108,7 @@ func migrateLegacyRulesFiles(home string, db *storage.DB) {
 	if db == nil {
 		return
 	}
-	oldDir := filepath.Join(home, ".claude-sentinel", "rules")
+	oldDir := filepath.Join(home, ".code-agent-sentinel", "rules")
 	rules, _, loadErrs := ruleengine.LoadDir(oldDir, "global")
 	for _, e := range loadErrs {
 		fmt.Fprintf(os.Stderr, "迁移旧规则:加载错误 %s: %s\n", e.Source, e.Reason)

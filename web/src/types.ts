@@ -29,7 +29,7 @@ export interface Finding {
   // 前端在 FindingDrawer→AssetSection 边界映射为 camelCase 传给 MonacoViewer.highlights。
   locations?: { line: number; start_col: number; end_col: number }[]
   // 治理字段(Spec 1):统一处置生命周期 + Category 派生。
-  // status/priority/note 由用户经 /api/finding-state 维护(POST/DELETE),后端落盘到 ~/.claude-sentinel/finding_states.yaml。
+  // status/priority/note 由用户经 /api/finding-state 维护(POST/DELETE),后端落盘到 ~/.code-agent-sentinel/finding_states.yaml。
   // category 由 API 读时根据 rule_id 派生 attach(后端 Task 11),前端只读不写。
   // contributing_rule_ids:combo 规则触发时记录所有命中的子规则 ID(后端 Task 11)。
   status?: string         // open|in_progress|resolved|false_positive|accepted

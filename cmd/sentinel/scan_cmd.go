@@ -30,7 +30,7 @@ func newScanCmd() *cobra.Command {
 			return runScanCmd(cmd, cfgPath, detectorsFlag, agentFlag)
 		},
 	}
-	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.claude-sentinel/config.yaml)")
+	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.code-agent-sentinel/config.yaml)")
 	cmd.Flags().StringVar(&detectorsFlag, "detectors", "", "只跑指定检测器(逗号分隔 ID;空=全量)")
 	cmd.Flags().StringVar(&agentFlag, "agent", "", "指定扫描的 code agent ID(空=回退首 agent)")
 	return cmd
@@ -79,7 +79,7 @@ func runScanCmd(cmd *cobra.Command, cfgPath, detectorsFlag, agentFlag string) er
 	r.Register(security.NewSecretDetector(cfg.Detectors))
 	r.Register(security.NewDependencyDetector(cfg.Detectors))
 	orch := &security.Orchestrator{Registry: r}
-	dbPath := filepath.Join(home, ".claude-sentinel", "sentinel.db")
+	dbPath := filepath.Join(home, ".code-agent-sentinel", "sentinel.db")
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
 		return fmt.Errorf("create db dir: %w", err)
 	}

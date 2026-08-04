@@ -19,7 +19,7 @@ type UnitSpec struct {
 	Port     int    // port
 	// LogPath 日志文件路径。非空 → launchd StandardOutPath/StandardErrorPath 指向它,
 	// systemd 加 StandardOutput=append:<path> + StandardError=append:<path>;空 → 平台默认
-	// (launchd 回退 <home>/.claude-sentinel/sentinel.log,systemd 走 journal)。
+	// (launchd 回退 <home>/.code-agent-sentinel/sentinel.log,systemd 走 journal)。
 	LogPath string
 }
 
@@ -68,20 +68,20 @@ WantedBy=default.target
 }
 
 func generateLaunchd(spec UnitSpec) (string, string, error) {
-	unitPath := filepath.Join(spec.Home, "Library", "LaunchAgents", "com.claude-sentinel.sentinel.plist")
+	unitPath := filepath.Join(spec.Home, "Library", "LaunchAgents", "com.code-agent-sentinel.sentinel.plist")
 	if !spec.UserMode {
-		unitPath = "/Library/LaunchDaemons/com.claude-sentinel.sentinel.plist"
+		unitPath = "/Library/LaunchDaemons/com.code-agent-sentinel.sentinel.plist"
 	}
 	// Task 14:LogPath 非空 → StandardOutPath/StandardErrorPath 指向它;空 → 回退默认 sentinel.log。
 	logPath := spec.LogPath
 	if logPath == "" {
-		logPath = filepath.Join(spec.Home, ".claude-sentinel", "sentinel.log")
+		logPath = filepath.Join(spec.Home, ".code-agent-sentinel", "sentinel.log")
 	}
 	content := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>com.claude-sentinel.sentinel</string>
+  <key>Label</key><string>com.code-agent-sentinel.sentinel</string>
   <key>ProgramArguments</key>
   <array><string>%s</string></array>
   <key>RunAtLoad</key><true/>

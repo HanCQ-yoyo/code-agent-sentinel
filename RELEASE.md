@@ -113,8 +113,8 @@
 
 ### 升级
 
-- **规则存储迁 sqlite(WAL + 双域)**:`internal/security/ruleengine/storage.go` 用 sqlite(WAL 模式,文件 `~/.claude-sentinel/sentinel.db`,运行时强制 `0o600`)存检测/拦截两域规则。三表:`rules`(规则正文,`match_json`/`paths_json` 等以 JSON 文本列往返)/`overrides`(启停覆盖,JOIN 派生 `enabled`)/`combos`(跨资产组合规则)。`MatchNode` 导出 `Raw()`/`NewMatchNode()` 供持久层 map 往返,与 YAML 加载路径同构。文件路径与 db 路径规则等价性有专项测试(9 个 asset_type)。
-- **启动迁移旧规则文件 + 双域 builtin 同步**:`main.go` 启动注入 db;`migrate.go` 把旧 `~/.claude-sentinel/rules/*.yaml` 旧文件规则迁入 db(对侧域标签修正 + 重命名语义);`SyncBuiltin` 把 embed 内置规则同步进两域 db(覆盖 builtin 行 + 报告孤儿 override 供审计)。
+- **规则存储迁 sqlite(WAL + 双域)**:`internal/security/ruleengine/storage.go` 用 sqlite(WAL 模式,文件 `~/.code-agent-sentinel/sentinel.db`,运行时强制 `0o600`)存检测/拦截两域规则。三表:`rules`(规则正文,`match_json`/`paths_json` 等以 JSON 文本列往返)/`overrides`(启停覆盖,JOIN 派生 `enabled`)/`combos`(跨资产组合规则)。`MatchNode` 导出 `Raw()`/`NewMatchNode()` 供持久层 map 往返,与 YAML 加载路径同构。文件路径与 db 路径规则等价性有专项测试(9 个 asset_type)。
+- **启动迁移旧规则文件 + 双域 builtin 同步**:`main.go` 启动注入 db;`migrate.go` 把旧 `~/.code-agent-sentinel/rules/*.yaml` 旧文件规则迁入 db(对侧域标签修正 + 重命名语义);`SyncBuiltin` 把 embed 内置规则同步进两域 db(覆盖 builtin 行 + 报告孤儿 override 供审计)。
 - **规则 CRUD + 启停 + fork + validate(检测/拦截对称)**:API 两域对称 16 端点(`/api/{detect|intercept}-rules` CRUD + `/:id/enabled` 启停 + `/:id/fork` builtin→custom + `/validate` 不落库校验)。`POST` 拒绝覆盖 builtin id(409,闭合"内置只读"绕过:UpsertRule ON CONFLICT 本可静默改 builtin 的 match/source)。`dtoToRule` 直接构造 `ruleengine.Rule` 经 `NewMatchNode(dto.Match)` + `Validate`(与 YAML 加载同路径,保等价)。
 - **运行时热重载 + fail-open**:`RulesDetector` 持 db 引用,扫描时实时读 db(规则改动无需重启,修 Finding #5 旧文件缓存);`guard` 守卫读 db 拦截规则,db 故障 fail-open 回退 builtin(4 种故障子情况全覆盖:dbPath 空/Open 失败/List 失败/表空,corrupt db 经 Ping 失败不 panic)。combos 构造时预编译不热重载。
 - **前端规则管理 + 域切换**:`RuleDTO` 统一类型(两域共用,`domain` 标识来源域);`store` 规则 actions(`fetchDetectRules`/`fetchInterceptRules`/`saveRule`/`toggleRule`/`forkRule`/`deleteRule`/`validateRuleDraft`);`RulesTable` 操作列(启停/来源筛选);`RuleDrawer` view/edit/create 三态 + builtin fork + 防抖实时校验(注:edit/create 的 Monaco YAML 编辑器在下一里程碑「规则结构化表单 + match 树编辑器」已替换为结构化表单);`Settings` 域切换(检测/拦截两域同表单)。e2e 覆盖启停/域切换核心路径。
@@ -159,7 +159,7 @@
 - **规则库单一来源**:guard 合成 `configengine.Asset{Type:AssetCommand}` 走与静态 `RulesDetector` 同构的 `DispatchCommand → Eval` 路径,复用 `ruleengine.LoadBuiltin()`(`//go:embed`),绝不复制规则。
 - **`sentinel setup` / `uninstall` 装/卸 hook**:`setup` 自动把 `sentinel guard` 注册到 `~/.claude/settings.json` 的 `hooks.PreToolUse`(matcher=`Bash`,sentinel 置首,幂等 basename 精确匹配);`uninstall` 反向移除(幂等)。
 - **GuardConfig 配置段**(`internal/config/guard.go`,与 Detectors 平级):`enabled`/`policy`/`deadline_ms`/`max_command_bytes`,持 `sync.RWMutex`,`PUT /api/guard/config` 原地 `ApplyFrom` + 写盘热生效;hook 子进程每次 `config.Load` 读盘。
-- **拦截记录存储**(`internal/intercept` 包,镜像 history):`InterceptRecord` JSON 文件(`~/.claude-sentinel/intercept/<id>.json`,原子写),`AgentProtocol="claude"` 命名空间(不复用 history/scheduler 的 AgentID)。
+- **拦截记录存储**(`internal/intercept` 包,镜像 history):`InterceptRecord` JSON 文件(`~/.code-agent-sentinel/intercept/<id>.json`,原子写),`AgentProtocol="claude"` 命名空间(不复用 history/scheduler 的 AgentID)。
 - **API**:`GET/PUT /api/guard/config`(全键校验防部分体静默禁用)、`GET /api/intercept`、`GET /api/intercept/:id`、`DELETE /api/intercept/:id`。
 - **前端 Intercept 只读页**(`/intercept`):列表(时间 / 决策 / 命令 / 规则 / 严重度 / 耗时)+ 详情抽屉 + 按决策筛选 + 删除;复用 zustand store slice + i18n 中英字典。
 
@@ -186,7 +186,7 @@
 
 ### 修复
 
-- **旧 baseline/suppressions 自动迁移**:首次启动时将 `~/.claude-sentinel/baseline.json` 与 `suppressions.yaml` 合并为 `finding_states.yaml`,旧文件重命名为 `.legacy`(不删,留作回滚);迁移幂等(已有 finding_states.yaml 时跳过)。
+- **旧 baseline/suppressions 自动迁移**:首次启动时将 `~/.code-agent-sentinel/baseline.json` 与 `suppressions.yaml` 合并为 `finding_states.yaml`,旧文件重命名为 `.legacy`(不删,留作回滚);迁移幂等(已有 finding_states.yaml 时跳过)。
 - **健康分 Status 单调**:`Status=accepted` 的 finding 不再参与 R(asset) 求和(修旧 baseline accepted finding 仍拉低分数的健康分失真)。
 - **emit 流水线 fingerprint 稳定性**:同位置多规则去重时复用首条 finding 的 fingerprint(避免重复 hash 计算,确保跨扫描可还原)。
 
@@ -360,7 +360,7 @@
 - **健康分**:`Score = 100 × (1 − Σ(R(asset)·w(asset)) / (Rmax · Σ w(asset)))`,Rmax=10,0–100 五档——可解释、单调、可还原。权重表是 `internal/security/health.go` 里的显式常量。
 - **本地服务安全**:默认 bind `127.0.0.1`;非 loopback 必须有非空 `allowed_cidrs` 否则拒绝启动(除非 `--i-know-its-risky`);token 经 URL fragment `#token=` 传递(不进 server log / Referer);严格 CORS + Host 头校验防 DNS rebinding。
 - **错误约定**:API 返回 `{error: {code, message, details?}}`;资产文件解析失败不致全盘失败——该资产标记 `parse_error` 作为 Finding 暴露,扫描继续。
-- **sentinel 自己的配置**放 `~/.claude-sentinel/config.yaml`(在 `~/.claude/` 之外,避免自扫 / 递归)。
+- **sentinel 自己的配置**放 `~/.code-agent-sentinel/config.yaml`(在 `~/.claude/` 之外,避免自扫 / 递归)。
 - **后端终审修复**(2026-07-03):XFF / token / CIDR / `--token` / govulncheck。
 
 ### 修复
