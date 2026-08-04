@@ -54,7 +54,6 @@ export function TopBar() {
     <Button
       icon={<LoadingOutlined />}
       style={{ whiteSpace: 'nowrap' }}
-      onClick={() => setPopoverOpen(!popoverOpen)}
     >
       {t('topbar.scanning')}
     </Button>

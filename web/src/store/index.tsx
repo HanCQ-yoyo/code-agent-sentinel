@@ -62,7 +62,7 @@ interface State {
   // Task 9:runScan 改多 agent。agentIDs 空数组 → 后端回退到所有 scan_enabled agent。
   // 响应为 AgentScanResult[](数组,非单个 ScanResult),含每 agent 的 findings/health_score/error。
   // 注:新响应无整体 findings 数组(每 agent 各自有),故不再 set scan;fetchDashboard/fetchHistory 负责刷新视图。
-  runScan: (agentIDs: string[], detectors?: string, scope?: { type: string; path?: string }) => Promise<AgentScanResult[] | undefined>
+  runScan: (agentIDs: string[], detectors?: string, scope?: { type: string; path?: string }) => Promise<void>
   _pollScanProgress: (batchId: string) => Promise<void>
   cancelScan: () => Promise<void>
   fetchDetectors: () => Promise<void>

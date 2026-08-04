@@ -1,11 +1,12 @@
 import { Button, Popover, Space, Typography } from 'antd'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 
 export function GuardCapsule() {
   const { t } = useTranslation()
   const { guardConfig, guardToggling, fetchGuardConfig, toggleGuard } = useStore()
+  const [popoverOpen, setPopoverOpen] = useState(false)
 
   // 初始加载(如果未加载)
   useEffect(() => {
@@ -58,9 +59,14 @@ export function GuardCapsule() {
       ? t('guardCapsule.capsuleOn')
       : t('guardCapsule.capsuleOff')
 
-  const handleClick = () => {
+  const handleConfirmDisable = () => {
+    setPopoverOpen(false)
+    toggleGuard()
+  }
+
+  // 关闭→开启:直接切换(无确认)
+  const handleEnable = () => {
     if (loading) return
-    // 关闭→开启:直接切换(无确认)
     toggleGuard()
   }
 
@@ -68,6 +74,8 @@ export function GuardCapsule() {
   if (enabled && !loading) {
     return (
       <Popover
+        open={popoverOpen}
+        onOpenChange={setPopoverOpen}
         trigger="click"
         placement="bottomRight"
         content={
@@ -77,10 +85,10 @@ export function GuardCapsule() {
             </Typography.Text>
             <div style={{ marginTop: 12, textAlign: 'right' }}>
               <Space>
-                <Button size="small">
+                <Button size="small" onClick={() => setPopoverOpen(false)}>
                   {t('common.cancel')}
                 </Button>
-                <Button size="small" danger onClick={() => toggleGuard()}>
+                <Button size="small" danger onClick={handleConfirmDisable}>
                   {t('guardCapsule.confirmOk')}
                 </Button>
               </Space>
@@ -97,7 +105,7 @@ export function GuardCapsule() {
   }
 
   return (
-    <Button style={style} onClick={handleClick} disabled={loading} loading={loading}>
+    <Button style={style} onClick={handleEnable} disabled={loading} loading={loading}>
       {!loading && dot}
       {label}
     </Button>
