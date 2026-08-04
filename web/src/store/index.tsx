@@ -3,6 +3,8 @@ import { apiGet, apiPost, apiPut, apiDelete, AuthError } from '../api/client'
 import type { Asset, Inventory, ScanResult, DetectorMeta, ScanSummary, ScanRecord, AgentsResponse, ScheduleStatus, TreeNode, Project, PinnedProject, DirTagsResponse, RawFile, PreviewResult, EditResult, DetectorsConfig, DashboardData, AgentScanResult, Agent, Finding, FindingState, InterceptRecord, GuardConfig, AllowlistBody, RuleDTO, RuleDomain } from '../types'
 import { type DirTag, type DirTagsMap } from '../lib/dirTags'
 import i18n from '../i18n'
+import { Button, notification } from 'antd'
+import { ArrowRightOutlined } from '@ant-design/icons'
 
 type ProjectTab = { kind: 'global' } | { kind: 'project'; path: string }
 
@@ -61,6 +63,8 @@ interface State {
   // 响应为 AgentScanResult[](数组,非单个 ScanResult),含每 agent 的 findings/health_score/error。
   // 注:新响应无整体 findings 数组(每 agent 各自有),故不再 set scan;fetchDashboard/fetchHistory 负责刷新视图。
   runScan: (agentIDs: string[], detectors?: string, scope?: { type: string; path?: string }) => Promise<AgentScanResult[] | undefined>
+  _pollScanProgress: (batchId: string) => Promise<void>
+  cancelScan: () => Promise<void>
   fetchDetectors: () => Promise<void>
   fetchDetectorConfig: () => Promise<void>
   saveDetectorConfig: (cfg: DetectorsConfig) => Promise<boolean>
@@ -96,6 +100,7 @@ interface State {
   // 一致),供组件判定是否关闭 saving 状态(实际错误已由 wrap 写入 store.error)。
   fetchGuardConfig: () => Promise<void>
   saveGuardConfig: (cfg: GuardConfig) => Promise<boolean>
+  toggleGuard: () => Promise<void>
   fetchAllowlist: () => Promise<void>
   saveAllowlist: (list: string[]) => Promise<boolean>
   // Task 14:规则 CRUD actions(detect/intercept 两域对称,共用同一组 action + domain 参数分流)。
@@ -169,6 +174,12 @@ interface State {
   // POST/GET/DELETE 全部在 Task 11 删除,这些是死代码(无消费方,调用即 404)。
   // /api/baseline 重定义为 bulk-accept,用 bulkAccept action 取代。
   clearError: () => void
+  // 后台扫描任务状态(Task: async-scan)
+  scanTaskBatchId: string | null
+  scanTaskProgress: { total: number; completed: number; current_agent: string } | null
+  _scanPollTimer: ReturnType<typeof setInterval> | null  // 轮询定时器句柄(内部,不暴露)
+  // 拦截防护切换中防抖
+  guardToggling: boolean
   // P3 Task 16:页面级 rescan 入口(项目右键 + 资产详情)预填 scope。
   // openRescan 传 initial 则预填(scopeType/scopePath),不传则默认 global。
   // closeRescan 关闭并清空 initial(避免下次打开残留上次预填)。
@@ -178,7 +189,7 @@ interface State {
   closeRescan: () => void
 }
 
-const wrap = async <T>(fn: () => Promise<T>, set: (p: Partial<State>) => void): Promise<T | undefined> => {
+const wrap = async <T,>(fn: () => Promise<T>, set: (p: Partial<State>) => void): Promise<T | undefined> => {
   try {
     return await fn()
   } catch (e) {
@@ -207,6 +218,10 @@ export const useStore = create<State>((set, get) => ({
   previewResult: null, editError: null,
   rescanOpen: false,
   rescanInitial: undefined,
+  scanTaskBatchId: null,
+  scanTaskProgress: null,
+  _scanPollTimer: null,
+  guardToggling: false,
   // Task 9:agentQuery — 全选聚合(?agent=all)或逗号分隔 IDs。
   // fetchDashboard/fetchLatestScan 用之(支持聚合);fetchAssets/fetchTree/fetchProjects 不用之(Task 11 起 agentID 参数,单 agent)。
   agentQuery: () => {
@@ -223,38 +238,75 @@ export const useStore = create<State>((set, get) => ({
     if (inv) set({ assets: inv })
   },
   runScan: async (agentIDs, detectors, scope) => {
-    set({ loading: true, error: null })
-    // agentIDs 空数组 → 不带 ?agents=,后端回退到所有 scan_enabled agent。
+    set({ error: null })
     const params = new URLSearchParams()
     if (agentIDs.length > 0) params.set('agents', agentIDs.join(','))
     if (detectors) params.set('detectors', detectors)
-    // scope=global 不传 query,后端缺省 global,等价旧行为。
     if (scope?.type && scope.type !== 'global') {
       params.set('scope', scope.type)
       if (scope.path) params.set('path', scope.path)
     }
     const q = params.toString() ? `?${params.toString()}` : ''
-    // Task 6:响应为 AgentScanResult[](数组),非单个 ScanResult。
-    // 新响应无整体 findings(每 agent 各自有),不再 set scan;fetchDashboard/fetchHistory 刷新视图。
-    const res = await wrap(() => apiPost<AgentScanResult[]>(`/api/scan${q}`), set)
-    set({ loading: false })
-    if (res) {
-      // 新响应是 AgentScanResult[] 无整体 findings,不再 set scan。重扫成功后需刷新四个视图:
-      // - fetchDashboard:Dashboard 聚合视图 + scan(聚合模式 last_scan=undefined→null,见下)
-      // - fetchHistory:History 列表(新扫描入列)
-      // - fetchFindings:Findings 页数据源(仅 fetchFindings 填 store.findings;不调则 Findings 页
-      //   显示重扫前的旧 findings —— RescanModal 是 overlay 不会 unmount Findings,故必须主动刷新)
-      // - fetchLatestScan:Assets 风险徽章数据源(scan?.findings)。聚合模式 fetchDashboard 把 scan
-      //   置 null(last_scan undefined),需重拉 latest 填回 scan,否则徽章消失。fetchLatestScan 在
-      //   selectedAgents 空时不带 ?agent= → 后端返回全局最近扫描 → scan 恢复(Task 11/9 已知局限:
-      //   聚合模式 scan 反映全局最近扫描而非 per-active-agent,此处仅恢复徽章,不改语义)。
-      // 四个都是独立 GET,无共享状态突变,无 loading/runScan 触发,不会循环。
-      get().fetchDashboard()
-      get().fetchHistory()
-      get().fetchFindings()   // 修 Findings 页陈旧(重扫后立即刷新)
-      get().fetchLatestScan() // 修 Assets 风险徽章消失(聚合模式 scan 被 fetchDashboard 置 null,重拉)
+    const res = await wrap(() => apiPost<{ batch_id: string; message: string }>(`/api/scan${q}`), set)
+    if (!res || !res.batch_id) return undefined
+    // 启动后台轮询
+    const batchId = res.batch_id
+    set({ scanTaskBatchId: batchId, scanTaskProgress: null })
+    // 清除旧定时器
+    const prev = get()._scanPollTimer
+    if (prev) clearInterval(prev)
+    const timer = setInterval(() => {
+      get()._pollScanProgress(batchId)
+    }, 2000)
+    set({ _scanPollTimer: timer })
+    return undefined // 不再返回 AgentScanResult[]
+  },
+  _pollScanProgress: async (batchId) => {
+    const snap = await wrap(() => apiGet<{
+      batch_id: string; status: string; total_agents: number;
+      completed_agents: number; current_agent: string; results?: AgentScanResult[]
+    }>(`/api/scan/progress?batch=${encodeURIComponent(batchId)}`), set)
+    if (!snap) return
+    set({ scanTaskProgress: { total: snap.total_agents, completed: snap.completed_agents, current_agent: snap.current_agent } })
+    if (snap.status === 'completed' || snap.status === 'cancelled') {
+      // 停轮询
+      const timer = get()._scanPollTimer
+      if (timer) { clearInterval(timer); set({ _scanPollTimer: null }) }
+      set({ scanTaskBatchId: null, scanTaskProgress: null })
+      // 已完成:刷新视图 + 弹 toast
+      if (snap.status === 'completed' && snap.results && snap.results.length > 0) {
+        get().fetchDashboard()
+        get().fetchHistory()
+        get().fetchFindings()
+        get().fetchLatestScan()
+        // 完成 toast(从 RescanModal.start 搬迁,保持逻辑不变)
+        const batch = snap.results[0].batch_id
+        const failed = snap.results.filter((r: AgentScanResult) => r.error).length
+        const desc = failed > 0
+          ? i18n.t('rescan.doneDescWithError', { agents: snap.results.length, failed, batch: batch ? batch.slice(-8) : '--' })
+          : i18n.t('rescan.doneDesc', { agents: snap.results.length, batch: batch ? batch.slice(-8) : '--' })
+        notification.success({
+          message: i18n.t('rescan.doneTitle'),
+          description: desc,
+          duration: 0,
+          btn: batch ? (
+            <Button type="primary" size="small" icon={<ArrowRightOutlined />} onClick={() => { notification.destroy(); window.location.hash = ''; /* avoid React Router */ setTimeout(() => { window.location.href = `/history?batch=${encodeURIComponent(batch)}` }, 0) }}>
+              {i18n.t('rescan.viewHistory')}
+            </Button>
+          ) : undefined,
+          onClose: () => notification.destroy(),
+        })
+      }
     }
-    return res
+  },
+  cancelScan: async () => {
+    const batchId = get().scanTaskBatchId
+    if (!batchId) return
+    await wrap(() => apiPost('/api/scan/cancel', { batch_id: batchId }), set)
+    // 停轮询
+    const timer = get()._scanPollTimer
+    if (timer) { clearInterval(timer); set({ _scanPollTimer: null }) }
+    set({ scanTaskBatchId: null, scanTaskProgress: null })
   },
   fetchDetectors: async () => {
     const list = await wrap(() => apiGet<DetectorMeta[]>('/api/detectors'), set)
@@ -370,6 +422,30 @@ export const useStore = create<State>((set, get) => ({
       return true
     }
     return false
+  },
+  toggleGuard: async () => {
+    const cfg = get().guardConfig
+    if (!cfg) {
+      // 未加载则先拉取
+      await get().fetchGuardConfig()
+      const fresh = get().guardConfig
+      if (!fresh) return
+      set({ guardToggling: true })
+      await get().saveGuardConfig({ ...fresh, enabled: !fresh.enabled })
+      set({ guardToggling: false })
+      notification.success({
+        message: fresh.enabled ? i18n.t('guardCapsule.toastOff') : i18n.t('guardCapsule.toastOn'),
+        duration: 3,
+      })
+      return
+    }
+    set({ guardToggling: true })
+    await get().saveGuardConfig({ ...cfg, enabled: !cfg.enabled })
+    set({ guardToggling: false })
+    notification.success({
+      message: cfg.enabled ? i18n.t('guardCapsule.toastOff') : i18n.t('guardCapsule.toastOn'),
+      duration: 3,
+    })
   },
   fetchAllowlist: async () => {
     const body = await wrap(() => apiGet<AllowlistBody>('/api/guard/allowlist'), set)
