@@ -152,6 +152,61 @@ CREATE TABLE IF NOT EXISTS intercept_combos (
   builtin_version TEXT,
   updated_at      TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS scan_history (
+  id              TEXT PRIMARY KEY,
+  agent_id        TEXT NOT NULL,
+  batch_id        TEXT,
+  started_at      TEXT NOT NULL,
+  duration_ns     INTEGER NOT NULL,
+  scope           TEXT NOT NULL DEFAULT 'global',
+  scope_path      TEXT,
+  finding_count   INTEGER NOT NULL DEFAULT 0,
+  health_score    INTEGER,
+  health_band     TEXT,
+  detector_avail  INTEGER NOT NULL DEFAULT 0,
+  detector_total  INTEGER NOT NULL DEFAULT 0,
+  findings_json   TEXT NOT NULL,
+  detectors_json  TEXT NOT NULL,
+  inventory_json  TEXT,
+  projects_json   TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_scan_history_agent_started ON scan_history(agent_id, started_at DESC);
+
+CREATE TABLE IF NOT EXISTS intercept_records (
+  id              TEXT PRIMARY KEY,
+  timestamp       TEXT NOT NULL,
+  agent_protocol  TEXT NOT NULL DEFAULT 'claude',
+  working_dir     TEXT,
+  command         TEXT NOT NULL,
+  outcome         TEXT NOT NULL,
+  rule_id         TEXT,
+  pack_id         TEXT,
+  severity        TEXT,
+  reason          TEXT,
+  eval_duration_us INTEGER NOT NULL DEFAULT 0,
+  session_id      TEXT,
+  tool_name       TEXT,
+  confidence      TEXT,
+  matched_span    TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_intercept_timestamp ON intercept_records(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_intercept_tool_name ON intercept_records(tool_name);
+CREATE INDEX IF NOT EXISTS idx_intercept_outcome ON intercept_records(outcome);
+
+CREATE TABLE IF NOT EXISTS finding_states (
+  fingerprint TEXT PRIMARY KEY,
+  status      TEXT NOT NULL,
+  priority    TEXT,
+  note        TEXT,
+  source      TEXT,
+  updated_at  TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS allowlist_entries (
+  command    TEXT PRIMARY KEY,
+  created_at TEXT NOT NULL
+);
 `)
 	if err != nil {
 		return fmt.Errorf("run migrations: %w", err)

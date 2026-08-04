@@ -49,9 +49,13 @@ func TestRunMigrationsCreatesTables(t *testing.T) {
 	if !initialized {
 		t.Fatal("after migration schema should be initialized")
 	}
-	// 四张 rules 表 + 四张 overrides 表 + 两张 combos 表都应存在
-	for _, tbl := range []string{"detect_rules", "detect_overrides", "detect_combos",
-		"intercept_rules", "intercept_overrides", "intercept_combos"} {
+	// 六张原有表 + 四张新表都应存在
+	tables := []string{
+		"detect_rules", "detect_overrides", "detect_combos",
+		"intercept_rules", "intercept_overrides", "intercept_combos",
+		"scan_history", "intercept_records", "finding_states", "allowlist_entries",
+	}
+	for _, tbl := range tables {
 		var name string
 		err := db.sqlDB.QueryRow(
 			"SELECT name FROM sqlite_master WHERE type='table' AND name=?", tbl).Scan(&name)
