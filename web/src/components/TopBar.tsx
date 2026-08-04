@@ -1,17 +1,13 @@
-import { useEffect } from 'react'
-import { Layout, Button, Space, Breadcrumb } from 'antd'
-import { ReloadOutlined, HomeOutlined } from '@ant-design/icons'
+import { useEffect, useState } from 'react'
+import { Layout, Button, Space, Breadcrumb, Popover, Progress, Typography } from 'antd'
+import { ReloadOutlined, LoadingOutlined } from '@ant-design/icons'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
 import { navLabels } from '../lib/nav'
+import { GuardCapsule } from './GuardCapsule'
 
 const { Header } = Layout
-
-interface Props {
-  onOpenRescan: () => void
-  loading: boolean
-}
 
 // 末段面包屑文案(含动态 :id 路由)。父段用 navLabels(侧栏文案单一来源)。
 function leafLabel(pathname: string, t: (k: string) => string): string | null {
@@ -20,18 +16,18 @@ function leafLabel(pathname: string, t: (k: string) => string): string | null {
   return null
 }
 
-export function TopBar({ onOpenRescan, loading }: Props) {
+export function TopBar() {
   const { t } = useTranslation()
-  const { agents, fetchAgents } = useStore()
+  const { agents, fetchAgents, scanTaskBatchId, scanTaskProgress, cancelScan, openRescan } = useStore()
   const loc = useLocation()
+  const [popoverOpen, setPopoverOpen] = useState(false)
 
   // 当前一级路由(用于面包屑首段)。navLabels 存 i18n key,需 t() 翻译。
   const root = loc.pathname === '/' ? '/dashboard' : `/${loc.pathname.split('/')[1]}`
   const rootLabel = navLabels[root] ? t(navLabels[root]) : undefined
   const leaf = leafLabel(loc.pathname, t)
 
-  // agent 加载:TopBar 仍是首次 agent 列表拉取入口(SettingsAgents 复用此数据)。
-  // Task 9 移除了 agent <Select>;agent 选择 UI 由各页自建(Dashboard 多选/Assets per-agent tabs)。
+  // agent 加载:TopBar 仍是首次 agent 列表拉取入口。
   useEffect(() => {
     if (!agents) fetchAgents()
   }, [agents, fetchAgents])
@@ -44,6 +40,46 @@ export function TopBar({ onOpenRescan, loading }: Props) {
       : { title: <span>{rootLabel}</span> },
   ]
   if (leaf) crumbItems.push({ title: <span>{leaf}</span> })
+
+  const isScanning = !!scanTaskBatchId
+  const progressText = scanTaskProgress
+    ? t('topbar.scanProgress', { current: scanTaskProgress.current_agent, completed: scanTaskProgress.completed, total: scanTaskProgress.total })
+    : ''
+  const progressPercent = scanTaskProgress && scanTaskProgress.total > 0
+    ? Math.round((scanTaskProgress.completed / scanTaskProgress.total) * 100)
+    : 0
+
+  // 扫描按钮
+  const scanBtn = isScanning ? (
+    <Button
+      icon={<LoadingOutlined />}
+      style={{ whiteSpace: 'nowrap' }}
+      onClick={() => setPopoverOpen(!popoverOpen)}
+    >
+      {t('topbar.scanning')}
+    </Button>
+  ) : (
+    <Button
+      icon={<ReloadOutlined />}
+      onClick={() => openRescan()}
+      style={{ whiteSpace: 'nowrap' }}
+    >
+      {t('topbar.rescan')}
+    </Button>
+  )
+
+  // Popover 内容
+  const popoverContent = (
+    <div style={{ minWidth: 220 }}>
+      <Typography.Text style={{ fontSize: 'var(--fs-sm)', display: 'block', marginBottom: 8 }}>
+        {progressText}
+      </Typography.Text>
+      <Progress percent={progressPercent} size="small" style={{ marginBottom: 12 }} />
+      <Button size="small" block onClick={() => { cancelScan(); setPopoverOpen(false) }}>
+        {t('topbar.cancelScan')}
+      </Button>
+    </div>
+  )
 
   return (
     <Header
@@ -61,9 +97,20 @@ export function TopBar({ onOpenRescan, loading }: Props) {
         <Breadcrumb items={crumbItems} />
       </Space>
       <Space size="middle">
-        <Button icon={<ReloadOutlined />} loading={loading} onClick={onOpenRescan} style={{ whiteSpace: 'nowrap' }}>
-          {loading ? t('topbar.scanning') : t('topbar.rescan')}
-        </Button>
+        <GuardCapsule />
+        {isScanning ? (
+          <Popover
+            open={popoverOpen}
+            onOpenChange={setPopoverOpen}
+            trigger="click"
+            placement="bottomRight"
+            content={popoverContent}
+          >
+            {scanBtn}
+          </Popover>
+        ) : (
+          scanBtn
+        )}
       </Space>
     </Header>
   )
