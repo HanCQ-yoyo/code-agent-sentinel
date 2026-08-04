@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Layout, Button, Space, Breadcrumb, Popover, Progress, Typography } from 'antd'
-import { ReloadOutlined, LoadingOutlined } from '@ant-design/icons'
+import { ReloadOutlined, LoadingOutlined, HomeOutlined } from '@ant-design/icons'
 import { Link, useLocation } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useStore } from '../store'
