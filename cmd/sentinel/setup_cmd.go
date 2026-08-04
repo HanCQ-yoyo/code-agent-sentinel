@@ -16,7 +16,7 @@ import (
 	"code-agent-sentinel/internal/configengine"
 )
 
-// newSetupCmd 构造 `sentinel setup` 子命令:huh TUI 交互式配置 code agent。
+// newSetupCmd 构造 `code-agent-sentinel setup` 子命令:huh TUI 交互式配置 code agent。
 // 流程:检测已知 agent → 勾选启用 → 逐个确认路径 → 预览 → 落盘到 config.yaml。
 // 非 TTY 拒绝(管道/CI 无法交互);--allow-missing 旁路路径存在性校验。
 // 可重跑:读现有 config,已检测到的 agent 默认勾选。
@@ -64,7 +64,7 @@ func mergeAgents(cfg *config.Config, selection []config.AgentCfg) {
 //
 // 规格说明:Codex 无项目清单文件;sentinel 用独立清单,Claude 的 ~/.claude.json projects
 // 仅作 setup 探测补充,运行时不再作为 Codex 项目源(见 Task 4 fix: Engine 按 agent spec 分流)。
-func importKnownProjects(claudeJSONPath string) []config.KnownProject {
+func importKnownProjects(claudeJSONPath, home string) []config.KnownProject {
 	data, err := os.ReadFile(claudeJSONPath)
 	if err != nil {
 		return nil // 文件不存在 / 不可读 → 安全降级
@@ -78,9 +78,10 @@ func importKnownProjects(claudeJSONPath string) []config.KnownProject {
 	if len(doc.Projects) == 0 {
 		return nil
 	}
+	cleanHome := filepath.Clean(home)
 	out := make([]config.KnownProject, 0, len(doc.Projects))
 	for path := range doc.Projects {
-		if path == "" {
+		if path == "" || filepath.Clean(path) == cleanHome {
 			continue
 		}
 		out = append(out, config.KnownProject{Path: path, Name: filepath.Base(path)})
@@ -199,11 +200,11 @@ func runSetup(homeFlag, cfgPath string, allowMissing bool, in io.Reader, out io.
 	// Task 11:从 ~/.claude.json projects 导入 known_projects 作项目清单初始值。
 	// 最小实现:仅导入,不做 huh 增删屏(brief Step 3 注允许;用户后续手改 config.yaml 增删)。
 	// 纯函数 importKnownProjects 处理文件缺失/JSON 损坏的安全降级,不阻塞 setup。
-	cfg.KnownProjects = importKnownProjects(filepath.Join(home, ".claude.json"))
+	cfg.KnownProjects = importKnownProjects(filepath.Join(home, ".claude.json"), home)
 	if err := config.Save(cfgPath, cfg); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "已写入 %s,重启 sentinel 生效\n", cfgPath)
+	fmt.Fprintf(out, "已写入 %s,重启 code-agent-sentinel 生效\n", cfgPath)
 
 	// Stage R2:安装运行时拦截 hook 到 ~/.claude/settings.json
 	// best-effort:失败不阻塞 setup(os.Executable 理论上极少失败,但避免在此引入新失败路径)。
@@ -213,7 +214,7 @@ func runSetup(homeFlag, cfgPath string, allowMissing bool, in io.Reader, out io.
 		if changed, err := InstallGuardHook(settingsPath, sentinelPath); err != nil {
 			fmt.Fprintf(os.Stderr, "安装拦截 hook 失败(不阻塞): %v\n", err)
 		} else if changed {
-			fmt.Println("已安装运行时拦截 hook(~/.claude/settings.json PreToolUse Bash → sentinel guard)")
+			fmt.Println("已安装运行时拦截 hook(~/.claude/settings.json PreToolUse Bash → code-agent-sentinel guard)")
 		}
 
 		// Stage R3:Codex hook 安装(仅当 ~/.codex 存在时,不强制创建空目录,避免给不用 codex 的用户留垃圾)。
@@ -224,7 +225,7 @@ func runSetup(homeFlag, cfgPath string, allowMissing bool, in io.Reader, out io.
 			if changed, err := InstallCodexHook(codexHooksPath, sentinelPath); err != nil {
 				fmt.Fprintf(os.Stderr, "安装 Codex 拦截 hook 失败(不阻塞): %v\n", err)
 			} else if changed {
-				fmt.Println("已安装 Codex 运行时拦截 hook(~/.codex/hooks.json PreToolUse Bash → sentinel guard)")
+				fmt.Println("已安装 Codex 运行时拦截 hook(~/.codex/hooks.json PreToolUse Bash → code-agent-sentinel guard)")
 			}
 		}
 	}

@@ -15,7 +15,7 @@ func newUninstallCmd() *cobra.Command {
 	var homeFlag string
 	cmd := &cobra.Command{
 		Use:   "uninstall",
-		Short: "清理 sentinel 历史数据与配置(不删 ~/.claude 与二进制)",
+		Short: "清理 code-agent-sentinel 历史数据与配置(不删 ~/.claude 与二进制)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			home := homeFlag
 			if home == "" {
@@ -105,6 +105,6 @@ func runUninstall(home string, yes, keepConfig bool, out io.Writer) error {
 		return fmt.Errorf("删除失败: %w", err)
 	}
 	fmt.Fprintf(out, "已删除:%s\n", dataDir)
-	fmt.Fprintf(out, "如需删除二进制,请手动 rm sentinel 可执行文件。\n")
+	fmt.Fprintf(out, "如需删除二进制,请手动 rm code-agent-sentinel 可执行文件。\n")
 	return nil
 }

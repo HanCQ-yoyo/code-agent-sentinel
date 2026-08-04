@@ -13,7 +13,7 @@ import (
 	"code-agent-sentinel/internal/storage"
 )
 
-// newRulesCmd 构造 `sentinel rules` 子命令,含 list / validate [file]。
+// newRulesCmd 构造 `code-agent-sentinel rules` 子命令,含 list / validate [file]。
 //
 // rules list:列出检测域全局规则(builtin + custom),含 id/severity/source/valid。
 //   - 优先读 sqlite(~/.code-agent-sentinel/sentinel.db,enabled 过滤);
@@ -120,7 +120,7 @@ func newRulesValidateCmd() *cobra.Command {
 				if err != nil {
 					return fmt.Errorf("读取文件 %s: %w", file, err)
 				}
-				tmpDir, err := os.MkdirTemp("", "sentinel-validate-")
+				tmpDir, err := os.MkdirTemp("", "code-agent-sentinel-validate-")
 				if err != nil {
 					return err
 				}

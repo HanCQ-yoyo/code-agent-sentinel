@@ -31,7 +31,7 @@ func TestServiceInstallDryRun(t *testing.T) {
 	}
 	// 单元文件应已写入(linux 上)
 	if runtime.GOOS == "linux" {
-		unitPath := filepath.Join(dir, ".config", "systemd", "user", "sentinel.service")
+		unitPath := filepath.Join(dir, ".config", "systemd", "user", "code-agent-sentinel.service")
 		b, err := os.ReadFile(unitPath)
 		if err != nil {
 			t.Fatalf("单元文件未生成: %v", err)

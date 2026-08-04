@@ -51,8 +51,8 @@ func newRootCmd() *cobra.Command {
 		daemonChild   bool
 	)
 	cmd := &cobra.Command{
-		Use:   "sentinel",
-		Short: "Claude Code 配置安全态势看板(P1 只读)",
+		Use:   "code-agent-sentinel",
+		Short: "Code Agent 配置安全态势看板(P1 只读)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return run(cmd.Context(), cfgPath, bindFlag, portFlag, noBrowser, risky, homeFlag, tokenFlag, claudeDirFlag, logPathFlag, daemonFlag)
 		},
@@ -188,7 +188,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	}
 	engAgents := configengine.AgentsFromSpecs(home, agentItems)
 	if len(engAgents) == 0 {
-		return fmt.Errorf("无启用的 code agent,运行 sentinel setup 配置")
+		return fmt.Errorf("无启用的 code agent,运行 code-agent-sentinel setup 配置")
 	}
 	// 本轮 Engine 仍取首个(Runner 内部按 agentID 池化,扫描时选)
 	eng := configengine.NewEngineFromAgent(engAgents[0])
@@ -305,7 +305,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	port := ln.Addr().(*net.TCPAddr).Port
 	am := resolveAccessMethod(cfg.Bind, port, home)
 	fmt.Println("==================================================")
-	fmt.Printf("sentinel 已启动 | token: %s\n", token)
+	fmt.Printf("code-agent-sentinel 已启动 | token: %s\n", token)
 	fmt.Printf("本地访问:   %s#token=%s\n", am.URL, token)
 	if am.TunnelCmd != "" {
 		fmt.Printf("远程访问(SSH 隧道): %s\n", am.TunnelCmd)
@@ -334,7 +334,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	// Task 8:首次无配置提示。Agents 空 且 ClaudeDir 空 且 默认 ~/.claude 不存在时,
 	// 提示用户运行 setup(ResolveAgents 会回退到默认 home/.claude,服务仍可启动)。
 	if shouldPromptSetup(cfg, filepath.Join(home, ".claude")) {
-		fmt.Println("提示:尚未配置 code agent。运行 `sentinel setup` 进行交互式配置。")
+		fmt.Println("提示:尚未配置 code agent。运行 `code-agent-sentinel setup` 进行交互式配置。")
 	}
 	// Task 18:SIGINT/SIGTERM 触发 http.Shutdown + mgr.Stop graceful 退出。
 	// sigCh 适配为 trigger chan(struct{}),让 serveHTTP 与测试共签名(<-chan struct{})。
@@ -363,7 +363,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 func serveHTTP(ln net.Listener, srv *http.Server, stop func(), shutdownTrigger <-chan struct{}) error {
 	go func() {
 		<-shutdownTrigger
-		fmt.Println("sentinel 正在关闭...")
+		fmt.Println("code-agent-sentinel 正在关闭...")
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(ctx) // 在途请求给 10s 缓冲;超时强切(history 已在 scan 完成时落盘)

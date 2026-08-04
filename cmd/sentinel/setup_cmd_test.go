@@ -101,7 +101,7 @@ func TestImportKnownProjectsFromClaudeJSON(t *testing.T) {
 	if err := os.WriteFile(claudeJSON, []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got := importKnownProjects(claudeJSON)
+	got := importKnownProjects(claudeJSON, home)
 	found := false
 	for _, p := range got {
 		if p.Path == proj {
@@ -118,7 +118,7 @@ func TestImportKnownProjectsFromClaudeJSON(t *testing.T) {
 
 // TestImportKnownProjectsMissingFile 验证文件不存在时安全降级返回空(不 panic / 不 error)。
 func TestImportKnownProjectsMissingFile(t *testing.T) {
-	got := importKnownProjects(filepath.Join(t.TempDir(), "nonexistent.claude.json"))
+	got := importKnownProjects(filepath.Join(t.TempDir(), "nonexistent.claude.json"), "/home/test")
 	if len(got) != 0 {
 		t.Fatalf("文件不存在应返回空切片(安全降级), got %+v", got)
 	}
@@ -132,9 +132,30 @@ func TestImportKnownProjectsCorruptJSON(t *testing.T) {
 	if err := os.WriteFile(p, []byte(`{not json`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got := importKnownProjects(p)
+	got := importKnownProjects(p, dir)
 	if len(got) != 0 {
 		t.Fatalf("损坏 JSON 应返回空切片(安全降级), got %+v", got)
+	}
+}
+
+// TestImportKnownProjectsFiltersHomeDir 验证家目录被过滤:即使 ~/.claude.json
+// projects 包含 home 自身,也不导入(家目录永远不应被当成项目)。
+func TestImportKnownProjectsFiltersHomeDir(t *testing.T) {
+	home := t.TempDir()
+	claudeJSON := filepath.Join(home, ".claude.json")
+	// projects 含 home 自身 + 一个正常项目
+	body := `{"projects":{"` + home + `":{},"/real/project":{}}}`
+	if err := os.WriteFile(claudeJSON, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got := importKnownProjects(claudeJSON, home)
+	for _, p := range got {
+		if filepath.Clean(p.Path) == filepath.Clean(home) {
+			t.Fatalf("家目录不应被导入为已知项目, got %+v", p)
+		}
+	}
+	if len(got) != 1 || got[0].Path != "/real/project" {
+		t.Fatalf("应仅保留正常项目, got %+v", got)
 	}
 }
 
@@ -145,7 +166,7 @@ func TestImportKnownProjectsEmptyProjects(t *testing.T) {
 	if err := os.WriteFile(p, []byte(`{"projects":{}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	got := importKnownProjects(p)
+	got := importKnownProjects(p, dir)
 	if len(got) != 0 {
 		t.Fatalf("空 projects 应返回空切片, got %+v", got)
 	}

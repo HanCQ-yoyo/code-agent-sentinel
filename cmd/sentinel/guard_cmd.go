@@ -21,7 +21,7 @@ import (
 	"code-agent-sentinel/internal/storage"
 )
 
-// newGuardCmd 构造 `sentinel guard` 子命令:被 Claude Code fork 的 PreToolUse hook。
+// newGuardCmd 构造 `code-agent-sentinel guard` 子命令:被 Claude Code fork 的 PreToolUse hook。
 // 读 stdin JSON → 7 步管线评估 → 写 stdout 决策 → 退出。不启动 HTTP server。
 // fail-open 铁律:hook 永远 exit 0;deny 只靠 stdout JSON。
 func newGuardCmd() *cobra.Command {
@@ -513,7 +513,7 @@ func domainMatch(domain string, sem semantics.SemanticResult) bool {
 // isSelfGuardCommand 判断命令是否是 sentinel guard 自身(递归短路)。
 func isSelfGuardCommand(cmd string) bool {
 	c := strings.TrimSpace(strings.ToLower(cmd))
-	return strings.HasPrefix(c, "sentinel guard") || strings.Contains(c, " sentinel guard")
+	return strings.HasPrefix(c, "code-agent-sentinel guard") || strings.Contains(c, " code-agent-sentinel guard")
 }
 
 // severityForRule / remediationForRule 按语义 RuleID 找载体规则的 severity/remediation。

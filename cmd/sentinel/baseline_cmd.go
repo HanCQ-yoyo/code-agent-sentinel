@@ -16,7 +16,7 @@ import (
 	"code-agent-sentinel/internal/storage"
 )
 
-// newBaselineCmd 构造 `sentinel baseline` 子命令(--create / --prune)。
+// newBaselineCmd 构造 `code-agent-sentinel baseline` 子命令(--create / --prune)。
 //
 // Task 11 语义变更:旧实现写 baseline.json(已删);新实现统一到 finding_states 表(SQLite):
 //   - --create:跑全量扫描,把所有 Finding 的 fingerprint 批量接受(accepted),与 API POST /api/baseline 一致。

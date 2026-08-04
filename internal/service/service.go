@@ -1,4 +1,4 @@
-// Package service 生成 sentinel 的 OS 服务单元(linux systemd / macOS launchd / Windows sc)。
+// Package service 生成 code-agent-sentinel 的 OS 服务单元(linux systemd / macOS launchd / Windows sc)。
 // 仅生成单元文件内容与落点路径;实际 install/uninstall 走 cmd/sentinel/service_cmd.go 调 systemctl/launchctl/sc.exe。
 package service
 
@@ -13,7 +13,7 @@ type UnitSpec struct {
 	OS       string // runtime.GOOS;空=用当前平台
 	UserMode bool   // true=用户级(无需 root);false=系统级
 	Home     string // 用户 home(Environment=HOME / 日志路径)
-	ExePath  string // sentinel 二进制绝对路径(os.Executable())
+	ExePath  string // code-agent-sentinel 二进制绝对路径(os.Executable())
 	Token    string // 预置 token(写入 config,非进单元;此处仅记录)
 	Bind     string // bind(默认 127.0.0.1)
 	Port     int    // port
@@ -42,9 +42,9 @@ func GenerateUnit(spec UnitSpec) (string, string, error) {
 }
 
 func generateSystemd(spec UnitSpec) (string, string, error) {
-	unitPath := filepath.Join(spec.Home, ".config", "systemd", "user", "sentinel.service")
+	unitPath := filepath.Join(spec.Home, ".config", "systemd", "user", "code-agent-sentinel.service")
 	if !spec.UserMode {
-		unitPath = "/etc/systemd/system/sentinel.service"
+		unitPath = "/etc/systemd/system/code-agent-sentinel.service"
 	}
 	// Task 14:LogPath 非空 → 加 StandardOutput/StandardError=append:<path>(追加写,不覆盖旧日志)。
 	// 空 → 无此两行,systemd 默认走 journal。模板用 %s 占位(空时只剩一个空行,保持原排版)。
@@ -68,20 +68,20 @@ WantedBy=default.target
 }
 
 func generateLaunchd(spec UnitSpec) (string, string, error) {
-	unitPath := filepath.Join(spec.Home, "Library", "LaunchAgents", "com.code-agent-sentinel.sentinel.plist")
+	unitPath := filepath.Join(spec.Home, "Library", "LaunchAgents", "com.code-agent-sentinel.code-agent-sentinel.plist")
 	if !spec.UserMode {
-		unitPath = "/Library/LaunchDaemons/com.code-agent-sentinel.sentinel.plist"
+		unitPath = "/Library/LaunchDaemons/com.code-agent-sentinel.code-agent-sentinel.plist"
 	}
 	// Task 14:LogPath 非空 → StandardOutPath/StandardErrorPath 指向它;空 → 回退默认 sentinel.log。
 	logPath := spec.LogPath
 	if logPath == "" {
-		logPath = filepath.Join(spec.Home, ".code-agent-sentinel", "sentinel.log")
+		logPath = filepath.Join(spec.Home, ".code-agent-sentinel", "code-agent-sentinel.log")
 	}
 	content := fmt.Sprintf(`<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-  <key>Label</key><string>com.code-agent-sentinel.sentinel</string>
+  <key>Label</key><string>com.code-agent-sentinel.code-agent-sentinel</string>
   <key>ProgramArguments</key>
   <array><string>%s</string></array>
   <key>RunAtLoad</key><true/>
@@ -96,8 +96,8 @@ func generateLaunchd(spec UnitSpec) (string, string, error) {
 
 func generateWindows(spec UnitSpec) (string, string, error) {
 	// windows 无单元文件,返回待执行的 sc 命令(install 时执行)。
-	content := fmt.Sprintf(`sc.exe create sentinel binPath= "%s" start= auto
-sc.exe start sentinel
+	content := fmt.Sprintf(`sc.exe create code-agent-sentinel binPath= "%s" start= auto
+sc.exe start code-agent-sentinel
 `, spec.ExePath)
 	return "", content, nil
 }

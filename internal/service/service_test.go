@@ -19,7 +19,7 @@ func TestGenerateUnitLinuxSystemd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(path, ".config/systemd/user/sentinel.service") {
+	if !strings.Contains(path, ".config/systemd/user/code-agent-sentinel.service") {
 		t.Errorf("linux user 路径错: %s", path)
 	}
 	if !strings.Contains(content, "ExecStart=/home/u/sentinel") {
@@ -39,7 +39,7 @@ func TestGenerateUnitMacOSLaunchd(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(path, "Library/LaunchAgents/com.code-agent-sentinel.sentinel.plist") {
+	if !strings.Contains(path, "Library/LaunchAgents/com.code-agent-sentinel.code-agent-sentinel.plist") {
 		t.Errorf("macOS 路径错: %s", path)
 	}
 	if !strings.Contains(content, "<string>/Users/u/sentinel</string>") {
@@ -65,7 +65,7 @@ func TestGenerateUnitWindowsSC(t *testing.T) {
 //   - launchd:LogPath 非空 → StandardOutPath/StandardErrorPath 指向该文件
 //   - systemd:LogPath 非空 → StandardOutput=append:<path> + StandardError=append:<path>
 //
-// LogPath 空 → launchd 回退默认 sentinel.log,systemd 走 journal(无 StandardOutput 行)。
+// LogPath 空 → launchd 回退默认 code-agent-sentinel.log,systemd 走 journal(无 StandardOutput 行)。
 func TestServiceUnitLogPath(t *testing.T) {
 	// launchd 带 LogPath
 	launchdSpec := UnitSpec{
@@ -83,8 +83,8 @@ func TestServiceUnitLogPath(t *testing.T) {
 		t.Errorf("launchd 单元应包含 LogPath: %s", launchdContent)
 	}
 	// 不应包含默认 sentinel.log(被自定义路径覆盖)
-	if strings.Contains(launchdContent, ".code-agent-sentinel/sentinel.log") {
-		t.Errorf("launchd 自定义 LogPath 应覆盖默认 sentinel.log: %s", launchdContent)
+	if strings.Contains(launchdContent, ".code-agent-sentinel/code-agent-sentinel.log") {
+		t.Errorf("launchd 自定义 LogPath 应覆盖默认 code-agent-sentinel.log: %s", launchdContent)
 	}
 
 	// systemd 带 LogPath
@@ -122,7 +122,7 @@ func TestServiceUnitLogPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(launchdNoContent, "/Users/u/.code-agent-sentinel/sentinel.log") {
-		t.Errorf("launchd 空 LogPath 应回退默认 sentinel.log: %s", launchdNoContent)
+	if !strings.Contains(launchdNoContent, "/Users/u/.code-agent-sentinel/code-agent-sentinel.log") {
+		t.Errorf("launchd 空 LogPath 应回退默认 code-agent-sentinel.log: %s", launchdNoContent)
 	}
 }

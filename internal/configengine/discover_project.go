@@ -12,12 +12,19 @@ import (
 //
 // 遍历 ListProjects() 返回的全部项目(全 agent 发现),缺失目录静默跳过。
 // 解析失败被各 parse* 函数内部吞为带 parse_error 的占位资产,不致整体失败。
+//
+// 防御:跳过项目路径等于家目录的项目(家目录下的 ~/.claude 是全局配置,已在 discoverClaude
+// 中作为全局资产发现过,不应再作为项目级资产重复出现)。
 func (e *Engine) discoverProjects(inv *Inventory) {
 	projects, err := e.ListProjects()
 	if err != nil || len(projects) == 0 {
 		return
 	}
+	cleanHome := filepath.Clean(e.HomeDir)
 	for _, p := range projects {
+		if filepath.Clean(p.Path) == cleanHome {
+			continue // 家目录不是项目,跳过(防 ~/.claude 全局资产被重复发现为项目级)
+		}
 		if !fileExists(filepath.Join(p.Path, ".claude")) && !fileExists(filepath.Join(p.Path, ".mcp.json")) {
 			// 项目目录已不存在(可能 ~/.claude.json 里登记的路径已删),静默跳过。
 			continue

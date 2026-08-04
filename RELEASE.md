@@ -19,7 +19,7 @@
 
 ### 修复
 
-- **拦截域只加载破坏性命令规则**:此前 `syncBuiltinRules` 给 intercept 域同步了与 detect 域相同的**全部** builtin 规则(baseline/injection/skill/destructive),导致运行时拦截表混入检测规则;`sentinel guard` 的 fail-open 回退路径(`LoadBuiltin`)同样加载全部。修复:新增 `ruleengine.LoadInterceptBuiltin()` 只读 `rules/destructive_commands.yaml`(190 条 `destructive.*` 规则),`syncBuiltinRules` 给 intercept 域改用它,guard 回退路径同步改用。detect 域不受影响(仍加载全部 builtin 做静态扫描);用户自定义拦截规则(`/api/intercept-rules`)不受影响(`SyncBuiltin` 只清 source=builtin 的 stale 行,不碰 custom)。已部署 db 下次启动由 `deleteStaleBuiltin` 自动收敛(257 → 190,一次性数据影响,研发阶段接受)。
+- **拦截域只加载破坏性命令规则**:此前 `syncBuiltinRules` 给 intercept 域同步了与 detect 域相同的**全部** builtin 规则(baseline/injection/skill/destructive),导致运行时拦截表混入检测规则;`code-agent-sentinel guard` 的 fail-open 回退路径(`LoadBuiltin`)同样加载全部。修复:新增 `ruleengine.LoadInterceptBuiltin()` 只读 `rules/destructive_commands.yaml`(190 条 `destructive.*` 规则),`syncBuiltinRules` 给 intercept 域改用它,guard 回退路径同步改用。detect 域不受影响(仍加载全部 builtin 做静态扫描);用户自定义拦截规则(`/api/intercept-rules`)不受影响(`SyncBuiltin` 只清 source=builtin 的 stale 行,不碰 custom)。已部署 db 下次启动由 `deleteStaleBuiltin` 自动收敛(257 → 190,一次性数据影响,研发阶段接受)。
 
 ### 已知限制
 
@@ -138,7 +138,7 @@
 - **放行清单 allowlist(独立文件 + 精确双匹配)**:`allowlist.yaml` 独立文件存储(与 guard config 解耦),`AllowlistStore` 原子读写。`Matches` 精确命令匹配,normalize 前后双比对(原始命令 + 反混淆后命令),不支持通配(防 `rm -rf *` 通配放行漏洞)。命中的命令即便命中规则也放行;`allowlist_enabled` 开关控制管线是否做放行匹配。
 - **静态层同治**:`RulesDetector` 静态检测器复用 span 分类 + 片段拆分(`split.go` + `span.go`),静态扫描命令类资产时同样按片段独立评估,与运行时 guard 走同一拆分/分类路径(I1 静态闭合)。
 - **前端管控面前移**:`SettingsGuard` 编辑面板(Mode strict/lenient 单选 + 总开关 + 放行清单启用 + 评估预算 + 命令长度上限,`PUT /api/guard/config` 热生效)+ `SettingsAllowlist` 放行清单编辑面板(增删条目,`GET/POST/DELETE /api/guard/allowlist`)+ Intercept 页 confidence 列(Tag 着色 high=绿/low=橙/unknown=灰)+ matched_span 详情区(命中片段文本)。
-- **Codex CLI 协议适配**:`sentinel guard` 按 `turn_id` 字段自动消歧 Claude/Codex 协议(Codex payload 带 `turn_id`,Claude 不带)。Codex 发最小 deny payload(仅 `hookEventName`/`permissionDecision`/`permissionDecisionReason` 三字段,防 strict parser 拒扩展字段);低置信度 ask 退化为 deny(Codex 不发 ask,安全不变量 #5)。`sentinel setup` 自动安装 `~/.codex/hooks.json` PreToolUse Bash hook(`InstallCodexHook`/`UninstallCodexHook`),与 Claude `~/.claude/settings.json` 并行。
+- **Codex CLI 协议适配**:`code-agent-sentinel guard` 按 `turn_id` 字段自动消歧 Claude/Codex 协议(Codex payload 带 `turn_id`,Claude 不带)。Codex 发最小 deny payload(仅 `hookEventName`/`permissionDecision`/`permissionDecisionReason` 三字段,防 strict parser 拒扩展字段);低置信度 ask 退化为 deny(Codex 不发 ask,安全不变量 #5)。`code-agent-sentinel setup` 自动安装 `~/.codex/hooks.json` PreToolUse Bash hook(`InstallCodexHook`/`UninstallCodexHook`),与 Claude `~/.claude/settings.json` 并行。
 
 ### 修复
 
@@ -152,12 +152,12 @@
 
 ### 升级
 
-- **`sentinel guard` 运行时拦截 hook**:作为 Claude Code `PreToolUse` Bash hook 运行,对单条 shell 命令跑 7 步管线(解析 → 递归短路 → quick-reject → normalize 反混淆 → heredoc 内联脚本提取 → pack 评估 → 决策输出+记录),实时 deny 破坏性命令(`rm -rf /`、`git reset --hard`、`sudo rm`、`$'\x72\x6d'` ANSI-C 编码、`bash -c "rm -rf /"` 内联脚本等)。fail-open 铁律:hook 永远 `exit 0`,deny 仅靠 stdout JSON 表达;解析失败 / 超时 / panic → allow 或 ask(超时)。
+- **`code-agent-sentinel guard` 运行时拦截 hook**:作为 Claude Code `PreToolUse` Bash hook 运行,对单条 shell 命令跑 7 步管线(解析 → 递归短路 → quick-reject → normalize 反混淆 → heredoc 内联脚本提取 → pack 评估 → 决策输出+记录),实时 deny 破坏性命令(`rm -rf /`、`git reset --hard`、`sudo rm`、`$'\x72\x6d'` ANSI-C 编码、`bash -c "rm -rf /"` 内联脚本等)。fail-open 铁律:hook 永远 `exit 0`,deny 仅靠 stdout JSON 表达;解析失败 / 超时 / panic → allow 或 ask(超时)。
 - **反混淆状态机**(手写,不引 shell parser):剥 sudo/env/command/exec/nohup/time/反斜杠 wrapper(迭代 ≤32)+ ANSI-C `$'\xNN'` 解码(仅 executable position,不动数据区)+ 去引号 + 路径展开(`/usr/bin/git`→`git`)。`command -v`/`-V` 查询模式不剥。
 - **quick-reject 关键词快速放行**:每域手工声明在规则 `metadata.keywords`(`destructive_commands.yaml` 5 域 189 条规则),命中关键词进入精检,未命中且无混淆字符放行;空关键词列表保守不 reject(防漏放行);混淆字符(`\ ' "`)回退 normalize 重判。
 - **heredoc Tier1/2 提取 + 手写分段递归**:17 个 trigger 正则 + `<<` 引号感知扫描(零假阴性);提取 interpreter `-c`/here-string/`$()` 内层命令,手写分段(`$()`/`;`/`&&`/`||`/`|`)递归(深度上限 8,砍 AST)。
 - **规则库单一来源**:guard 合成 `configengine.Asset{Type:AssetCommand}` 走与静态 `RulesDetector` 同构的 `DispatchCommand → Eval` 路径,复用 `ruleengine.LoadBuiltin()`(`//go:embed`),绝不复制规则。
-- **`sentinel setup` / `uninstall` 装/卸 hook**:`setup` 自动把 `sentinel guard` 注册到 `~/.claude/settings.json` 的 `hooks.PreToolUse`(matcher=`Bash`,sentinel 置首,幂等 basename 精确匹配);`uninstall` 反向移除(幂等)。
+- **`code-agent-sentinel setup` / `uninstall` 装/卸 hook**:`setup` 自动把 `code-agent-sentinel guard` 注册到 `~/.claude/settings.json` 的 `hooks.PreToolUse`(matcher=`Bash`,sentinel 置首,幂等 basename 精确匹配);`uninstall` 反向移除(幂等)。
 - **GuardConfig 配置段**(`internal/config/guard.go`,与 Detectors 平级):`enabled`/`policy`/`deadline_ms`/`max_command_bytes`,持 `sync.RWMutex`,`PUT /api/guard/config` 原地 `ApplyFrom` + 写盘热生效;hook 子进程每次 `config.Load` 读盘。
 - **拦截记录存储**(`internal/intercept` 包,镜像 history):`InterceptRecord` JSON 文件(`~/.code-agent-sentinel/intercept/<id>.json`,原子写),`AgentProtocol="claude"` 命名空间(不复用 history/scheduler 的 AgentID)。
 - **API**:`GET/PUT /api/guard/config`(全键校验防部分体静默禁用)、`GET /api/intercept`、`GET /api/intercept/:id`、`DELETE /api/intercept/:id`。
@@ -180,7 +180,7 @@
   - **否定上下文抑制**:`ruleengine.IsNegatedByContext` 识别"禁止/不允许"前缀,否定语义命中不再当 finding。
   - **资产内去重**:emit 流水线按位置聚合同位置多规则命中,`ContributingRuleIDs` 记录所有触发规则,单一 finding 承载多规则上下文。
   - **聚合视图**:FindingTable 双视图(按 finding / 按资产聚合),资产维度集中查看风险。
-- **统一处置生命周期**:塌缩旧 `baseline.json` + `suppressions.yaml` 为单一 `finding_states.yaml` overlay(`findingstate` 包:Status / Priority / Note / Category / ContributingRuleIDs);`applyFindingState` 在扫描期按 fingerprint 注入处置状态;`sentinel baseline --create` 改为 `BulkAccept`(批量接受全部当前未处置),`--prune` 改为打印 `PruneReport`。
+- **统一处置生命周期**:塌缩旧 `baseline.json` + `suppressions.yaml` 为单一 `finding_states.yaml` overlay(`findingstate` 包:Status / Priority / Note / Category / ContributingRuleIDs);`applyFindingState` 在扫描期按 fingerprint 注入处置状态;`code-agent-sentinel baseline --create` 改为 `BulkAccept`(批量接受全部当前未处置),`--prune` 改为打印 `PruneReport`。
 - **细粒度筛选**:FindingTable 按 Category / Status / Priority / asset-type 多维度筛选;Category 派生(`ruleengine.CategoryOf`)贯穿检测器 → API → UI。
 - **检测任务完善**:History 页 per-agent 视图(每 agent 独立最近扫描列表)+ 检测范围/目标列(`ScanSummary.ScopePath`,`global` / `project:<path>` / `asset:<id>`)。
 
@@ -263,7 +263,7 @@
 - **支柱 1 全页面 multi-agent**:`engineForQuery(c)` 路由 9 只读 handler 走选中 agent Engine;`latestScan(agentID)` + `Store.LatestForAgent`;前端各页 `?agent=`;Dashboard 多圆圈 + 多线趋势 + `AgentMultiSelect` 筛选器;Assets 两级 tab(agent L1 + global/projects L2);Findings/History 加 Agent 列。
 - **支柱 2 运行时扫描开关**:`Manager.Paused` atomic 闸门 + `applyScanToggle` 传播 `scan_enabled`→`SetPaused`(删 dead `Server.Scheduler` 字段);前端 Settings 总开关 + `RescanModal` 多选 agent。
 - **支柱 3 重扫描**:`ScanScope{Type,Path}` + `RunScan(scope)`;`ScanRecord.Scope`;`LatestForAgent` 优先 global scope(防 asset-scope 重扫污染 dashboard);`partialRescan` 改走 Runner 抽象;`POST /api/scan?scope=&path=`;`RescanModal`(选范围/agent/检测器)+ 页面级入口(`store openRescan/closeRescan` + `initialScope` 预填)。
-- **支柱 4 守护进程**:`config.Token`(三级优先级 `--token`>cfg.Token>genToken);`serveHTTP` signal/graceful shutdown;`internal/service` 三平台单元生成器(stdlib 叶子);`sentinel service install/uninstall/status`;`--daemon` 后台启动 flag + 跨平台 self-fork;`--log-path` 日志路径 flag + config.LogPath。
+- **支柱 4 守护进程**:`config.Token`(三级优先级 `--token`>cfg.Token>genToken);`serveHTTP` signal/graceful shutdown;`internal/service` 三平台单元生成器(stdlib 叶子);`code-agent-sentinel service install/uninstall/status`;`--daemon` 后台启动 flag + 跨平台 self-fork;`--log-path` 日志路径 flag + config.LogPath。
 - **资产级安全检查**:资产详情页安全检查 Modal(只配检测器,`getContainer={false}` 修 z-index);`AssetDetailPanel` 三调用点透传 agentID;agent 展示改用 Claude Code 品牌 logo(`AgentIcon`)。
 - **安全检测文案双语**(i18n)。
 
@@ -286,12 +286,12 @@
 ### 升级
 
 - **统一规则引擎**(63 条内置规则)+ **提示注入扫描**(含反混淆)+ **密钥扫描**(gitleaks)+ **依赖漏洞**(govulncheck / npm-audit)。子进程缺失时优雅降级(`unavailable`)。
-- **抑制与 baseline**:`suppressions.yaml` 静默已知 finding;`baseline.json` 快照已接受指纹(`sentinel baseline --create/--prune` 或 API)。
+- **抑制与 baseline**:`suppressions.yaml` 静默已知 finding;`baseline.json` 快照已接受指纹(`code-agent-sentinel baseline --create/--prune` 或 API)。
 - **发现层补齐**:项目根 `CLAUDE.md` 与 `CLAUDE.local.md` 发现;skill frontmatter `allowed-tools` 字段解析。
 - **检测器运行期配置**:`Enabled()` 接口与三态(已禁用/不可用/可用);`GET/PUT /api/detectors/config` 端点;设置页检测器配置 UI(启用开关 + 二进制路径,三态着色);规则详情补齐 9 字段(资产类型/修复/路径/元数据/来源等)。
 - **Dashboard 重设计**:分层看板(资产统计/检测器对齐/Top 风险/趋势图)+ 共享 `DetectorPanel`;收藏后端持久化;文件树 md/json 预览。
 - **i18n 默认英文** + 切换后刷新保留(修刷新不回退 bug,根因 `i18n.init` 显式 lng 跳过 detection);规则/检测器名双语走前端字典 `lib/i18n-names.ts`。
-- **CLI `sentinel setup`**:交互式配置 code agent。
+- **CLI `code-agent-sentinel setup`**:交互式配置 code agent。
 
 ### 修复
 

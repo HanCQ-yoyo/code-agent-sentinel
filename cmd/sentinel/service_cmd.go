@@ -14,7 +14,7 @@ import (
 	"code-agent-sentinel/internal/service"
 )
 
-// newServiceCmd 构造 `sentinel service` 父命令及其 install/uninstall/status 子命令。
+// newServiceCmd 构造 `code-agent-sentinel service` 父命令及其 install/uninstall/status 子命令。
 // install 生成单元文件 + 写 config token +(非 dry-run)调 systemctl/launchctl/sc.exe 启用;
 // uninstall/status 则 best-effort 调对应平台命令。
 func newServiceCmd() *cobra.Command {
@@ -27,7 +27,7 @@ func newServiceCmd() *cobra.Command {
 
 	install := &cobra.Command{
 		Use:   "install",
-		Short: "安装 sentinel 为系统服务并启动",
+		Short: "安装 code-agent-sentinel 为系统服务并启动",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			home, _ := os.UserHomeDir()
 			cfgPath, _ := config.DefaultPath()
@@ -47,7 +47,7 @@ func newServiceCmd() *cobra.Command {
 
 	uninstall := &cobra.Command{
 		Use:   "uninstall",
-		Short: "停止并移除 sentinel 系统服务",
+		Short: "停止并移除 code-agent-sentinel 系统服务",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runServiceUninstall(userMode)
 		},
@@ -56,7 +56,7 @@ func newServiceCmd() *cobra.Command {
 
 	status := &cobra.Command{
 		Use:   "status",
-		Short: "查看 sentinel 服务状态",
+		Short: "查看 code-agent-sentinel 服务状态",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runServiceStatus(userMode)
 		},
@@ -98,7 +98,7 @@ func runServiceInstall(opts serviceInstallOpts) (string, error) {
 	spec := service.UnitSpec{
 		OS: runtime.GOOS, UserMode: opts.UserMode, Home: opts.Home,
 		ExePath: opts.ExePath, Token: tok, Bind: cfg.Bind, Port: cfg.Port,
-		LogPath: cfg.LogPath, // Task 14:用户配置 log_path 时,单元模板 StandardOutPath/StandardOutput 指向它(否则 launchd 回退默认 sentinel.log、systemd 走 journal)
+		LogPath: cfg.LogPath, // Task 14:用户配置 log_path 时,单元模板 StandardOutPath/StandardOutput 指向它(否则 launchd 回退默认 code-agent-sentinel.log、systemd 走 journal)
 	}
 	unitPath, content, err := service.GenerateUnit(spec)
 	if err != nil {
@@ -122,15 +122,15 @@ func runServiceInstall(opts serviceInstallOpts) (string, error) {
 		// 条件构造 arg slice:UserMode 才加 --user,避免向 systemctl 传空串参数。
 		args := daemonReloadArgs(opts.UserMode)
 		exec.Command("systemctl", args...).Run()
-		exec.Command("systemctl", append(enableNowArgs(opts.UserMode), "sentinel")...).Run()
+		exec.Command("systemctl", append(enableNowArgs(opts.UserMode), "code-agent-sentinel")...).Run()
 	case "darwin":
 		exec.Command("launchctl", "load", unitPath).Run()
 	case "windows":
 		// sc.exe 的 binPath= 值须紧跟等号后(空格分隔);含空格的路径(如 Program Files)须加引号,
 		// 否则 sc.exe 按空格重切 argv 致 "syntax incorrect" 静默失败(与 service.go 生成器一致)。
 		exe := scBinPathArg(opts.ExePath)
-		exec.Command("sc.exe", "create", "sentinel", "binPath=", exe, "start=", "auto").Run()
-		exec.Command("sc.exe", "start", "sentinel").Run()
+		exec.Command("sc.exe", "create", "code-agent-sentinel", "binPath=", exe, "start=", "auto").Run()
+		exec.Command("sc.exe", "start", "code-agent-sentinel").Run()
 	}
 	return tok, nil
 }
@@ -153,7 +153,7 @@ func enableNowArgs(userMode bool) []string {
 }
 
 // scBinPathArg 构造 sc.exe create 的 binPath= 值。sc.exe 要求值紧跟 `binPath= ` 之后
-// (空格分隔),含空格的路径(如 `C:\Program Files\sentinel.exe`)须加双引号,否则
+// (空格分隔),含空格的路径(如 `C:\Program Files\code-agent-sentinel.exe`)须加双引号,否则
 // sc.exe 按空格重切 argv 致 "The syntax of the command is incorrect." 静默失败
 // (Go 的 exec 把 argv 用空格拼成命令行,裸传含空格路径等同未引用)。
 // 与 internal/service/service.go generateWindows 的 `binPath= "%s"` 行为一致。
@@ -164,30 +164,30 @@ func scBinPathArg(exePath string) string {
 	return exePath
 }
 
-// runServiceUninstall 停止并移除 sentinel 系统服务。best-effort,错误忽略。
+// runServiceUninstall 停止并移除 code-agent-sentinel 系统服务。best-effort,错误忽略。
 func runServiceUninstall(userMode bool) error {
 	switch runtime.GOOS {
 	case "linux":
 		args := stopArgs(userMode)
 		exec.Command("systemctl", args...).Run()
-		exec.Command("systemctl", append(disableArgs(userMode), "sentinel")...).Run()
+		exec.Command("systemctl", append(disableArgs(userMode), "code-agent-sentinel")...).Run()
 		var unitPath string
 		if userMode {
 			home, _ := os.UserHomeDir()
-			unitPath = filepath.Join(home, ".config", "systemd", "user", "sentinel.service")
+			unitPath = filepath.Join(home, ".config", "systemd", "user", "code-agent-sentinel.service")
 		} else {
-			unitPath = "/etc/systemd/system/sentinel.service"
+			unitPath = "/etc/systemd/system/code-agent-sentinel.service"
 		}
 		os.Remove(unitPath)
 		exec.Command("systemctl", daemonReloadArgs(userMode)...).Run()
 	case "darwin":
 		home, _ := os.UserHomeDir()
-		unitPath := filepath.Join(home, "Library", "LaunchAgents", "com.code-agent-sentinel.sentinel.plist")
+		unitPath := filepath.Join(home, "Library", "LaunchAgents", "com.code-agent-sentinel.code-agent-sentinel.plist")
 		exec.Command("launchctl", "unload", unitPath).Run()
 		os.Remove(unitPath)
 	case "windows":
-		exec.Command("sc.exe", "stop", "sentinel").Run()
-		exec.Command("sc.exe", "delete", "sentinel").Run()
+		exec.Command("sc.exe", "stop", "code-agent-sentinel").Run()
+		exec.Command("sc.exe", "delete", "code-agent-sentinel").Run()
 	}
 	return nil
 }
@@ -206,22 +206,22 @@ func disableArgs(userMode bool) []string {
 	return []string{"disable"}
 }
 
-// runServiceStatus 查询 sentinel 服务状态,stdout/stderr 直连终端。best-effort。
+// runServiceStatus 查询 code-agent-sentinel 服务状态,stdout/stderr 直连终端。best-effort。
 func runServiceStatus(userMode bool) error {
 	switch runtime.GOOS {
 	case "linux":
 		args := statusArgs(userMode)
-		cmd := exec.Command("systemctl", append(args, "sentinel")...)
+		cmd := exec.Command("systemctl", append(args, "code-agent-sentinel")...)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		cmd.Run()
 	case "darwin":
-		cmd := exec.Command("launchctl", "list", "com.code-agent-sentinel.sentinel")
+		cmd := exec.Command("launchctl", "list", "com.code-agent-sentinel.code-agent-sentinel")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		cmd.Run()
 	case "windows":
-		cmd := exec.Command("sc.exe", "query", "sentinel")
+		cmd := exec.Command("sc.exe", "query", "code-agent-sentinel")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		cmd.Run()

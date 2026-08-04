@@ -33,10 +33,31 @@ func NewEngine(home, claudeDir string) *Engine {
 // Codex 空 ClaudeJSON → nil 安全降级)。共享接口:被 discoverProjects / loadProjectRules /
 // API handlers / editor 复用,故回退保留而非删除。
 func (e *Engine) ListProjects() ([]Project, error) {
+	var projects []Project
 	if len(e.KnownProjects) > 0 {
-		return e.KnownProjects, nil
+		projects = e.KnownProjects
+	} else {
+		var err error
+		projects, err = readProjectList(e.ClaudeJSON)
+		if err != nil {
+			return nil, err
+		}
 	}
-	return readProjectList(e.ClaudeJSON)
+	return filterOutHomeDir(projects, e.HomeDir), nil
+}
+
+// filterOutHomeDir 从项目清单中剔除家目录(纯函数,可测)。
+// 家目录永远不应被当成项目,避免 ~/.codex/~/.claude 全局配置被项目级发现重复解析。
+func filterOutHomeDir(projects []Project, home string) []Project {
+	cleanHome := filepath.Clean(home)
+	out := make([]Project, 0, len(projects))
+	for _, p := range projects {
+		if filepath.Clean(p.Path) == cleanHome {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
 }
 
 // NewEngineFromAgent 用 agent 描述构造 Engine。显式拷 ClaudeJSON:Claude agent 指向 ~/.claude.json,

@@ -17,7 +17,7 @@ import (
 	"code-agent-sentinel/internal/storage"
 )
 
-// newScanCmd 构造 `sentinel scan` 子命令:一次性扫描(发现→扫描→写历史),
+// newScanCmd 构造 `code-agent-sentinel scan` 子命令:一次性扫描(发现→扫描→写历史),
 // 不启动 HTTP server。打印摘要(findings 数 / 耗时 / 健康分 / 不可用检测器)。
 func newScanCmd() *cobra.Command {
 	var cfgPath string
@@ -64,7 +64,7 @@ func runScanCmd(cmd *cobra.Command, cfgPath, detectorsFlag, agentFlag string) er
 	}
 	engAgents := configengine.AgentsFromSpecs(home, agentItems)
 	if len(engAgents) == 0 {
-		return fmt.Errorf("无启用的 code agent,运行 sentinel setup 配置")
+		return fmt.Errorf("无启用的 code agent,运行 code-agent-sentinel setup 配置")
 	}
 	// 本轮 Engine 仍取首个(Runner 内部按 agentID 池化,扫描时选)。
 	eng := configengine.NewEngineFromAgent(engAgents[0])
@@ -100,7 +100,7 @@ func runScanCmd(cmd *cobra.Command, cfgPath, detectorsFlag, agentFlag string) er
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
-	// CLI sentinel scan 始终是 global scope(全量发现+扫描)。
+	// CLI code-agent-sentinel scan 始终是 global scope(全量发现+扫描)。
 	res, err := runner.RunScan(ctx, agentFlag, scan.ScanScope{Type: "global"}, ids, "")
 	if err != nil {
 		return fmt.Errorf("扫描失败: %w", err)

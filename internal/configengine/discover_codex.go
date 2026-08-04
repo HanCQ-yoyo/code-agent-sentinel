@@ -56,10 +56,17 @@ func (e *Engine) discoverCodex() (Inventory, error) {
 // 不再借用 Claude 的 ~/.claude.json。纯 Codex 用户项目级发现照常(只要 config 登记了项目)。
 // 注意:此处直接读 e.KnownProjects,不经 ListProjects()(后者会回退 ~/.claude.json,
 // 与"Codex 不借 Claude 机器文件"目标相悖)。
+//
+// 防御:跳过项目路径等于家目录的项目(家目录下的 ~/.codex 是全局配置,已在 discoverCodex
+// 中作为全局资产发现过,不应再作为项目级资产重复出现)。
 func (e *Engine) discoverCodexProjects(inv *Inventory) {
+	cleanHome := filepath.Clean(e.HomeDir)
 	for _, p := range e.KnownProjects {
 		if !fileExists(p.Path) {
 			continue
+		}
+		if filepath.Clean(p.Path) == cleanHome {
+			continue // 家目录不是项目,跳过(防 ~/.codex 全局资产被重复发现为项目级)
 		}
 		if a := codexAgentsMDAsset(filepath.Join(p.Path, "AGENTS.md"), ScopeProject); a != nil {
 			inv.Assets = append(inv.Assets, *a)
