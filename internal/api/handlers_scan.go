@@ -87,24 +87,46 @@ func (s *Server) postScan(c *gin.Context) {
 		return hex.EncodeToString(b)
 	}()
 
-	results := make([]AgentScanResult, 0, len(agentIDs))
-	for _, aid := range agentIDs {
-		ctx, cancel := context.WithTimeout(c.Request.Context(), 5*time.Minute)
-		res, err := s.Runner.RunScan(ctx, aid, scope, ids, batchID)
-		cancel()
-		if err != nil {
-			// 单 agent 失败不中断整批:记录 error,继续下一个 agent,整体仍 200。
-			// BatchID 仍填上(同次扫描共享),前端可据此引导用户去历史查看该批次。
-			results = append(results, AgentScanResult{AgentID: aid, BatchID: batchID, Error: err.Error()})
-			continue
+	// 创建可取消的 context(独立于请求 context,避免请求结束后 ctx 被取消)
+	ctx, cancel := context.WithCancel(context.Background())
+	task := NewScanTask(batchID, agentIDs, cancel)
+	s.scanTasks.Store(batchID, task)
+
+	// 异步执行扫描
+	go func() {
+		defer func() {
+			// 5 分钟后清理
+			time.AfterFunc(5*time.Minute, func() { s.scanTasks.Delete(batchID) })
+		}()
+		results := make([]AgentScanResult, 0, len(agentIDs))
+		for i, aid := range agentIDs {
+			select {
+			case <-ctx.Done():
+				// 被取消:保留已完成的结果,标记取消
+				task.MarkCancelled()
+				return
+			default:
+			}
+			task.Update(i, aid, results)
+			scanCtx, scanCancel := context.WithTimeout(ctx, 5*time.Minute)
+			res, err := s.Runner.RunScan(scanCtx, aid, scope, ids, batchID)
+			scanCancel()
+			if err != nil {
+				results = append(results, AgentScanResult{AgentID: aid, BatchID: batchID, Error: err.Error()})
+				task.Update(i+1, aid, results)
+				continue
+			}
+			ar := AgentScanResult{AgentID: aid, BatchID: batchID, Findings: res.Findings, Count: len(res.Findings), HealthScore: res.HealthScore}
+			if res.StartedAt != (time.Time{}) {
+				ar.ScanID = res.StartedAt.Format("2006-01-02-15-04-05")
+			}
+			results = append(results, ar)
+			task.Update(i+1, aid, results)
 		}
-		ar := AgentScanResult{AgentID: aid, BatchID: batchID, Findings: res.Findings, Count: len(res.Findings), HealthScore: res.HealthScore}
-		if res.StartedAt != (time.Time{}) {
-			ar.ScanID = res.StartedAt.Format("2006-01-02-15-04-05")
-		}
-		results = append(results, ar)
-	}
-	c.JSON(http.StatusOK, results)
+		task.MarkCompleted(results)
+	}()
+
+	c.JSON(http.StatusAccepted, gin.H{"batch_id": batchID, "message": "scan started"})
 }
 
 func (s *Server) getScanResult(c *gin.Context) {
@@ -143,4 +165,46 @@ func (s *Server) agentScanEnabled(agentID string) bool {
 	}
 	// Config.Agents 无此 agent(旧配置/测试 fixture)→ 默认开扫
 	return true
+}
+
+// getScanProgress 返回指定 batch 的扫描进度。
+// GET /api/scan/progress?batch=xxx
+func (s *Server) getScanProgress(c *gin.Context) {
+	batchID := c.Query("batch")
+	if batchID == "" {
+		c.JSON(http.StatusBadRequest, errorBody("bad_request", "batch 参数必填"))
+		return
+	}
+	v, ok := s.scanTasks.Load(batchID)
+	if !ok {
+		c.JSON(http.StatusNotFound, errorBody("not_found", "扫描任务不存在或已过期"))
+		return
+	}
+	task := v.(*ScanTask)
+	snap := task.Snapshot()
+	// 已完成时附带 results(供前端弹 toast)
+	if snap.Status == "completed" || snap.Status == "cancelled" {
+		snap = task.SnapshotWithResults()
+	}
+	c.JSON(http.StatusOK, snap)
+}
+
+// cancelScan 取消指定 batch 的扫描任务。
+// POST /api/scan/cancel  body: { "batch_id": "..." }
+func (s *Server) cancelScan(c *gin.Context) {
+	var body struct {
+		BatchID string `json:"batch_id"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || body.BatchID == "" {
+		c.JSON(http.StatusBadRequest, errorBody("bad_request", "batch_id 必填"))
+		return
+	}
+	v, ok := s.scanTasks.Load(body.BatchID)
+	if !ok {
+		c.JSON(http.StatusNotFound, errorBody("not_found", "扫描任务不存在或已过期"))
+		return
+	}
+	task := v.(*ScanTask)
+	task.MarkCancelled()
+	c.JSON(http.StatusOK, gin.H{"cancelled": true})
 }

@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"path"
 	"strings"
+	"sync"
 
 	"github.com/gin-gonic/gin"
 
@@ -40,6 +41,9 @@ type Server struct {
 	// 规则库 sqlite 句柄(nil 表示不可用 → 检测器/guard 已 fail-open 回退 LoadForScan)。
 	// Task 12 起 NewServer 直接注入(main.go Task 10 曾用构造后赋值 srv.DB=db)。
 	DB *storage.DB
+
+	// 异步扫描任务追踪(内存态,key=batchID)。重启丢失,符合本地工具预期。
+	scanTasks sync.Map
 }
 
 // ScanRunner 抽象 *scan.Runner 的公共方法面,让 Server.Runner 可在测试中替换为 spy。
@@ -132,6 +136,8 @@ func (s *Server) registerRoutes(api *gin.RouterGroup) {
 	api.PUT("/favorites", s.putFavorites)
 	api.GET("/raw", s.getRaw)
 	api.POST("/scan", s.postScan)
+	api.GET("/scan/progress", s.getScanProgress)
+	api.POST("/scan/cancel", s.cancelScan)
 	api.GET("/scan/result", s.getScanResult)
 	api.GET("/findings", s.getFindings)
 	api.GET("/health", s.getHealth)

@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"code-agent-sentinel/internal/configengine"
 	"code-agent-sentinel/internal/scan"
@@ -35,6 +36,40 @@ func reqScan(t *testing.T, s *Server, method, path string, body any) *httptest.R
 	return w
 }
 
+// pollScanComplete 轮询直到扫描任务完成(completed 或 cancelled),最多等 5 秒。
+func pollScanComplete(t *testing.T, s *Server, batchID string) *ScanTaskSnapshot {
+	t.Helper()
+	for i := 0; i < 50; i++ {
+		v, ok := s.scanTasks.Load(batchID)
+		if !ok {
+			t.Fatalf("scan task %q not found in map", batchID)
+		}
+		task := v.(*ScanTask)
+		snap := task.Snapshot()
+		if snap.Status == "completed" || snap.Status == "cancelled" {
+			return &snap
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("scan task %q did not complete within 5 seconds", batchID)
+	return nil
+}
+
+// batchIDFrom202 从 POST /api/scan 的 202 响应中解析 batch_id。
+func batchIDFrom202(t *testing.T, w *httptest.ResponseRecorder) string {
+	t.Helper()
+	var body struct {
+		BatchID string `json:"batch_id"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatalf("解析 202 响应 batch_id 失败: %v, body=%s", err, w.Body.String())
+	}
+	if body.BatchID == "" {
+		t.Fatalf("202 响应应含 batch_id: %s", w.Body.String())
+	}
+	return body.BatchID
+}
+
 // TestPostScanPassesAgentQuery 验证 postScan 读 ?agent= 并传给 RunScan。
 // 用 spyRunner 替换 s.Runner,断言收到的 agentID 与 query 一致。
 func TestPostScanPassesAgentQuery(t *testing.T) {
@@ -43,9 +78,11 @@ func TestPostScanPassesAgentQuery(t *testing.T) {
 	spy := &spyRunner{}
 	s.Runner = spy
 	w := reqScan(t, s, "POST", "/api/scan?agent=claude-code", nil)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status: %d %s", w.Code, w.Body.String())
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("异步扫描应返回 202: got %d %s", w.Code, w.Body.String())
 	}
+	batchID := batchIDFrom202(t, w)
+	pollScanComplete(t, s, batchID)
 	if spy.lastAgentID != "claude-code" {
 		t.Errorf("应传 agent=claude-code: got %q", spy.lastAgentID)
 	}
@@ -86,17 +123,21 @@ func TestPostScanScopeQuery(t *testing.T) {
 	s.Runner = spy
 	// scope=project&path=/p
 	w := reqScan(t, s, "POST", "/api/scan?agent=claude-code&scope=project&path=/p", nil)
-	if w.Code != http.StatusOK {
+	if w.Code != http.StatusAccepted {
 		t.Fatalf("got %d %s", w.Code, w.Body)
 	}
+	batchID := batchIDFrom202(t, w)
+	pollScanComplete(t, s, batchID)
 	if spy.lastScope.Type != "project" || spy.lastScope.Path != "/p" {
 		t.Errorf("scope 应为 project /p: got %+v", spy.lastScope)
 	}
 	// 无 scope → global
 	w2 := reqScan(t, s, "POST", "/api/scan", nil)
-	if w2.Code != http.StatusOK {
+	if w2.Code != http.StatusAccepted {
 		t.Fatalf("got %d", w2.Code)
 	}
+	batchID2 := batchIDFrom202(t, w2)
+	pollScanComplete(t, s, batchID2)
 	if spy.lastScope.Type != "global" {
 		t.Errorf("无 scope 应为 global: got %+v", spy.lastScope)
 	}
@@ -123,17 +164,23 @@ func TestPostScan(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer tok")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	if w.Code != 200 {
-		t.Fatalf("got %d: %s", w.Code, w.Body)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("异步扫描应返回 202: got %d: %s", w.Code, w.Body)
 	}
-	// 新响应格式为 []AgentScanResult(多 agent 循环扫描);无参数单 agent 场景返回 1 元素数组。
-	// 解码数组后取首元素验证 ScanResult 字段。
-	var results []AgentScanResult
-	json.Unmarshal(w.Body.Bytes(), &results)
-	if len(results) != 1 {
-		t.Fatalf("无参数单 agent 应返回 1 条结果: got %d", len(results))
+	batchID := batchIDFrom202(t, w)
+	// 轮询等待扫描完成
+	snap := pollScanComplete(t, s, batchID)
+	if snap.Status != "completed" {
+		t.Fatalf("扫描应完成: got status=%q", snap.Status)
 	}
-	res := results[0]
+	// 验证 results 包含 findings
+	v, _ := s.scanTasks.Load(batchID)
+	task := v.(*ScanTask)
+	fullSnap := task.SnapshotWithResults()
+	if len(fullSnap.Results) != 1 {
+		t.Fatalf("无参数单 agent 应返回 1 条结果: got %d", len(fullSnap.Results))
+	}
+	res := fullSnap.Results[0]
 	if len(res.Findings) == 0 {
 		t.Error("应检出通配 Bash")
 	}
@@ -153,15 +200,17 @@ func TestGetScanResultRestoresLatest(t *testing.T) {
 	writeFile(t, filepath.Join(claude, "settings.json"), `{"model":"opus"}`)
 	s := newTestServer(t, dir)
 	r := s.Router()
-	// 先扫描一次
+	// 先扫描一次(异步)
 	req := httptest.NewRequest("POST", "/api/scan", nil)
 	req.Host = "127.0.0.1"
 	req.Header.Set("Authorization", "Bearer tok")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	if w.Code != 200 {
+	if w.Code != http.StatusAccepted {
 		t.Fatalf("scan got %d", w.Code)
 	}
+	batchID := batchIDFrom202(t, w)
+	pollScanComplete(t, s, batchID)
 	// GET /scan/result 应返回最近一条(非空 {})
 	greq := httptest.NewRequest("GET", "/api/scan/result", nil)
 	greq.Host = "127.0.0.1"
@@ -182,8 +231,13 @@ func TestHistoryRoutes(t *testing.T) {
 	claude := filepath.Join(dir, ".claude")
 	writeFile(t, filepath.Join(claude, "settings.json"), `{"permissions":{"allow":["Bash(*)"]}}`)
 	s := newTestServer(t, dir)
-	// 扫描产生一条历史
-	doJSON[map[string]any](t, s, "POST", "/api/scan")
+	// 扫描产生一条历史(异步)
+	w := reqScan(t, s, "POST", "/api/scan", nil)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("scan got %d: %s", w.Code, w.Body)
+	}
+	batchID := batchIDFrom202(t, w)
+	pollScanComplete(t, s, batchID)
 
 	list := doJSON[[]map[string]any](t, s, "GET", "/api/history")
 	if len(list) != 1 {
@@ -246,9 +300,11 @@ func TestSaveHistoryProjects(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer tok")
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
-	if w.Code != 200 {
+	if w.Code != http.StatusAccepted {
 		t.Fatalf("scan got %d: %s", w.Code, w.Body)
 	}
+	batchID := batchIDFrom202(t, w)
+	pollScanComplete(t, s, batchID)
 	// 取历史详情,断言 projects 非空
 	req2 := httptest.NewRequest("GET", "/api/history", nil)
 	req2.Host = "127.0.0.1"
@@ -289,20 +345,24 @@ func TestPostScanNewScopes(t *testing.T) {
 	spy := &spyRunner{}
 	s.Runner = spy
 
-	// scope=user → 200,scope.Type == "user",Path 空。
+	// scope=user → 202,scope.Type == "user",Path 空。
 	w := reqScan(t, s, "POST", "/api/scan?agent=claude-code&scope=user", nil)
-	if w.Code != http.StatusOK {
-		t.Fatalf("user scope 应 200: got %d %s", w.Code, w.Body)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("user scope 应 202: got %d %s", w.Code, w.Body)
 	}
+	batchID := batchIDFrom202(t, w)
+	pollScanComplete(t, s, batchID)
 	if spy.lastScope.Type != "user" || spy.lastScope.Path != "" {
 		t.Errorf("user scope 透传错误: got %+v", spy.lastScope)
 	}
 
-	// scope=asset-id&path=<id> → 200,scope.Type == "asset-id",Path == id。
+	// scope=asset-id&path=<id> → 202,scope.Type == "asset-id",Path == id。
 	w2 := reqScan(t, s, "POST", "/api/scan?agent=claude-code&scope=asset-id&path=abc123", nil)
-	if w2.Code != http.StatusOK {
-		t.Fatalf("asset-id scope 应 200: got %d %s", w2.Code, w2.Body)
+	if w2.Code != http.StatusAccepted {
+		t.Fatalf("asset-id scope 应 202: got %d %s", w2.Code, w2.Body)
 	}
+	batchID2 := batchIDFrom202(t, w2)
+	pollScanComplete(t, s, batchID2)
 	if spy.lastScope.Type != "asset-id" || spy.lastScope.Path != "abc123" {
 		t.Errorf("asset-id scope 透传错误: got %+v", spy.lastScope)
 	}
@@ -323,9 +383,11 @@ func TestPostScanMultiAgents(t *testing.T) {
 	spy := &spyRunner{}
 	s.Runner = spy
 	w := reqScan(t, s, "POST", "/api/scan?agents=a,b", nil)
-	if w.Code != http.StatusOK {
-		t.Fatalf("status: %d %s", w.Code, w.Body.String())
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("异步扫描应返回 202: got %d %s", w.Code, w.Body.String())
 	}
+	batchID := batchIDFrom202(t, w)
+	pollScanComplete(t, s, batchID)
 	if spy.callCount != 2 {
 		t.Errorf("应调 2 次 RunScan: got %d", spy.callCount)
 	}
@@ -333,11 +395,12 @@ func TestPostScanMultiAgents(t *testing.T) {
 	if len(spy.batchIDs) == 2 && spy.batchIDs[0] != spy.batchIDs[1] {
 		t.Errorf("多 agent 应共享 batchID: got %q vs %q", spy.batchIDs[0], spy.batchIDs[1])
 	}
-	// 响应是数组,长度 2
-	var results []AgentScanResult
-	json.NewDecoder(w.Body).Decode(&results)
-	if len(results) != 2 {
-		t.Errorf("应返回 2 条结果: got %d", len(results))
+	// 从 task 获取 results,长度应为 2
+	v, _ := s.scanTasks.Load(batchID)
+	task := v.(*ScanTask)
+	fullSnap := task.SnapshotWithResults()
+	if len(fullSnap.Results) != 2 {
+		t.Errorf("应返回 2 条结果: got %d", len(fullSnap.Results))
 	}
 }
 
@@ -349,15 +412,18 @@ func TestPostScanMultiAgents_OneFails(t *testing.T) {
 	spy := &spyRunner{failOnAgent: "b"}
 	s.Runner = spy
 	w := reqScan(t, s, "POST", "/api/scan?agents=a,b", nil)
-	if w.Code != http.StatusOK {
-		t.Fatalf("部分失败仍应 200: %d", w.Code)
+	if w.Code != http.StatusAccepted {
+		t.Fatalf("异步扫描应返回 202: %d", w.Code)
 	}
-	var results []AgentScanResult
-	json.NewDecoder(w.Body).Decode(&results)
-	if len(results) != 2 {
-		t.Fatalf("应返回 2 条结果: got %d", len(results))
+	batchID := batchIDFrom202(t, w)
+	pollScanComplete(t, s, batchID)
+	v, _ := s.scanTasks.Load(batchID)
+	task := v.(*ScanTask)
+	fullSnap := task.SnapshotWithResults()
+	if len(fullSnap.Results) != 2 {
+		t.Fatalf("应返回 2 条结果: got %d", len(fullSnap.Results))
 	}
-	for _, r := range results {
+	for _, r := range fullSnap.Results {
 		if r.AgentID == "b" && r.Error == "" {
 			t.Error("b 应有 error")
 		}

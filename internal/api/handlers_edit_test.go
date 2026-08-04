@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"net/http"
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
@@ -240,9 +241,11 @@ func TestPartialRescanDedup(t *testing.T) {
 	scanReq.Header.Set("Authorization", "Bearer tok")
 	scanW := httptest.NewRecorder()
 	r.ServeHTTP(scanW, scanReq)
-	if scanW.Code != 200 {
+	if scanW.Code != http.StatusAccepted {
 		t.Fatalf("POST /api/scan: got %d: %s", scanW.Code, scanW.Body)
 	}
+	batchID := batchIDFrom202(t, scanW)
+	pollScanComplete(t, s, batchID)
 	latest := s.latestScan("")
 	if latest == nil {
 		t.Fatal("latestScan() nil after POST /api/scan")
@@ -312,9 +315,11 @@ func TestPartialRescanDedupSettingsEdit(t *testing.T) {
 	scanReq.Header.Set("Authorization", "Bearer tok")
 	scanW := httptest.NewRecorder()
 	r.ServeHTTP(scanW, scanReq)
-	if scanW.Code != 200 {
+	if scanW.Code != http.StatusAccepted {
 		t.Fatalf("POST /api/scan: got %d: %s", scanW.Code, scanW.Body)
 	}
+	batchID := batchIDFrom202(t, scanW)
+	pollScanComplete(t, s, batchID)
 	latest := s.latestScan("")
 	if latest == nil || len(latest.Findings) == 0 {
 		t.Fatal("expected baseline findings in latest scan")
@@ -449,9 +454,11 @@ func TestPartialRescanUsesRunnerAgent(t *testing.T) {
 	scanReq.Header.Set("Authorization", "Bearer tok")
 	scanW := httptest.NewRecorder()
 	r.ServeHTTP(scanW, scanReq)
-	if scanW.Code != 200 {
+	if scanW.Code != http.StatusAccepted {
 		t.Fatalf("POST /api/scan: got %d: %s", scanW.Code, scanW.Body)
 	}
+	batchID := batchIDFrom202(t, scanW)
+	pollScanComplete(t, s, batchID)
 	latest := s.latestScan("")
 	if latest == nil {
 		t.Fatal("latestScan() nil after POST /api/scan")
@@ -533,9 +540,11 @@ func TestPartialRescanDedupPerAgent(t *testing.T) {
 	scanA.Header.Set("Authorization", "Bearer tok")
 	wA := httptest.NewRecorder()
 	r.ServeHTTP(wA, scanA)
-	if wA.Code != 200 {
+	if wA.Code != http.StatusAccepted {
 		t.Fatalf("POST /api/scan?agent=a: got %d: %s", wA.Code, wA.Body)
 	}
+	batchA := batchIDFrom202(t, wA)
+	pollScanComplete(t, s, batchA)
 
 	// 2. 对 b 跑 global 扫描(使 latestScan("b") 非 nil,含 Read(**) finding)。
 	scanB := httptest.NewRequest("POST", "/api/scan?agent=b", nil)
@@ -543,9 +552,11 @@ func TestPartialRescanDedupPerAgent(t *testing.T) {
 	scanB.Header.Set("Authorization", "Bearer tok")
 	wB := httptest.NewRecorder()
 	r.ServeHTTP(wB, scanB)
-	if wB.Code != 200 {
+	if wB.Code != http.StatusAccepted {
 		t.Fatalf("POST /api/scan?agent=b: got %d: %s", wB.Code, wB.Body)
 	}
+	batchB := batchIDFrom202(t, wB)
+	pollScanComplete(t, s, batchB)
 	latestB := s.latestScan("b")
 	if latestB == nil {
 		t.Fatal("latestScan(\"b\") nil after POST /api/scan?agent=b")

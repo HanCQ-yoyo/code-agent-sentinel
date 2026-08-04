@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -49,8 +50,20 @@ func TestPostScanEmptyAgentFallsBack(t *testing.T) {
 	spy := &spyRunner{}
 	s.Runner = spy
 	w := reqScan(t, s, "POST", "/api/scan", nil)
-	if w.Code != http.StatusOK {
+	if w.Code != http.StatusAccepted {
 		t.Fatalf("空 agent 应回退首 agent: got %d %s", w.Code, w.Body)
+	}
+	var body struct {
+		BatchID string `json:"batch_id"`
+	}
+	json.Unmarshal(w.Body.Bytes(), &body)
+	if body.BatchID == "" {
+		t.Fatalf("202 响应应含 batch_id: %s", w.Body)
+	}
+	pollScanComplete(t, s, body.BatchID)
+	// 验证 spy 被调用(agent 回退生效)
+	if spy.callCount == 0 {
+		t.Error("扫描未执行,agent 回退失败")
 	}
 }
 
