@@ -29,6 +29,9 @@ func NewAllowlistStore(db *storage.DB) *AllowlistStore {
 
 // Load 读取放行清单。db 为 nil 或表空时返回空切片(nil 安全,非 error)。
 func (s *AllowlistStore) Load() ([]string, error) {
+	if s.db == nil {
+		return []string{}, nil
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	rows, err := storage.ListAllowlist(s.db)

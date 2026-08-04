@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -57,6 +58,7 @@ type State struct {
 // 持久化模型:Set/Remove/BulkAccept 在 db 非 nil 时立即写 db,调用方无需调额外
 // 的 Save() 方法。Save(path) 保留仅用于 MigrateFromLegacy(YAML 迁移路径)。
 type States struct {
+	mu    sync.RWMutex
 	db    *storage.DB
 	Items []State `yaml:"items"`
 }
@@ -125,11 +127,8 @@ func (s *States) Save(path string) error {
 	return nil
 }
 
-// Match 按 fingerprint 查找处置状态。命中返回 (state, true);nil 接收者或未命中返回 (zero, false)。
-func (s *States) Match(fp string) (State, bool) {
-	if s == nil {
-		return State{}, false
-	}
+// matchUnlocked 是 Match 的无锁内部版本,调用方必须先持有 s.mu(RLock 或 Lock)。
+func (s *States) matchUnlocked(fp string) (State, bool) {
 	for _, item := range s.Items {
 		if item.Fingerprint == fp {
 			return item, true
@@ -138,9 +137,18 @@ func (s *States) Match(fp string) (State, bool) {
 	return State{}, false
 }
 
-// Set 插入或更新(upsert)一条处置状态:同步写 db 和内存副本。
-// db 为 nil 时仅写内存(兼容未注入 db 的旧调用路径)。
-func (s *States) Set(fp string, st State) {
+// Match 按 fingerprint 查找处置状态。命中返回 (state, true);nil 接收者或未命中返回 (zero, false)。
+func (s *States) Match(fp string) (State, bool) {
+	if s == nil {
+		return State{}, false
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.matchUnlocked(fp)
+}
+
+// setUnlocked 是 Set 的无锁内部版本,调用方必须先持有 s.mu.Lock。
+func (s *States) setUnlocked(fp string, st State) {
 	st.Fingerprint = fp
 	if st.UpdatedAt == "" {
 		st.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
@@ -159,20 +167,32 @@ func (s *States) Set(fp string, st State) {
 	s.Items = append(s.Items, st)
 }
 
+// Set 插入或更新(upsert)一条处置状态:同步写 db 和内存副本。
+// db 为 nil 时仅写内存(兼容未注入 db 的旧调用路径)。
+func (s *States) Set(fp string, st State) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.setUnlocked(fp, st)
+}
+
 // BulkAccept 批量将给定 fingerprint 标为 accepted(若当前为 open 或不存在)。
 // 已有非 open 状态(resolved/false_positive/accepted/in_progress)不覆盖,尊重既有处置。
 func (s *States) BulkAccept(fps []string, source Source, updatedAt string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	for _, fp := range fps {
-		if existing, ok := s.Match(fp); ok && existing.Status != StatusOpen && existing.Status != "" {
+		if existing, ok := s.matchUnlocked(fp); ok && existing.Status != StatusOpen && existing.Status != "" {
 			continue
 		}
-		s.Set(fp, State{Status: StatusAccepted, Source: source, UpdatedAt: updatedAt})
+		s.setUnlocked(fp, State{Status: StatusAccepted, Source: source, UpdatedAt: updatedAt})
 	}
 }
 
 // PruneReport 返回"已处置但本轮未检出"的孤儿状态(不删除原记录)。
 // activeFps 是本轮扫描实际检出的 fingerprint 集合。
 func (s *States) PruneReport(activeFps []string) []State {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
 	active := make(map[string]bool, len(activeFps))
 	for _, fp := range activeFps {
 		active[fp] = true
@@ -189,6 +209,8 @@ func (s *States) PruneReport(activeFps []string) []State {
 // Remove 删除一条处置状态:同步删 db 和内存。存在并删除返回 true,不存在返回 false。
 // db 为 nil 时仅删内存。
 func (s *States) Remove(fp string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 	// 删 db(nil-safe)
 	if s.db != nil {
 		deleted, _ := storage.DeleteFindingState(s.db, fp)
