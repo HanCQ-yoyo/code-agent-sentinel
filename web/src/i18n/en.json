@@ -5,7 +5,7 @@
     "sub.scanRules": "Scan Rules",
     "sub.interceptRules": "Intercept Rules"
   },
-  "topbar": { "rescan": "Security Scan", "scanning": "Scanning…", "language": "Language", "theme": "Theme", "leafAsset": "Asset Details", "leafScan": "Scan Details", "dark": "Dark", "light": "Light" },
+  "topbar": { "rescan": "Security Scan", "scanning": "Scanning…", "scanProgress": "Scanning {{current}} ({{completed}}/{{total}})", "cancelScan": "Cancel Scan", "language": "Language", "theme": "Theme", "leafAsset": "Asset Details", "leafScan": "Scan Details", "dark": "Dark", "light": "Light" },
   "rescan": {
     "title": "Security Scan Config",
     "scope": "Scan Scope",
@@ -124,6 +124,15 @@
     "batchAgentsCount": "{{count}} agents in this batch",
     "singleAgentHint": "Single agent scan",
     "batchSiblings": "Other agents in this batch"
+  },
+  "guardCapsule": {
+    "capsuleOn": "Intercept: ON",
+    "capsuleOff": "Intercept: OFF",
+    "capsuleToggling": "Intercept: ...",
+    "confirmOff": "Disable intercept protection? Destructive commands will not be blocked.",
+    "confirmOk": "Disable",
+    "toastOn": "Intercept protection enabled",
+    "toastOff": "Intercept protection disabled"
   },
   "intercept": {
     "title": "Intercept Log",

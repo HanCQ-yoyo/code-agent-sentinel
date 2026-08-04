@@ -5,7 +5,7 @@
     "sub.scanRules": "扫描规则",
     "sub.interceptRules": "拦截规则"
   },
-  "topbar": { "rescan": "安全扫描", "scanning": "扫描中…", "language": "语言", "theme": "主题", "leafAsset": "资产详情", "leafScan": "扫描详情", "dark": "深", "light": "浅" },
+  "topbar": { "rescan": "安全扫描", "scanning": "扫描中…", "scanProgress": "正在扫描 {{current}} ({{completed}}/{{total}})", "cancelScan": "取消扫描", "language": "语言", "theme": "主题", "leafAsset": "资产详情", "leafScan": "扫描详情", "dark": "深", "light": "浅" },
   "rescan": {
     "title": "安全扫描配置",
     "scope": "扫描范围",
@@ -124,6 +124,15 @@
     "batchAgentsCount": "本批次共 {{count}} 个 Agent",
     "singleAgentHint": "单 Agent 扫描",
     "batchSiblings": "批次内其他 Agent"
+  },
+  "guardCapsule": {
+    "capsuleOn": "拦截: 开",
+    "capsuleOff": "拦截: 关",
+    "capsuleToggling": "拦截: ...",
+    "confirmOff": "关闭拦截防护？关闭后危险指令将不被拦截。",
+    "confirmOk": "确认关闭",
+    "toastOn": "拦截防护已开启",
+    "toastOff": "拦截防护已关闭"
   },
   "intercept": {
     "title": "拦截记录",
