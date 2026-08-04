@@ -1,5 +1,5 @@
 import { useState, type HTMLAttributes } from 'react'
-import { Card, Table, Segmented, Typography, Empty, Tooltip, Tag, Select, Space, Button } from 'antd'
+import { Card, Table, Segmented, Typography, Empty, Tooltip, Tag, Select, Space } from 'antd'
 import { useTranslation } from 'react-i18next'
 import type { ColumnsType } from 'antd/es/table'
 import type { Finding, Severity, DetectorMeta } from '../types'
@@ -9,6 +9,7 @@ import { formatDateTime } from '../lib/format'
 import { ruleNameById } from '../lib/i18n-names'
 import { agentMetaById } from '../lib/agents'
 import { AgentIcon } from './AgentIcon'
+import { DisposalNowIcon, DisposedIcon } from './DispositionIcon'
 import { ASSET_TYPE_META } from '../lib/assetTypes'
 
 // 筛选标签内的色点颜色(复用 sev token);「全部」用 accent。
@@ -156,11 +157,17 @@ export function FindingTable({ findings, startedAt, detectors, onSelect, onDispo
       ),
     },
     {
-      title: t('findingTable.colAction', { defaultValue: '操作' }), width: 110, render: (_: unknown, f: Finding) => (
-        <Button size="small" onClick={(e) => { e.stopPropagation(); onDispose?.(f) }}>
-          {f.status && f.status !== 'open' ? t('findingDrawer.disposed', { defaultValue: '已处置' }) : t('findingDrawer.disposeNow', { defaultValue: '立即处置' })}
-        </Button>
-      ),
+      title: t('findingTable.colAction', { defaultValue: '操作' }), width: 70, render: (_: unknown, f: Finding) => {
+        const isDisposed = f.status && f.status !== 'open'
+        const label = isDisposed ? t('findingDrawer.disposed', { defaultValue: '已处置' }) : t('findingDrawer.disposeNow', { defaultValue: '立即处置' })
+        return (
+          <Tooltip title={label}>
+            <span onClick={(e) => { e.stopPropagation(); onDispose?.(f) }} style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center' }}>
+              {isDisposed ? <DisposedIcon size={24} /> : <DisposalNowIcon size={20} />}
+            </span>
+          </Tooltip>
+        )
+      },
     },
   ]
 

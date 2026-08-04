@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Drawer, Descriptions, Typography, Alert, Spin, Empty, Modal, Input, Button, Space, Tag, message } from 'antd'
+import { Drawer, Descriptions, Typography, Alert, Spin, Empty, Modal, Input, Button, Space, Tag, Tooltip, message } from 'antd'
 import { useTranslation } from 'react-i18next'
 import type { Finding, DetectorMeta, Asset } from '../types'
 import { apiGet } from '../api/client'
 import { useStore } from '../store'
 import { useTheme } from '../theme'
 import { Badge as SevBadge, type BadgeTone } from './Badge'
+import { DisposalNowIcon, DisposedIcon } from './DispositionIcon'
 import { ContentArea } from './ContentArea'
 import { relativeClaudePath } from '../lib/path'
 import { formatDateTime } from '../lib/format'
@@ -199,9 +200,11 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
           {/* Task 9:「立即处置」按钮(有 fingerprint 才显示)。已处置(status≠open)显示「已处置」文案,
               否则「立即处置」。点击打开 DispositionModal(底部 key={finding.fingerprint} 重挂载保证 state 重置)。 */}
           {finding.fingerprint ? (
-            <Button type="primary" onClick={() => setDisposeOpen(true)} style={{ marginBottom: 12, alignSelf: 'flex-start' }}>
-              {finding.status && finding.status !== 'open' ? t('findingDrawer.disposed') : t('findingDrawer.disposeNow')}
-            </Button>
+            <Tooltip title={finding.status && finding.status !== 'open' ? t('findingDrawer.disposed') : t('findingDrawer.disposeNow')}>
+              <span onClick={() => setDisposeOpen(true)} style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', marginBottom: 12, alignSelf: 'flex-start' }}>
+                {finding.status && finding.status !== 'open' ? <DisposedIcon size={24} /> : <DisposalNowIcon size={20} />}
+              </span>
+            </Tooltip>
           ) : null}
           {/* #9:label 列定宽 120 + nowrap,值列 word-break,table-layout:fixed 防止标签长短不一导致值列错位。
               className + index.css 的 .risk-desc table 规则为兜底(antd Descriptions 包 div,inline style 不一定生效)。 */}
