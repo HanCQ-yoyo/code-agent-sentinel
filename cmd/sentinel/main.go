@@ -68,7 +68,7 @@ func newRootCmd() *cobra.Command {
 	// Task 3:--claude-dir 覆盖 cfg.ResolveClaudeDir(home);空走配置/默认回退。
 	cmd.Flags().StringVar(&claudeDirFlag, "claude-dir", "", ".claude 目录绝对路径(默认 home/.claude)")
 	// Task 14:--log-path 覆盖 cfg.LogPath;空走配置/默认 stderr。
-	// service install 生成的单元文件带此 flag 指向 sentinel.log。
+	// service install 生成的单元文件带此 flag 指向 code-agent-sentinel.log。
 	cmd.Flags().StringVar(&logPathFlag, "log-path", "", "日志文件路径(默认 stderr)")
 	// Task 15:--daemon 后台启动(脱离终端)。父进程 fork 子进程后立即退出,
 	// 子进程继续服务(--daemon-child 标记,防重复 fork)。

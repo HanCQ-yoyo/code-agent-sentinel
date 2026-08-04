@@ -58,7 +58,7 @@ type Config struct {
 	Token string `yaml:"token"`
 	// Task 14:日志文件路径。空=stderr(默认,前台交互场景)。
 	// --log-path flag > config.LogPath > 默认 stderr,run() 里统一解析。
-	// service install 生成的单元文件带 --log-path 指向 <home>/.code-agent-sentinel/sentinel.log,
+	// service install 生成的单元文件带 --log-path 指向 <home>/.code-agent-sentinel/code-agent-sentinel.log,
 	// 亦允许用户在此显式配置自定义路径覆盖单元默认。
 	LogPath string `yaml:"log_path" json:"log_path"`
 	// #4:置顶项目列表

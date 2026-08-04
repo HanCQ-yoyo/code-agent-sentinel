@@ -119,7 +119,7 @@ func runGuard(stdin io.Reader, stdout, stderr io.Writer, cfg *config.Config, hom
 		return nil // 无命令 → allow
 	}
 
-	// ② 递归短路:sentinel guard 自身 → allow(防 parse_hooks 资产化递归)
+	// ② 递归短路:code-agent-sentinel guard 自身 → allow(防 parse_hooks 资产化递归)
 	if isSelfGuardCommand(cmd) {
 		if debug {
 			fmt.Fprintf(stderr, "recursive short-circuit: %q\n", cmd)
@@ -510,7 +510,7 @@ func domainMatch(domain string, sem semantics.SemanticResult) bool {
 	return strings.HasPrefix(sem.RuleID, domain+".") || strings.HasPrefix(domain, sem.RuleID)
 }
 
-// isSelfGuardCommand 判断命令是否是 sentinel guard 自身(递归短路)。
+// isSelfGuardCommand 判断命令是否是 code-agent-sentinel guard 自身(递归短路)。
 func isSelfGuardCommand(cmd string) bool {
 	c := strings.TrimSpace(strings.ToLower(cmd))
 	return strings.HasPrefix(c, "code-agent-sentinel guard") || strings.Contains(c, " code-agent-sentinel guard")
