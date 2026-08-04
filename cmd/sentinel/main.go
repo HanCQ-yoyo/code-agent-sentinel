@@ -118,6 +118,18 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 		}
 		cfgPath = p
 	}
+
+	// 配置目录不存在 → 自动拉起 setup TUI
+	if needsSetup(filepath.Dir(cfgPath)) {
+		fmt.Println("首次运行：配置目录不存在，自动进入交互式配置...")
+		exe, err := os.Executable()
+		if err != nil {
+			return fmt.Errorf("无法定位二进制: %w", err)
+		}
+		// syscall.Exec 替换当前进程为 setup 子命令（保留 TTY 交互）
+		return syscall.Exec(exe, []string{exe, "setup"}, os.Environ())
+	}
+
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		return err
@@ -373,6 +385,12 @@ func serveHTTP(ln net.Listener, srv *http.Server, stop func(), shutdownTrigger <
 	}
 	stop()
 	return nil
+}
+
+// needsSetup 检查配置目录是否存在。独立函数便于测试（不依赖 run() 的复杂依赖）。
+func needsSetup(cfgDir string) bool {
+	_, err := os.Stat(cfgDir)
+	return os.IsNotExist(err)
 }
 
 // shouldPromptSetup 判断是否提示运行 setup:Agents 空 且 ClaudeDir 空 且 默认 ~/.claude 不存在。

@@ -235,6 +235,19 @@ func TestDaemonChildFlagHidden(t *testing.T) {
 	}
 }
 
+// TestNeedsSetup 验证 Task 5:needsSetup 在目录不存在时返回 true,存在时返回 false。
+func TestNeedsSetup(t *testing.T) {
+	home := t.TempDir()
+	cfgDir := filepath.Join(home, ".code-agent-sentinel")
+	if needsSetup(cfgDir) != true {
+		t.Error("空目录应触发 auto-setup")
+	}
+	os.MkdirAll(cfgDir, 0o700)
+	if needsSetup(cfgDir) != false {
+		t.Error("已存在目录不应触发 auto-setup")
+	}
+}
+
 // TestDaemonizeChild 验证 Task 15:--daemon-child 在 os.Args 中时,daemonize() 返回
 // (true, nil)——当前进程是子进程,不再 fork(防递归)。只测 guard 路径,
 // 不测真实 fork(真实 fork 会启动 sentinel 服务,属集成测试范畴)。
