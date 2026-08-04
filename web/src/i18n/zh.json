@@ -548,6 +548,7 @@
     "prioAll": "全部优先级",
     "typeAll": "全部类型",
     "hits": "命中",
+    "totalCount": "共 {{count}} 条风险",
     "status": {
       "open": "未处置",
       "in_progress": "处置中",

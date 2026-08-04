@@ -548,6 +548,7 @@
     "prioAll": "All Priorities",
     "typeAll": "All Types",
     "hits": "hits",
+    "totalCount": "{{count}} findings total",
     "status": {
       "open": "Open",
       "in_progress": "In Progress",

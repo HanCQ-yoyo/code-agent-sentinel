@@ -226,7 +226,13 @@ export function FindingTable({ findings, startedAt, detectors, onSelect, onDispo
         <Table
           rowKey={([ruleId]) => ruleId}
           dataSource={grouped}
-          pagination={false}
+          pagination={{
+            defaultPageSize: 20,
+            showSizeChanger: true,
+            pageSizeOptions: ['10', '20', '50', '100'],
+            showTotal: (total: number) => t('findingTable.totalCount', { count: total }),
+            size: 'small',
+          }}
           size="middle"
           columns={[
             {
@@ -267,7 +273,13 @@ export function FindingTable({ findings, startedAt, detectors, onSelect, onDispo
         rowKey={(_f, i) => String(i)}
         columns={columns}
         dataSource={sorted}
-        pagination={false}
+        pagination={{
+          defaultPageSize: 20,
+          showSizeChanger: true,
+          pageSizeOptions: ['10', '20', '50', '100'],
+          showTotal: (total: number) => t('findingTable.totalCount', { count: total }),
+          size: 'small',
+        }}
         size="middle"
         // 行点击打开抽屉;保留 finding-row testid(e2e [data-testid="finding-row"] 硬约束)。
         // onClick 经 onRow 注入;data-testid 同理(参考 AssetTable onRow 模式)。
