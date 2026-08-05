@@ -77,10 +77,9 @@ func (s *Server) putSettings(c *gin.Context) {
 		"claude_dir":    s.Config.ClaudeDir,
 		"discovery":     s.Config.Discovery,
 	}
-	if interval, enabled := s.schedPrefs("claude-code"); true {
-		resp["scan_interval"] = interval
-		resp["scan_enabled"] = enabled
-	}
+	interval, enabled := s.schedPrefs("claude-code")
+	resp["scan_interval"] = interval
+	resp["scan_enabled"] = enabled
 	if len(warnings) > 0 {
 		resp["warnings"] = warnings
 	}
@@ -110,9 +109,14 @@ func (s *Server) schedPrefs(agentID string) (interval string, enabled bool) {
 	return "0s", false
 }
 
-// applyScanToggle 传播 ScheduleManager 暂停状态(nil store → 全开)。
+// applyScanToggle 传播 ScheduleManager 暂停状态。
+// nil store → 不暂停(fail-open:存储故障不阻断扫描)。
 func (s *Server) applyScanToggle() {
 	if s.ScheduleManager == nil {
+		return
+	}
+	if s.SchedRepo == nil {
+		s.ScheduleManager.SetPaused(false) // fail-open:存储不可用时保持扫描运行
 		return
 	}
 	_, enabled := s.schedPrefs("claude-code")

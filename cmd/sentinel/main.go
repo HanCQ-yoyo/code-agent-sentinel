@@ -292,6 +292,11 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	srv.ConfigPath = cfgPath
 	srv.Intercept = istore
 	srv.Allowlist = allowlist
+	// 注入 SQLite 持久化 store(db nil 时 store 内部 nil-db 守卫,handler 侧 nil-store 守卫兜底)。
+	if db != nil {
+		srv.UserPrefs = config.NewUserPrefsStore(db)
+		srv.SchedRepo = config.NewScheduleRepo(db)
+	}
 	// 多任务调度:每 agent 一个 Scheduler,Manager 增量同步。
 	// makeRun 按 agentID 闭包 srv.Runner.RunScan(内部 EngineFor 按 agentID 池化选 Engine)。
 	mgr := scheduler.NewManager(func(agentID string) func(context.Context) error {
@@ -302,7 +307,13 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 		}
 	})
 	srv.ScheduleManager = mgr
-	mgr.Apply(nil)
+	// 启动时从持久化存储加载调度配置(nil store → 空切片,与旧 mgr.Apply(nil) 行为一致)。
+	if srv.SchedRepo != nil {
+		scs, _ := srv.SchedRepo.List()
+		mgr.Apply(scs)
+	} else {
+		mgr.Apply(nil)
+	}
 	// defer mgr.Stop 作为所有返回路径(Listen 失败 / Serve 返回)的兜底。
 	// serveHTTP 的 stop 回调也调 mgr.Stop——双重调用安全:Manager.Stop 幂等
 	// (遍历 runners 后置空 map,二次调用遍历空 map = no-op;Scheduler.Stop 亦由

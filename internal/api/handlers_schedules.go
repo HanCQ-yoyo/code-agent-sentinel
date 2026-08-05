@@ -64,20 +64,20 @@ func (s *Server) postSchedule(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errorBody("bad_interval", "interval 无效: "+b.Interval))
 		return
 	}
+	if s.SchedRepo == nil {
+		c.JSON(http.StatusServiceUnavailable, errorBody("store_unavailable", "调度存储不可用"))
+		return
+	}
 	// 去重:同 agent_id 已有任务报 409
-	if s.SchedRepo != nil {
-		scs, _ := s.SchedRepo.List()
-		for _, sc := range scs {
-			if sc.AgentID == b.AgentID {
-				c.JSON(http.StatusConflict, errorBody("duplicate", "agent "+b.AgentID+" 已有定时任务"))
-				return
-			}
+	scs, _ := s.SchedRepo.List()
+	for _, sc := range scs {
+		if sc.AgentID == b.AgentID {
+			c.JSON(http.StatusConflict, errorBody("duplicate", "agent "+b.AgentID+" 已有定时任务"))
+			return
 		}
 	}
-	// 持久化到 ScheduleRepo(nil store 静默跳过)
-	if s.SchedRepo != nil {
-		_ = s.SchedRepo.Upsert(b.AgentID, b.Enabled, b.Interval)
-	}
+	// 持久化到 ScheduleRepo
+	_ = s.SchedRepo.Upsert(b.AgentID, b.Enabled, b.Interval)
 	s.applySchedules()
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
@@ -93,42 +93,46 @@ func (s *Server) putSchedule(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errorBody("bad_interval", "interval 无效: "+b.Interval))
 		return
 	}
-	if s.SchedRepo != nil {
-		scs, _ := s.SchedRepo.List()
-		found := false
-		for _, sc := range scs {
-			if sc.AgentID == agentID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			c.JSON(http.StatusNotFound, errorBody("not_found", "agent "+agentID+" 无定时任务"))
-			return
-		}
-		_ = s.SchedRepo.Upsert(agentID, b.Enabled, b.Interval)
+	if s.SchedRepo == nil {
+		c.JSON(http.StatusServiceUnavailable, errorBody("store_unavailable", "调度存储不可用"))
+		return
 	}
+	scs, _ := s.SchedRepo.List()
+	found := false
+	for _, sc := range scs {
+		if sc.AgentID == agentID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, errorBody("not_found", "agent "+agentID+" 无定时任务"))
+		return
+	}
+	_ = s.SchedRepo.Upsert(agentID, b.Enabled, b.Interval)
 	s.applySchedules()
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
 func (s *Server) deleteSchedule(c *gin.Context) {
 	agentID := c.Param("agent_id")
-	if s.SchedRepo != nil {
-		scs, _ := s.SchedRepo.List()
-		found := false
-		for _, sc := range scs {
-			if sc.AgentID == agentID {
-				found = true
-				break
-			}
-		}
-		if !found {
-			c.JSON(http.StatusNotFound, errorBody("not_found", "agent "+agentID+" 无定时任务"))
-			return
-		}
-		_ = s.SchedRepo.Delete(agentID)
+	if s.SchedRepo == nil {
+		c.JSON(http.StatusServiceUnavailable, errorBody("store_unavailable", "调度存储不可用"))
+		return
 	}
+	scs, _ := s.SchedRepo.List()
+	found := false
+	for _, sc := range scs {
+		if sc.AgentID == agentID {
+			found = true
+			break
+		}
+	}
+	if !found {
+		c.JSON(http.StatusNotFound, errorBody("not_found", "agent "+agentID+" 无定时任务"))
+		return
+	}
+	_ = s.SchedRepo.Delete(agentID)
 	s.applySchedules()
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }

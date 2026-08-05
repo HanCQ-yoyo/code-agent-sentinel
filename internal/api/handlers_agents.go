@@ -8,7 +8,7 @@ import (
 	"code-agent-sentinel/internal/configengine"
 )
 
-// getAgents 返回所有 agent + scan_enabled(从 ScheduleRepo 读取,默认 true)。
+// getAgents 返回所有 agent + scan_enabled(从 ScheduleRepo 读取;nil store 时从 ScheduleManager 派生)。
 func (s *Server) getAgents(c *gin.Context) {
 	type agentResp struct {
 		configengine.Agent
@@ -22,6 +22,14 @@ func (s *Server) getAgents(c *gin.Context) {
 			for _, sc := range scs {
 				if sc.AgentID == a.ID {
 					se = sc.Enabled
+					break
+				}
+			}
+		} else if s.ScheduleManager != nil {
+			// nil store 时从 ScheduleManager 内存状态派生,避免显示误导性默认值。
+			for _, st := range s.ScheduleManager.Status() {
+				if st.AgentID == a.ID {
+					se = st.Enabled
 					break
 				}
 			}
