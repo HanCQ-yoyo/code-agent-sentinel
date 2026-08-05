@@ -389,6 +389,14 @@ body {
   background: var(--sev-low) !important;
 }
 
+/* 主题切换 Switch 不用绿色,用灰度:浅色=深灰 / 暗色=浅灰 */
+.ant-switch.theme-switch.ant-switch-checked {
+  background: var(--color-muted) !important;
+}
+.ant-switch.theme-switch.ant-switch-checked:hover:not(.ant-switch-disabled) {
+  background: var(--color-dim) !important;
+}
+
 /* Alert error:暗色主题下 antd 内部派生的 error 底色与 paper 拉不开,
    用自定义背景 + 浅色主题复用 antd 默认。仅覆写 error 类型。 */
 :root[data-theme="dark"] .ant-alert-error {

@@ -72,6 +72,7 @@ export function Sidebar() {
         <div style={{ flexShrink: 0, borderTop: '1px solid var(--color-rule)', padding: 'var(--space-md) var(--space-xl)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <span style={{ fontSize: 'var(--fs-sm)', color: 'var(--color-muted)' }}>{t('topbar.theme')}</span>
           <Switch
+            className="theme-switch"
             size="small"
             checked={theme === 'dark'}
             onChange={toggle}
