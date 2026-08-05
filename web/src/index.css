@@ -406,3 +406,12 @@ body {
 :root[data-theme="dark"] .ant-alert-error .ant-alert-message {
   color: var(--color-ink);
 }
+
+/* 暗色主题:antd Menu SubMenu 展开/选中时标题文字避免变黑撞色 */
+:root[data-theme="dark"] .ant-menu-submenu-title {
+  color: var(--color-muted);
+}
+:root[data-theme="dark"] .ant-menu-submenu-open > .ant-menu-submenu-title,
+:root[data-theme="dark"] .ant-menu-submenu-selected > .ant-menu-submenu-title {
+  color: var(--color-ink);
+}
