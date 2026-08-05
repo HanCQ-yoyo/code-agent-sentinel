@@ -207,9 +207,93 @@ CREATE TABLE IF NOT EXISTS allowlist_entries (
   command    TEXT PRIMARY KEY,
   created_at TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS user_prefs (
+  key   TEXT PRIMARY KEY,
+  value TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS schedules (
+  agent_id   TEXT PRIMARY KEY,
+  enabled    INTEGER NOT NULL DEFAULT 1,
+  interval   TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL
+);
 `)
 	if err != nil {
 		return fmt.Errorf("run migrations: %w", err)
+	}
+	return nil
+}
+
+// GetUserPref 读取 user_prefs 表中 key 对应的 value。不存在返回空串。
+func GetUserPref(db *DB, key string) (string, error) {
+	var v string
+	err := db.sqlDB.QueryRow("SELECT value FROM user_prefs WHERE key = ?", key).Scan(&v)
+	if err == sql.ErrNoRows {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("get user_pref %s: %w", key, err)
+	}
+	return v, nil
+}
+
+// SetUserPref INSERT OR REPLACE user_prefs。key 不存在时插入,存在时更新。
+func SetUserPref(db *DB, key, value string) error {
+	_, err := db.sqlDB.Exec(
+		"INSERT OR REPLACE INTO user_prefs(key, value) VALUES (?, ?)",
+		key, value)
+	if err != nil {
+		return fmt.Errorf("set user_pref %s: %w", key, err)
+	}
+	return nil
+}
+
+// ScheduleRow 对应 schedules 表一行。
+type ScheduleRow struct {
+	AgentID   string
+	Enabled   bool
+	Interval  string
+	UpdatedAt string
+}
+
+// ListSchedules 返回 schedules 表全部行。
+func ListSchedules(db *DB) ([]ScheduleRow, error) {
+	rows, err := db.sqlDB.Query("SELECT agent_id, enabled, interval, updated_at FROM schedules ORDER BY agent_id")
+	if err != nil {
+		return nil, fmt.Errorf("list schedules: %w", err)
+	}
+	defer rows.Close()
+	var out []ScheduleRow
+	for rows.Next() {
+		var r ScheduleRow
+		var enabledInt int
+		if err := rows.Scan(&r.AgentID, &enabledInt, &r.Interval, &r.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("scan schedule: %w", err)
+		}
+		r.Enabled = enabledInt != 0
+		out = append(out, r)
+	}
+	return out, rows.Err()
+}
+
+// UpsertSchedule 插入或更新 schedules 表一行。
+func UpsertSchedule(db *DB, agentID string, enabled int, interval, updatedAt string) error {
+	_, err := db.sqlDB.Exec(
+		`INSERT OR REPLACE INTO schedules(agent_id, enabled, interval, updated_at) VALUES (?, ?, ?, ?)`,
+		agentID, enabled, interval, updatedAt)
+	if err != nil {
+		return fmt.Errorf("upsert schedule %s: %w", agentID, err)
+	}
+	return nil
+}
+
+// DeleteSchedule 删除 schedules 表一行。
+func DeleteSchedule(db *DB, agentID string) error {
+	_, err := db.sqlDB.Exec("DELETE FROM schedules WHERE agent_id = ?", agentID)
+	if err != nil {
+		return fmt.Errorf("delete schedule %s: %w", agentID, err)
 	}
 	return nil
 }
