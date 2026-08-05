@@ -49,11 +49,18 @@ export function TopBar() {
     ? Math.round((scanTaskProgress.completed / scanTaskProgress.total) * 100)
     : 0
 
+  // 扫描按钮:边框参考拦截胶囊风格,主题自适应
+  const scanBtnStyle: React.CSSProperties = {
+    whiteSpace: 'nowrap',
+    borderColor: 'var(--color-rule)',
+    borderRadius: 'var(--radius-input)',
+  }
+
   // 扫描按钮
   const scanBtn = isScanning ? (
     <Button
       icon={<LoadingOutlined />}
-      style={{ whiteSpace: 'nowrap' }}
+      style={scanBtnStyle}
     >
       {t('topbar.scanning')}
     </Button>
@@ -61,7 +68,7 @@ export function TopBar() {
     <Button
       icon={<ReloadOutlined />}
       onClick={() => openRescan()}
-      style={{ whiteSpace: 'nowrap' }}
+      style={scanBtnStyle}
     >
       {t('topbar.rescan')}
     </Button>

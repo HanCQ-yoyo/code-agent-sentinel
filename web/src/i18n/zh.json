@@ -126,8 +126,8 @@
     "batchSiblings": "批次内其他 Agent"
   },
   "guardCapsule": {
-    "capsuleOn": "拦截: 开",
-    "capsuleOff": "拦截: 关",
+    "capsuleOn": "拦截防护：已开启",
+    "capsuleOff": "拦截防护：已关闭",
     "capsuleToggling": "拦截: ...",
     "confirmOff": "关闭拦截防护？关闭后危险指令将不被拦截。",
     "confirmOk": "确认关闭",

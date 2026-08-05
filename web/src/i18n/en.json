@@ -126,8 +126,8 @@
     "batchSiblings": "Other agents in this batch"
   },
   "guardCapsule": {
-    "capsuleOn": "Intercept: ON",
-    "capsuleOff": "Intercept: OFF",
+    "capsuleOn": "Intercept: Enabled",
+    "capsuleOff": "Intercept: Disabled",
     "capsuleToggling": "Intercept: ...",
     "confirmOff": "Disable intercept protection? Destructive commands will not be blocked.",
     "confirmOk": "Disable",

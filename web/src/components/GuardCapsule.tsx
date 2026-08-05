@@ -16,11 +16,11 @@ export function GuardCapsule() {
   const enabled = guardConfig?.enabled ?? false
   const loading = guardToggling
 
-  // 开启态样式:绿色调
+  // 开启态:浅绿色填充 + 绿色文字/边框
   const onStyle: React.CSSProperties = {
-    color: 'var(--color-success)',
-    borderColor: 'var(--color-success)',
-    background: 'transparent',
+    color: 'var(--sev-low-solid)',
+    borderColor: 'var(--sev-low-solid)',
+    background: 'oklch(62% 0.15 145 / 0.12)',
     fontWeight: 500,
     fontSize: 'var(--fs-sm)',
     padding: '0 12px',
@@ -28,13 +28,14 @@ export function GuardCapsule() {
     display: 'flex',
     alignItems: 'center',
     gap: 6,
+    borderRadius: 'var(--radius-input)',
   }
 
-  // 关闭态样式:灰色调
+  // 关闭态:浅橙色填充 + 橙色文字/边框
   const offStyle: React.CSSProperties = {
-    color: 'var(--color-text-muted)',
-    borderColor: 'var(--color-rule)',
-    background: 'transparent',
+    color: 'var(--sev-high-solid)',
+    borderColor: 'var(--sev-high-solid)',
+    background: 'oklch(63% 0.15 55 / 0.10)',
     fontWeight: 500,
     fontSize: 'var(--fs-sm)',
     padding: '0 12px',
@@ -42,16 +43,10 @@ export function GuardCapsule() {
     display: 'flex',
     alignItems: 'center',
     gap: 6,
+    borderRadius: 'var(--radius-input)',
   }
 
   const style = enabled ? onStyle : offStyle
-
-  // 实心/空心圆点
-  const dot = enabled ? (
-    <span style={{ color: 'var(--color-success)', fontSize: 10, lineHeight: 1 }}>●</span>
-  ) : (
-    <span style={{ color: 'var(--color-text-muted)', fontSize: 10, lineHeight: 1 }}>○</span>
-  )
 
   const label = loading
     ? t('guardCapsule.capsuleToggling')
@@ -97,7 +92,6 @@ export function GuardCapsule() {
         }
       >
         <Button style={style}>
-          {dot}
           {label}
         </Button>
       </Popover>
@@ -106,7 +100,6 @@ export function GuardCapsule() {
 
   return (
     <Button style={style} onClick={handleEnable} disabled={loading} loading={loading}>
-      {!loading && dot}
       {label}
     </Button>
   )
