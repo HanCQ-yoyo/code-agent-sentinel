@@ -83,7 +83,15 @@ export function GuardCapsule() {
                 <Button size="small" onClick={() => setPopoverOpen(false)}>
                   {t('common.cancel')}
                 </Button>
-                <Button size="small" danger onClick={handleConfirmDisable}>
+                <Button
+                  size="small"
+                  style={{
+                    background: 'var(--sev-critical-solid)',
+                    borderColor: 'var(--sev-critical-solid)',
+                    color: 'var(--badge-text)',
+                  }}
+                  onClick={handleConfirmDisable}
+                >
                   {t('guardCapsule.confirmOk')}
                 </Button>
               </Space>
