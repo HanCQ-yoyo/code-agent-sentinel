@@ -407,6 +407,25 @@ body {
   color: var(--color-ink);
 }
 
+/* 暗色主题:antd darkAlgorithm 的 generateColorPalettes 会将色板颜色与 #141414
+   混合,导致 colorError(errorColors[6])≈黑色,text variant 危险按钮图标不可见。
+   显式覆写为已适配暗色主题的 sev-critical,恢复正常可见度。 */
+:root[data-theme="dark"] .ant-btn-color-dangerous.ant-btn-variant-text {
+  color: var(--sev-critical) !important;
+}
+:root[data-theme="dark"] .ant-btn-color-dangerous.ant-btn-variant-text:hover:not(:disabled) {
+  color: var(--sev-critical) !important;
+  background: oklch(30% 0.06 27) !important;
+}
+/* solid variant 危险按钮:主色填充应使用足够亮度的实色,而非被暗色算法冲淡的暗红 */
+:root[data-theme="dark"] .ant-btn-color-dangerous.ant-btn-variant-solid {
+  color: var(--badge-text) !important;
+  background: var(--sev-critical-solid) !important;
+}
+:root[data-theme="dark"] .ant-btn-color-dangerous.ant-btn-variant-solid:hover:not(:disabled) {
+  background: var(--sev-critical) !important;
+}
+
 /* 暗色主题:antd Menu SubMenu 展开/选中时标题文字避免变黑撞色 */
 :root[data-theme="dark"] .ant-menu-submenu-title {
   color: var(--color-muted);

@@ -130,7 +130,7 @@
     "capsuleOff": "拦截防护：已关闭",
     "capsuleToggling": "拦截: ...",
     "confirmOff": "关闭拦截防护？关闭后危险指令将不被拦截。",
-    "confirmOk": "确认关闭",
+    "confirmOk": "确认",
     "toastOn": "拦截防护已开启",
     "toastOff": "拦截防护已关闭"
   },
