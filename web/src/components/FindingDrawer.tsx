@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Drawer, Descriptions, Typography, Alert, Spin, Empty, Modal, Input, Button, Space, Tag, Tooltip, message } from 'antd'
+import { Drawer, Descriptions, Typography, Alert, Spin, Empty, Modal, Input, Button, Space, Tag, Tooltip, message, Checkbox } from 'antd'
+import { SecurityScanOutlined } from '@ant-design/icons'
 import { useTranslation } from 'react-i18next'
 import type { Finding, DetectorMeta, Asset } from '../types'
 import { apiGet } from '../api/client'
@@ -181,9 +182,25 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
   // 初始值依赖 finding prop,不重挂载会保留旧 finding 的 status/priority/note(脏状态)。
   // Task 9:DispositionPanel → DispositionModal,由「立即处置」按钮触发(disposeOpen state)。
   const [disposeOpen, setDisposeOpen] = useState(false)
+  // 安全扫描:对 finding 关联的资产发起按 asset-id 扫描,按钮在 Drawer header 右对齐。
+  const { runScan } = useStore()
+  const storeDetectors = useStore((s) => s.detectors)
+  const [scanOpen, setScanOpen] = useState(false)
+  const [scanDets, setScanDets] = useState<string[]>([])
+  const openScan = () => {
+    setScanDets((storeDetectors ?? []).map(d => d.id))
+    setScanOpen(true)
+  }
+  const startScan = async () => {
+    if (!finding?.asset_id) return
+    const det = scanDets.length === (storeDetectors ?? []).length ? undefined : scanDets.join(',')
+    await runScan(finding.agent_id ? [finding.agent_id] : [], det, { type: 'asset-id', path: finding.asset_id })
+    setScanOpen(false)
+  }
 
   // key={assetId}:切换 finding 时 AssetSection 重挂载,重拉资产(防脏数据)。
   return (
+    <>
     <Drawer
       title={t('findingDrawer.title')}
       placement="right"
@@ -194,6 +211,13 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
       keyboard
       rootClassName="finding-drawer"
       styles={{ body: { padding: 16, overflow: 'auto' } }}
+      extra={
+        finding ? (
+          <Button size="small" icon={<SecurityScanOutlined />} onClick={openScan}>
+            立即处理
+          </Button>
+        ) : undefined
+      }
     >
       {finding ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
@@ -282,5 +306,29 @@ export function FindingDrawer({ finding, detectors, startedAt, onClose }: Findin
         </div>
       ) : null}
     </Drawer>
+    {/* 安全扫描 Modal:对 finding 关联资产发起按 asset-id 扫描,与 AssetDrawer 安全检查同模式。 */}
+    <Modal
+      open={scanOpen}
+      title={t('rescan.checkTitle')}
+      onCancel={() => setScanOpen(false)}
+      onOk={startScan}
+      okText={t('rescan.start')}
+      cancelText={t('common.cancel')}
+      getContainer={false}
+    >
+      <Space direction="vertical" size={12} style={{ width: '100%' }}>
+        <Typography.Text type="secondary">{t('rescan.checkHint')}</Typography.Text>
+        <div>
+          <Typography.Text strong>{t('rescan.detectors')}</Typography.Text>
+          <Checkbox.Group
+            value={scanDets}
+            onChange={(v) => setScanDets(v as string[])}
+            options={(storeDetectors ?? []).map(d => ({ label: d.name ?? d.id, value: d.id, disabled: d.available === false }))}
+            style={{ display: 'block', marginTop: 4 }}
+          />
+        </div>
+      </Space>
+    </Modal>
+    </>
   )
 }

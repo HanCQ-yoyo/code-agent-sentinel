@@ -20,8 +20,9 @@ import { CapabilityPanel } from './CapabilityPanel'
 // 比「安全检查」按钮文字(fs-base 14px)大,作为可识别的分区标题。内容区 borderless 让标题统一。
 //
 // 注:testid(asset-detail-name / asset-risk-list)保留不动(e2e 钩子)。
-export function AssetDetailPanel({ asset, highlights, findings, detectors, agentID }: { asset: Asset, highlights?: { line: number; startCol: number; endCol: number }[], findings?: Finding[], detectors?: DetectorMeta[], agentID?: string }) {
+export function AssetDetailPanel({ asset, highlights, findings, detectors, agentID, hideCheckButton }: { asset: Asset, highlights?: { line: number; startCol: number; endCol: number }[], findings?: Finding[], detectors?: DetectorMeta[], agentID?: string, hideCheckButton?: boolean }) {
   const { t } = useTranslation()
+  const metaLabel: React.CSSProperties = { fontSize: 'var(--fs-xs)', color: 'var(--color-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }
   const { runScan, detectors: storeDetectors } = useStore()
   const description = (asset.fields as Record<string, unknown> | undefined)?.description
   const [checkOpen, setCheckOpen] = useState(false)
@@ -74,8 +75,9 @@ export function AssetDetailPanel({ asset, highlights, findings, detectors, agent
           <Badge tone="neutral">{asset.type}</Badge>
           <Badge tone={`scope-${asset.scope}` as BadgeTone}>{scopeText}</Badge>
           {/* 安全检查:secondary 操作,default 描边(design.md CTA voice:次要操作 transparent+rule 边框)。
-              非规避暗色对比——此页主操作是资产内容编辑,安全检查为次要,故 default 而非 primary。 */}
-          <Button size="small" style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }} onClick={openCheck}>{t('rescan.check')}</Button>
+              非规避暗色对比——此页主操作是资产内容编辑,安全检查为次要,故 default 而非 primary。
+              hideCheckButton 时由父级 Drawer extra header 渲染,此处不重复。 */}
+          {!hideCheckButton ? <Button size="small" style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }} onClick={openCheck}>{t('rescan.check')}</Button> : null}
         </div>
         {/* 资产文件路径:名下一行,mono 小字 dim。 */}
         <Typography.Text style={{ display: 'block', marginTop: 'var(--space-xs)', fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', color: 'var(--color-dim)', wordBreak: 'break-all' }} title={asset.source_path}>{relativeClaudePath(asset.source_path)}</Typography.Text>
@@ -94,17 +96,17 @@ export function AssetDetailPanel({ asset, highlights, findings, detectors, agent
         <div className="asset-section-title">{t('assetDetail.metaTitle')}</div>
         <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 'var(--space-md)', rowGap: 'var(--space-xs)' }}>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-            <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('assetDetail.path')}</span>
+            <span style={metaLabel}>{t('assetDetail.path')}</span>
             <Typography.Text code style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', wordBreak: 'break-all' }}>{relativeClaudePath(asset.source_path)}</Typography.Text>
           </div>
           <span style={{ color: 'var(--color-rule-2)' }}>·</span>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-            <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('assetDetail.hash')}</span>
+            <span style={metaLabel}>{t('assetDetail.hash')}</span>
             <Typography.Text code copyable style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)' }}>{asset.hash}</Typography.Text>
           </div>
           <span style={{ color: 'var(--color-rule-2)' }}>·</span>
           <div style={{ display: 'inline-flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
-            <span style={{ fontSize: 'var(--fs-xs)', color: 'var(--color-dim)', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{t('assetDetail.mtime')}</span>
+            <span style={metaLabel}>{t('assetDetail.mtime')}</span>
             <span style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', color: 'var(--color-muted)', fontVariantNumeric: 'tabular-nums' }}>{asset.mtime ?? '--'}</span>
           </div>
         </div>

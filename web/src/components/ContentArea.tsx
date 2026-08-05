@@ -114,8 +114,8 @@ export function ContentArea({
   const wrap = (children: ReactNode, opts: { bodyStyle?: CSSProperties; cardStyle?: CSSProperties }) => {
     if (borderless) {
       return (
-        <section className="content-area-section" style={{ flex: 1, minHeight: 240, display: 'flex', flexDirection: 'column', ...opts.cardStyle }}>
-          <div className="section-label content-area-label" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
+        <section className="content-area-section" style={{ flex: 1, minHeight: 240 /* 保证内容区 ≥15 行可见,Monaco 编辑器最小可读区域 */, display: 'flex', flexDirection: 'column', ...opts.cardStyle }}>
+          <div className="asset-section-title" style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-sm)' }}>
             <span>{t('content.title')}</span>
             {cardExtra ? <span style={{ marginLeft: 'auto' }}>{cardExtra}</span> : null}
           </div>

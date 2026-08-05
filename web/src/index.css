@@ -365,20 +365,10 @@ body {
   border-bottom: 1px solid var(--color-rule);
 }
 
-/* borderless 内容区:ContentArea(borderless=true)渲染 <section> + .content-area-label,
-   标题覆盖成 .asset-section-title 同款(fs-lg 700 + 发丝线),与属性/风险分区标题完全一致。 */
+/* borderless 内容区:ContentArea(borderless=true)渲染 <section>,
+   标题直接用 .asset-section-title(与属性/风险分区标题统一)。 */
 .asset-detail-content .content-area-section {
   min-height: 240px;
-}
-.asset-detail-content .content-area-label {
-  font-size: var(--fs-lg);
-  font-weight: 700;
-  color: var(--color-ink);
-  letter-spacing: -0.01em;
-  text-transform: none;
-  padding-bottom: var(--space-sm);
-  margin-bottom: var(--space-md);
-  border-bottom: 1px solid var(--color-rule);
 }
 
 /* Switch 胶囊开关:开启=绿色(--sev-low-solid),关闭=默认白/灰底,暗色主题下不撞色 */
@@ -424,6 +414,32 @@ body {
 }
 :root[data-theme="dark"] .ant-btn-color-dangerous.ant-btn-variant-solid:hover:not(:disabled) {
   background: var(--sev-critical) !important;
+}
+
+/* 暗色主题:primary 按钮。antd darkAlgorithm 将 colorPrimary 色板与 #141414 混合,
+   导致 primary 按钮背景变近黑色,与深色背景撞色。显式覆写为 accent 实色 + onAccent 字。 */
+:root[data-theme="dark"] .ant-btn-primary {
+  background: var(--color-accent) !important;
+  border-color: var(--color-accent) !important;
+  color: var(--color-on-accent) !important;
+}
+:root[data-theme="dark"] .ant-btn-primary:not(:disabled):hover {
+  background: oklch(78% 0.100 195) !important;
+  border-color: oklch(78% 0.100 195) !important;
+  color: var(--color-on-accent) !important;
+}
+
+/* 暗色主题:搜索框按钮(Input.Search 内部渲染的 .ant-input-search-button)不受
+   Button token 的 accent 色影响,恢复默认 ink/rule2 样式。 */
+:root[data-theme="dark"] .ant-input-search-button {
+  color: var(--color-ink) !important;
+  border-color: var(--color-rule-2) !important;
+  background: var(--color-paper-2) !important;
+}
+:root[data-theme="dark"] .ant-input-search-button:not(:disabled):hover {
+  color: var(--color-accent) !important;
+  border-color: var(--color-accent) !important;
+  background: var(--color-paper-2) !important;
 }
 
 /* 暗色主题:antd Menu SubMenu 展开/选中时标题文字避免变黑撞色 */

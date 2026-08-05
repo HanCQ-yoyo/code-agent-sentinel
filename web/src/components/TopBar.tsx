@@ -49,10 +49,10 @@ export function TopBar() {
     ? Math.round((scanTaskProgress.completed / scanTaskProgress.total) * 100)
     : 0
 
-  // 扫描按钮:边框参考拦截胶囊风格,主题自适应
+  // 扫描按钮:边框与品牌色一致(accent),深色浅色自动适配
   const scanBtnStyle: React.CSSProperties = {
     whiteSpace: 'nowrap',
-    borderColor: 'var(--color-rule-2)',
+    borderColor: 'var(--color-accent)',
     borderRadius: 'var(--radius-input)',
   }
 

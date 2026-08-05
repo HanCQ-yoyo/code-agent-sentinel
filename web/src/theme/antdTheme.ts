@@ -119,10 +119,15 @@ export function antdTheme(mode: Mode): ThemeConfig {
       },
       Button: {
         // CTA voice(design.md):primary accent 实色 + onAccent 字。
+        // defaultBorderColor:浅色深灰(ΔL≈37%)/深色 accent(品牌一致)。
+        // defaultColor:浅色 ink(深字浅底)/深色 accent(品牌色醒目)。
+        // hover:统一 accent 边框+字,浅深自动随 t.accent 适配。
         primaryShadow: 'none',
-        defaultBorderColor: t.rule2,
-        defaultColor: t.ink,
+        defaultBorderColor: mode === 'dark' ? t.accent : 'oklch(62% 0.010 175)',
+        defaultColor: mode === 'dark' ? t.accent : t.ink,
         defaultBg: t.paper2,
+        defaultHoverBorderColor: t.accent,
+        defaultHoverColor: t.accent,
       },
       Statistic: {
         titleFontSize: 12,
