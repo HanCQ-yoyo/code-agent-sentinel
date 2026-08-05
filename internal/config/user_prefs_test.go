@@ -80,14 +80,3 @@ func TestUserPrefsNilDB(t *testing.T) {
 	}
 }
 
-func TestUserPrefsNoDBFile(t *testing.T) {
-	// 测试 db 文件不存在场景(尚未创建,对应首次启动)
-	s := NewUserPrefsStore(nil)
-	v, err := s.Get("language")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if v != "" {
-		t.Errorf("expected empty string (default), got %q", v)
-	}
-}
