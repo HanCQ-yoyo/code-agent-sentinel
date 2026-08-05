@@ -99,7 +99,7 @@
   --color-surface: oklch(24% 0.010 175);
   --color-rule:    oklch(28% 0.008 175);
   --color-rule-2:  oklch(34% 0.010 175);
-  --color-muted:   oklch(66% 0.010 175);
+  --color-muted:   oklch(72% 0.010 175);
   --color-dim:     oklch(62% 0.008 175);   /* 三级文字:ΔL=42 vs paper-2(20),过 large/icon */
   --color-ink:     oklch(92% 0.006 175);
   --color-accent:  oklch(72% 0.110 195);
@@ -107,7 +107,7 @@
   --color-focus:   oklch(72% 0.110 195);
   --color-on-accent: oklch(16% 0.008 175);
 
-  --sev-critical: oklch(64% 0.180 27);
+  --sev-critical: oklch(70% 0.180 27);
   --sev-high:     oklch(70% 0.140 55);
   --sev-medium:   oklch(75% 0.130 85);
   --sev-low:      oklch(68% 0.150 145);
@@ -381,4 +381,20 @@ body {
   border-bottom: 1px solid var(--color-rule);
 }
 
+/* Switch 胶囊开关:开启=绿色(--sev-low-solid),关闭=默认白/灰底,暗色主题下不撞色 */
+.ant-switch.ant-switch-checked {
+  background: var(--sev-low-solid) !important;
+}
+.ant-switch.ant-switch-checked:hover:not(.ant-switch-disabled) {
+  background: var(--sev-low) !important;
+}
 
+/* Alert error:暗色主题下 antd 内部派生的 error 底色与 paper 拉不开,
+   用自定义背景 + 浅色主题复用 antd 默认。仅覆写 error 类型。 */
+:root[data-theme="dark"] .ant-alert-error {
+  background: oklch(25% 0.04 27);
+  border-color: var(--sev-critical);
+}
+:root[data-theme="dark"] .ant-alert-error .ant-alert-message {
+  color: var(--color-ink);
+}

@@ -23,6 +23,8 @@ export function antdTheme(mode: Mode): ThemeConfig {
       colorBorder: t.rule2,
       colorBorderSecondary: t.rule,
       colorError: t.sevCritical,
+      colorErrorBg: mode === 'dark' ? 'oklch(25% 0.04 27)' : 'oklch(97% 0.01 27)',
+      colorErrorBorder: t.sevCritical,
       colorWarning: t.sevMedium,
       colorSuccess: t.sevLow,
       fontFamily: t.fontSans,
