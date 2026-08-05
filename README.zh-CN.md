@@ -1,116 +1,141 @@
 # Code Agent Sentinel
 
-> 把 Claude Code 的配置资产(settings、hooks、MCP servers、skills、commands、agents、plugins、CLAUDE.md/memory、keybindings、scripts)当作安全管控面来发现、解析、检测、编辑与监控的**本地单二进制安全看板**,并给出可解释的健康分。
+> 一款本地单二进制 AI 编程助手安全控制台 ——
+> 发现、检测、拦截、监控你的 Claude Code 配置攻击面。
 
 [English](README.md) | 中文
 
+## 为什么需要 Sentinel？
+
+AI 编程助手（如 Claude Code 和 Codex CLI）会积累大量配置攻击面：MCP 服务器、hooks、skills、
+凭据文件、自定义命令 —— 分布在 12 种以上的资产类型中。人工审查不具可扩展性。
+
+Sentinel 以一个二进制提供 SOC 风格安全看板：
+**资产发现 → 静态检测 → 运行时拦截 → 可解释的健康分。**
+
 ## 核心能力
 
-- **资产发现与解析**:扫描 `~/.claude/` 与项目 `.claude/`,覆盖 settings、permissions、hooks、MCP servers、skills、commands、agents、plugins、CLAUDE.md/memory、keybindings、scripts、**credential**(凭据文件 `auth.json`/`.env`/`*.pem` 等,不暴露内容)等 12 类资产。支持多种 code agent:**Claude Code**(`~/.claude/`)与 **OpenAI Codex CLI**(`~/.codex/config.toml`、`AGENTS.md`、`prompts/`、`hooks.json`)。`code-agent-sentinel setup` 自动探测已安装 agent;看板支持多 agent 聚合、各自独立扫描。
-- **发现补齐与跨资产组合规则**:Claude L1-L5——`managed-mcp.json`(企业模式提示)、全局 `.mcp.json`、项目 `hooks/` 目录、项目 `keybindings.json`、`skip_dangerous_mode_permission_prompt` 字段;Codex C2/C3——项目级 `.codex/config.toml` + `[hooks.state]` 建模;Codex C4/L6——`auth.json` 凭据 + 项目根敏感文件。**6 条跨资产组合规则**(skip-perm+Bash(*) / Codex danger+never / 凭据外发等)经统一规则引擎新增 `ComboRule` 第二遍求值。Codex 项目级发现改读 code-agent-sentinel 的 `known_projects` 清单(独立于 `~/.claude.json`)。
-- **安全检测**:统一规则引擎(256 条内置规则 + 6 条跨资产组合规则)+ 提示注入扫描(含反混淆)+ 密钥扫描(gitleaks)+ 依赖漏洞(govulncheck / npm-audit)。子进程缺失时优雅降级。
-- **规则可配置化(sqlite 存储)**:检测/拦截两域规则统一存于单个 sqlite db(`~/.code-agent-sentinel/sentinel.db`,WAL 模式,`0o600`)——三表:`rules` / `overrides`(启停覆盖,JOIN 派生 `enabled`)/ `combos`。内置规则启动时从 embed 同步进 db(旧 `~/.code-agent-sentinel/rules/*.yaml` 自动迁入);拦截域只同步 `destructive_commands.yaml`(运行时拦截只用破坏性命令规则,baseline/injection/skill 留在检测侧)。自定义规则可经设置页(`RuleDrawer`)与对称的 `/api/{detect|intercept}-rules` CRUD + `/validate` 端点新建 / 编辑 / 从内置 fork / 启停 / 删除;内置规则只读(POST 覆盖 builtin id → 409)。`RulesDetector` 扫描时实时读 db(热重载,无需重启);`code-agent-sentinel guard` 从 db 读拦截规则,db 故障 fail-open 回退内置。文件路径与 db 路径规则求值等价性已验证(按 asset_type)。
-- **统一处置生命周期**:塌缩旧 `baseline.json` + `suppressions.yaml` 为单一 `finding_states.yaml` overlay(`findingstate` 包:Status / Priority / Note / Category / ContributingRuleIDs)。`code-agent-sentinel baseline --create` 批量接受全部当前未处置 finding;`--prune` 打印清理报告。旧文件自动迁移(重命名 `.legacy`,不删除)。已接受 finding 不再拉低健康分。
-- **健康分**:`Score = 100 × (1 − Σ(R(asset)·w(asset)) / (Rmax · Σ w(asset)))`,Rmax=10,0–100 五档,可解释 / 单调 / 可还原。
-- **配置编辑**:原子写入 + 自动备份与迁移(`internal/editor`);configengine 保持只读。
-- **定时扫描**:进程内 scheduler(`scan_interval` / `scan_enabled`)持续刷新历史;`code-agent-sentinel scan` 一次性扫描不启 server。
-- **自定义 `.claude` 目录**:`claude_dir` + `discovery.disabled_asset_types` 指向自定义配置根、跳过不关心的资产类型。
-- **双语 UI**:界面 `zh` / `en` 切换(react-i18next,`language` 配置默认值);后端文案保持中文。
-- **命中位置高亮**:规则 finding 携带 `Location{Line,StartCol,EndCol}`,在 Monaco 查看器中高亮。
-- **资产能力看板**:结构化展示 allowed-tools / hook 事件 / mcp 命令 / memory 大纲,替代旧的单行 description。
-- **FP 减负**:否定上下文抑制("禁止/不允许"前缀命中不再触发)+ 资产内去重(同位置多规则命中塌缩为单条 finding,`ContributingRuleIDs` 记录全部触发规则)+ 双视图 FindingTable(按 finding / 按资产聚合)。
-- **检测任务视图**:History 页 per-agent 视图 + 检测范围/目标列(`ScanSummary.ScopePath`:`global` / `project:<path>` / `asset:<id>`)。
-- **运行时风险指令拦截(Claude + Codex)**:`code-agent-sentinel guard` 作为 Claude Code 与 OpenAI Codex CLI 的 `PreToolUse` Bash hook 运行,对每条 shell 命令跑 span 感知管线(解析 → 递归短路 → quick-reject → normalize 反混淆 → heredoc 提取 → **链式拆分 + span 分类** → 规则引擎评估 → 决策+记录),实时 deny 破坏性命令(`rm -rf /`、`git reset --hard`、`git commit -m "x" && rm -rf /` 链式、ANSI-C 混淆、`bash -c "..."` 内联脚本等)。**span 分类器**(引号/注释/命令替换状态机)把命令文本切成 executed/data/comment 三类 span,破坏性正则只在 executed 区匹配,抑制数据区字面量误报(`echo "rm -rf /"` 不再误 deny)。**链式拆分器**按 `&&`/`;`/`||`/`|` 拆命令为独立片段,每片段独立评估(闭合 Stage R2 遗留的链式绕过缺口)。**置信度打分**(high/low/unknown,按命中落 span 位置)+ **安全模式**(`strict` 默认 = 不确定时 deny / `lenient` = 不确定时 ask;高置信度命中两模式都 deny)。**放行清单 allowlist**(独立 `allowlist.yaml`,精确双匹配 normalize 前后,不支持通配)命中的命令即便命中规则也放行。fail-open 铁律:hook 永远 `exit 0`,deny 仅靠 stdout JSON 表达。**Codex 协议适配**:`turn_id` 字段自动消歧 Claude/Codex;Codex 发最小三字段 deny payload(防 strict parser 拒扩展字段);低置信度 ask 退化为 deny。`code-agent-sentinel setup` 自动把 hook 注册进 `~/.claude/settings.json` 与 `~/.codex/hooks.json`;决策记录(含 `confidence` + `matched_span`)落盘 `~/.code-agent-sentinel/intercept/` 并在 `/intercept` 页只读展示。经 `guard` 配置段(`enabled`/`policy`/`deadline_ms`/`max_command_bytes`/`mode`/`allowlist_enabled`,`PUT /api/guard/config` 热生效)调控;设置页暴露 GuardConfig 编辑面板 + Allowlist 编辑面板。
-- **项目置顶**:`pinned_projects` 把常用项目置顶 Assets 页并配色。
-- **Dashboard**:健康分卡、风险摘要、检测器状态、资产盘点、历史趋势。
+### 多 Agent 资产发现
 
-## 安装
+从 Claude Code（`~/.claude/`）和 OpenAI Codex CLI（`~/.codex/`）发现并解析资产。
+覆盖 settings、permissions、hooks、MCP servers、skills、commands、agents、plugins、
+CLAUDE.md/memory、keybindings、scripts 及凭据文件 —— 两种 agent 共 12 种资产类型。
 
-预编译二进制以单归档发布(前端已内嵌)。本地构建:
+`code-agent-sentinel setup` 自动探测已安装的 agent。看板以多 agent 聚合视图展示，
+并支持独立按 agent 扫描。
 
-```bash
-git clone <repo> && cd code-agent-sentinel
-make build          # 构建 web(npm run build)+ Go 二进制 -> bin/code-agent-sentinel
-```
+### 安全检测引擎
 
-需要 Go 1.25 与 Node.js(用于 `make web`)。生成的 `bin/code-agent-sentinel` 完全自包含。
+- **统一规则引擎**:256 条内置规则 + 6 条跨资产组合规则
+- **提示注入扫描** 带反混淆
+- **密钥扫描**（gitleaks）+ **依赖审计**（govulncheck / npm-audit）
+- 规则存储在 sqlite 中，热生效 —— 通过设置界面创建、编辑、fork、启用或禁用规则，
+  无需重启。扫描器二进制缺失时优雅降级。
+
+### 运行时命令拦截
+
+一条同时对 Claude Code 和 Codex CLI 生效的 `PreToolUse` Bash hook，
+通过 span 感知管线评估每条 shell 命令：
+
+解析 → 短路判断 → 反混淆 → 链式拆分（`&&`/`;`/`||`/`|`）→
+span 分类器（引号/注释/命令替换）→ 规则引擎 → 决策
+
+- 拦截破坏性命令（`rm -rf /`、`git reset --hard`、链式绕过、ANSI-C 混淆）
+- 避免数据字面量误报（`echo "rm -rf /"` 安全放行）
+- 置信度打分（高/低/未知）+ 严格/宽松模式 + 放行清单
+- **fail-open**：hook 始终 exit 0；拒绝仅通过 stdout JSON 表达
+- `/intercept` 页面展示完整审计日志（含置信度 + 命中 span 元数据）
+
+### 风险看板与处置生命周期
+
+- **健康分**：0–100 五档，基于可解释公式 —— 单调、可还原。修复一个 finding，分数只升不降。
+- **统一处置生命周期**：open → in_progress → resolved / false_positive / accepted，
+  支持批量接受和清理
+- **能力看板**：按资产结构化展示 allowed-tools、hook 事件、MCP 命令、memory 大纲
+- **误报减负**：否定上下文抑制、资产内去重、双视图 FindingTable（按 finding / 按资产聚合）
+- **扫描任务视图**：按 agent 的历史记录，含扫描范围和目标列
+
+### 配置管理
+
+所有运行时设置通过 Web 界面管理并持久化到 SQLite，无需手动编辑 YAML：
+
+- 各检测器启用/禁用 + 二进制路径
+- 各 agent 扫描计划，进程内调度器
+- Guard 配置（策略、超时、模式）—— 热生效
+- 项目置顶 + 彩色标签
 
 ## 快速开始
 
 ```bash
-./bin/code-agent-sentinel                  # 127.0.0.1 + 随机端口,自动打开浏览器
-# Token 打印到 stdout,经 URL fragment(#token=...)传递。
+./bin/code-agent-sentinel                  # 127.0.0.1 + 随机端口，自动打开浏览器
+# Token 打印到 stdout，经 URL fragment (#token=...) 传递。
 
-# 不启 server 的一次性扫描:
+# 不启动 server 的一次性扫描：
 code-agent-sentinel scan
 
-# 远程开发机(服务仍仅绑 loopback,端口通过隧道转发):
+# 远程开发机（服务仅绑 loopback，通过隧道转发端口）：
 ssh -L <port>:127.0.0.1:<port> <devhost>
 ```
 
 ## 配置文件
 
-`~/.code-agent-sentinel/config.yaml`(在 `~/.claude/` 之外,避免自扫)。空字段经 `Resolve*` 方法回退默认值。
+`~/.code-agent-sentinel/config.yaml` —— 刻意放在 `~/.claude/` 之外，避免自扫。
+
+> 语言、收藏、项目置顶、扫描计划、检测器配置、guard 设置等运行时选项通过 Web 界面管理，
+> 并持久化到 SQLite。无需手动编辑 YAML。
+
+只有启动引导字段需要放在 config.yaml 中：
 
 | 字段 | 类型 | 说明 |
-| --- | --- | --- |
-| `bind` | string | 绑定地址。默认 `127.0.0.1`;非 loopback 需 `allowed_cidrs`(或 `--i-know-its-risky`)。 |
+|---|---|---|
+| `bind` | string | 绑定地址。默认 `127.0.0.1`；非 loopback 需 `allowed_cidrs`（或 `--i-know-its-risky`）。 |
 | `port` | int | `0` = 随机临时端口。 |
-| `allowed_cidrs` | []string | IP 白名单;非 loopback 绑定必填。 |
-| `basic_auth` | object | `user` + bcrypt `password_hash`;认证以 token 为准。 |
-| `home_dir` | string | 覆盖发现用的 `$HOME`(调试)。 |
-| `claude_dir` | string | `.claude` 根目录绝对路径;空 = `<home>/.claude`。 |
-| `discovery.disabled_asset_types` | []string | 发现时跳过的资产类型(如 `mcp`、`scripts`)。 |
-| `scan_interval` | duration string | 如 `30m`、`1h`;空/无效 = 关。 |
-| `scan_enabled` | bool | 进程内 scheduler 总开关。 |
-| `language` | string | `zh` / `en`;空 = 浏览器探测后回退 `zh`。 |
-| `pinned_projects` | list | `{path, color}` 条目,Assets 页置顶。 |
-| `known_projects` | list | `{path, name}` 条目——sentinel 独立已知项目清单;`setup` 从 `~/.claude.json` projects 自动导入初始值。用于 Codex 项目级发现(及 Claude)。空 → Claude 回退 `~/.claude.json` projects。 |
-| `dir_tags` | map | 按路径覆盖标签。 |
-| `favorites` | []string | 收藏的资产 ID(后端持久化)。 |
-| `backup_dir` | string | 备份根目录;空 = `~/.code-agent-sentinel/backups`。 |
+| `allowed_cidrs` | []string | IP 白名单；非 loopback 绑定必填。 |
+| `basic_auth` | object | `user` + bcrypt `password_hash`。 |
+| `home_dir` | string | 覆盖 `$HOME` 用于发现（调试）。 |
+| `claude_dir` | string | `.claude` 根目录绝对路径；空 = `<home>/.claude`。 |
+| `discovery.disabled_asset_types` | []string | 发现时跳过的资产类型。 |
+| `backup_dir` | string | 备份根目录；空 = `~/.code-agent-sentinel/backups`。 |
 | `max_backups` | int | `0` = 默认 20。 |
-| `sentinel_rules_dir` | string | 全局自定义规则目录;空 = `~/.code-agent-sentinel/rules`。 |
-| `finding_states_path` | string | 处置 overlay 文件;空 = `~/.code-agent-sentinel/finding_states.yaml`。旧 `baseline.json` / `suppressions.yaml` 首次启动自动迁移(重命名 `.legacy`)。 |
-| `detectors` | object | 各检测器 `enabled` 开关 + 二进制路径(rules / secret / dep)。 |
+| `log_path` | string | 日志文件路径；空 = stderr。 |
+| `token` | string | 预设访问 token；空 = 启动时随机生成。 |
+| `known_projects` | list | `{path, name}` 条目；`setup` 从 `~/.claude.json` 自动导入。 |
+| `agents` | list | Agent 定义（`id`/`enabled`/`root_dir`/`claude_json`）；`setup` 填充。 |
 
-示例:
+示例：
 
 ```yaml
 bind: 127.0.0.1
 port: 0
-claude_dir: /home/me/.claude
-scan_interval: 30m
-scan_enabled: true
 language: en
-pinned_projects:
-  - path: /work/myapp
-    color: "#1677ff"
+claude_dir: /home/me/.claude
 discovery:
   disabled_asset_types: [scripts]
 ```
 
-## 命令行
+## 命令行参考
 
-所有子命令均可用 `--config` 覆盖配置路径。`--home` 覆盖发现用的 `$HOME`(调试/测试)。
+所有子命令均可用 `--config` 覆盖配置路径。
 
 | 命令 | 用途 |
-| --- | --- |
-| `code-agent-sentinel` | 启动本地 SOC 看板 server(默认)。Flags:`--config`、`--bind`、`--port`、`--no-browser`、`--i-know-its-risky`、`--home`、`--token`、`--claude-dir`。 |
-| `code-agent-sentinel scan` | 一次性扫描(发现 → 扫描 → 写历史),不启 server;`--detectors=rules,secret` 限定运行的检测器。 |
-| `code-agent-sentinel guard` | 运行时拦截 hook(由 Claude Code `PreToolUse` 调用)。读 stdin JSON,评估 Bash 命令,向 stdout 写 deny/allow 决策。永远 `exit 0`(fail-open)。Flags:`--config`、`--deadline`、`--debug`。通常由 `code-agent-sentinel setup` 自动注册。 |
-| `code-agent-sentinel uninstall` | 清理 `~/.code-agent-sentinel/`(历史、备份、finding_states、规则 db)。**不**碰 `~/.claude` 与二进制。`--yes` 跳过确认;`--keep-config` 保留 `config.yaml`。 |
-| `code-agent-sentinel baseline` | `--create` 批量接受当前全部未处置 finding 写入 `finding_states.yaml`;`--prune` 打印不复现指纹的清理报告。 |
-| `code-agent-sentinel rules` | `list` 打印 id/severity/source/valid(读 sqlite db);`validate [file]` 校验规则文件(无参 = 内置 + 全局)。规则新建/编辑/启停/fork/删除经设置页 + `/api/{detect|intercept}-rules`。 |
+|---|---|
+| `code-agent-sentinel` | 启动本地 SOC 看板 server（默认）。 |
+| `code-agent-sentinel scan` | 一次性扫描（发现 → 扫描 → 写历史），不启 server。 |
+| `code-agent-sentinel guard` | 运行时拦截 hook（由 Claude Code `PreToolUse` 调用）。 |
+| `code-agent-sentinel setup` | 交互式 agent 配置。 |
+| `code-agent-sentinel uninstall` | 清理 `~/.code-agent-sentinel/`，不碰 `~/.claude`。 |
+| `code-agent-sentinel baseline` | `--create` 批量接受 finding；`--prune` 清理失效条目。 |
+| `code-agent-sentinel rules` | `list` 打印规则列表；`validate` 校验规则文件。 |
+| `code-agent-sentinel service` | `install`/`uninstall`/`status` systemd 服务。 |
 
 ## 安全模型
 
-- **默认仅 loopback**:`bind` 默认 `127.0.0.1`。非 loopback 绑定须有非空 `allowed_cidrs`,否则拒绝启动(用 `--i-know-its-risky` 覆盖)。
-- **token 经 URL fragment 传递**:随机 token 通过 `#token=` 下发——不进 server 日志、不进 `Referer`——每个 API 请求校验。
-- **Host 头 + 严格 CORS**:防 DNS rebinding。
-- **非 loopback 不自动开浏览器**:多用户主机上开浏览器会经 `xdg-open` argv 泄露 token。
-- **优雅降级**:缺失 `gitleaks` / `govulncheck` / `npm` 时检测器标记 `unavailable` 并附原因,整体扫描继续。
-- **范围明确的卸载**:`code-agent-sentinel uninstall` 仅删 `~/.code-agent-sentinel/`;Claude Code 配置与二进制不受影响。
+- **默认仅 loopback**：`bind` 默认 `127.0.0.1`。非 loopback 绑定须有非空 `allowed_cidrs`（或 `--i-know-its-risky`）。
+- **token 经 URL fragment 传递**：随机 token 通过 `#token=` 下发 —— 不进 server 日志、不进 `Referer` —— 每个 API 请求校验。
+- **Host 头 + 严格 CORS**：防 DNS rebinding。
+- **非 loopback 不自动开浏览器**：避免多用户主机上通过 `xdg-open` argv 泄露 token。
+- **优雅降级**：缺失 `gitleaks`/`govulncheck`/`npm` 时检测器标记 `unavailable`，整体扫描继续。
+- **范围明确的卸载**：`code-agent-sentinel uninstall` 仅删 `~/.code-agent-sentinel/`；Claude Code 配置与二进制不受影响。
 
 ## 开发
 
@@ -118,14 +143,14 @@ discovery:
 make build          # web + Go 二进制 -> bin/code-agent-sentinel
 make test           # go test ./...
 make run            # build 后运行
-make web            # 仅构建前端(vite build -> internal/api/web_dist)
+make web            # 仅构建前端
 make web-install    # cd web && npm install
-make clean          # 删除 bin/、web/dist、web_dist
-make release        # linux/darwin/windows 交叉编译归档
-make build-cross GOOS=darwin GOARCH=arm64     # 单平台
-make build-cross-fast GOOS=linux GOARCH=arm64 # 跳过前端重建
+make clean          # 删除 bin/、web/dist
+make release        # 交叉编译归档
 ```
 
-前端 e2e:`cd web && npm run test:e2e`(Playwright)。
+前端 e2e：`cd web && npm run test:e2e`（Playwright）。
 
-技术栈:**Go 1.25**(Gin + cobra + embed)+ **React 18 / Vite / TypeScript / antd v5 / zustand / monaco-editor / react-i18next**。单二进制分发——React 构建产物 embed 进 Go 二进制。
+技术栈：**Go 1.25**（Gin + cobra + embed）+ **React 18 / Vite / TypeScript /
+antd v5 / zustand / monaco-editor / react-i18next**。单二进制分发 ——
+React 构建产物 embed 进 Go 二进制。
