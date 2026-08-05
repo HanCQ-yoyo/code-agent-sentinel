@@ -24,6 +24,7 @@ export default function GeneralSettings() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
             <span style={{ fontSize: 'var(--fs-sm)' }}>{t('topbar.theme')}</span>
             <Switch
+              className="theme-switch"
               size="small"
               checked={theme === 'dark'}
               onChange={toggle}
