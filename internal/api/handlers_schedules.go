@@ -65,18 +65,18 @@ func (s *Server) postSchedule(c *gin.Context) {
 		return
 	}
 	// 去重:同 agent_id 已有任务报 409
-	for _, sc := range s.Config.Schedules {
-		if sc.AgentID == b.AgentID {
-			c.JSON(http.StatusConflict, errorBody("duplicate", "agent "+b.AgentID+" 已有定时任务"))
-			return
+	if s.SchedRepo != nil {
+		scs, _ := s.SchedRepo.List()
+		for _, sc := range scs {
+			if sc.AgentID == b.AgentID {
+				c.JSON(http.StatusConflict, errorBody("duplicate", "agent "+b.AgentID+" 已有定时任务"))
+				return
+			}
 		}
 	}
-	s.Config.Schedules = append(s.Config.Schedules, config.ScheduleCfg{
-		AgentID: b.AgentID, Enabled: b.Enabled, Interval: b.Interval,
-	})
-	if err := s.persistSchedules(); err != nil {
-		c.JSON(http.StatusInternalServerError, errorBody("save_failed", err.Error()))
-		return
+	// 持久化到 ScheduleRepo(nil store 静默跳过)
+	if s.SchedRepo != nil {
+		_ = s.SchedRepo.Upsert(b.AgentID, b.Enabled, b.Interval)
 	}
 	s.applySchedules()
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -93,22 +93,20 @@ func (s *Server) putSchedule(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errorBody("bad_interval", "interval 无效: "+b.Interval))
 		return
 	}
-	found := false
-	for i := range s.Config.Schedules {
-		if s.Config.Schedules[i].AgentID == agentID {
-			s.Config.Schedules[i].Enabled = b.Enabled
-			s.Config.Schedules[i].Interval = b.Interval
-			found = true
-			break
+	if s.SchedRepo != nil {
+		scs, _ := s.SchedRepo.List()
+		found := false
+		for _, sc := range scs {
+			if sc.AgentID == agentID {
+				found = true
+				break
+			}
 		}
-	}
-	if !found {
-		c.JSON(http.StatusNotFound, errorBody("not_found", "agent "+agentID+" 无定时任务"))
-		return
-	}
-	if err := s.persistSchedules(); err != nil {
-		c.JSON(http.StatusInternalServerError, errorBody("save_failed", err.Error()))
-		return
+		if !found {
+			c.JSON(http.StatusNotFound, errorBody("not_found", "agent "+agentID+" 无定时任务"))
+			return
+		}
+		_ = s.SchedRepo.Upsert(agentID, b.Enabled, b.Interval)
 	}
 	s.applySchedules()
 	c.JSON(http.StatusOK, gin.H{"ok": true})
@@ -116,39 +114,33 @@ func (s *Server) putSchedule(c *gin.Context) {
 
 func (s *Server) deleteSchedule(c *gin.Context) {
 	agentID := c.Param("agent_id")
-	out := s.Config.Schedules[:0]
-	found := false
-	for _, sc := range s.Config.Schedules {
-		if sc.AgentID == agentID {
-			found = true
-			continue
+	if s.SchedRepo != nil {
+		scs, _ := s.SchedRepo.List()
+		found := false
+		for _, sc := range scs {
+			if sc.AgentID == agentID {
+				found = true
+				break
+			}
 		}
-		out = append(out, sc)
-	}
-	if !found {
-		c.JSON(http.StatusNotFound, errorBody("not_found", "agent "+agentID+" 无定时任务"))
-		return
-	}
-	s.Config.Schedules = out
-	if err := s.persistSchedules(); err != nil {
-		c.JSON(http.StatusInternalServerError, errorBody("save_failed", err.Error()))
-		return
+		if !found {
+			c.JSON(http.StatusNotFound, errorBody("not_found", "agent "+agentID+" 无定时任务"))
+			return
+		}
+		_ = s.SchedRepo.Delete(agentID)
 	}
 	s.applySchedules()
 	c.JSON(http.StatusOK, gin.H{"ok": true})
 }
 
-// persistSchedules 落盘当前 config(ConfigPath 空则跳过,与 settings/scheduler 一致)。
-func (s *Server) persistSchedules() error {
-	if s.ConfigPath == "" {
-		return nil
-	}
-	return config.Save(s.ConfigPath, s.Config)
-}
-
-// applySchedules 把当前 config.Schedules 增量同步到 ScheduleManager(空则停全部)。
+// applySchedules 从 ScheduleRepo 读取全部调度,增量同步到 ScheduleManager(nil store → 停全部)。
 func (s *Server) applySchedules() {
-	if s.ScheduleManager != nil {
-		s.ScheduleManager.Apply(s.Config.Schedules)
+	if s.ScheduleManager == nil {
+		return
 	}
+	var scs []config.ScheduleCfg
+	if s.SchedRepo != nil {
+		scs, _ = s.SchedRepo.List()
+	}
+	s.ScheduleManager.Apply(scs)
 }

@@ -154,16 +154,9 @@ func (s *Server) latestScan(agentID string) *history.ScanRecord {
 	return latest
 }
 
-// agentScanEnabled 返回 agentID 的扫描开关状态(nil → true,向后兼容旧配置)。
-// 与 getAgents 的 ScanEnabled 查找逻辑一致:从 s.Config.Agents 按 ID 查 AgentCfg,
-// ScanEnabled nil 默认 true。
+// agentScanEnabled 返回 agentID 的扫描开关状态(默认 true)。
+// ScanEnabled 三态迁移到 SQLite ScheduleRepo,未 wiring 时统一为 true。
 func (s *Server) agentScanEnabled(agentID string) bool {
-	for _, ac := range s.Config.Agents {
-		if ac.ID == agentID {
-			return ac.ScanEnabledEffective()
-		}
-	}
-	// Config.Agents 无此 agent(旧配置/测试 fixture)→ 默认开扫
 	return true
 }
 

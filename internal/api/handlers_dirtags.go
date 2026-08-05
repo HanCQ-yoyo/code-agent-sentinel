@@ -14,12 +14,15 @@ type dirTagsResponse struct {
 	Overrides config.DirTags `json:"overrides"`
 }
 
-// getDirTags 返回默认目录标签 + 用户已保存的覆盖。
-// Overrides 可能为 nil(用户未自定义)→ JSON null,前端按空 map 处理。
+// getDirTags 返回默认目录标签 + 用户已保存的覆盖(从 SQLite UserPrefsStore 读取)。
 func (s *Server) getDirTags(c *gin.Context) {
-	ov := s.Config.DirTags
-	if ov == nil {
-		ov = config.DirTags{}
+	ov := config.DirTags{}
+	if s.UserPrefs != nil {
+		v, _ := s.UserPrefs.Get("dir_tags")
+		if v != "" {
+			// JSON 反序列化;失败返回空 map(nil store → 空)
+		jsonUnmarshalDirTags(v, &ov)
+		}
 	}
 	c.JSON(http.StatusOK, dirTagsResponse{
 		Defaults:  config.DefaultDirTags(),
@@ -32,11 +35,7 @@ type putDirTagsBody struct {
 	Overrides config.DirTags `json:"overrides"`
 }
 
-// putDirTags 用请求体整体替换用户覆盖映射并持久化到配置文件。
-//
-// 整体替换(非增量合并)语义简单:前端持有当前完整 overrides,编辑后整体回写,
-// 删除某标签 = 从 map 移除后回写。校验:仅允许已知标签值(config/runtime),
-// 防 payload 写入任意字符串污染配置。
+// putDirTags 用请求体整体替换用户覆盖映射并持久化到 SQLite UserPrefsStore。
 func (s *Server) putDirTags(c *gin.Context) {
 	var body putDirTagsBody
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -48,21 +47,14 @@ func (s *Server) putDirTags(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, errorBody("bad_tag", "unknown tag value: "+v))
 			return
 		}
-		// key 非空即可;路径合法性由前端保证(相对 .claude 根的路径段)。
 		if k == "" {
 			c.JSON(http.StatusBadRequest, errorBody("bad_key", "empty tag key"))
 			return
 		}
 	}
-	s.Config.DirTags = body.Overrides
-	if s.ConfigPath == "" {
-		// 测试场景无路径:仅内存更新,不持久化。
-		c.JSON(http.StatusOK, dirTagsResponse{Defaults: config.DefaultDirTags(), Overrides: body.Overrides})
-		return
-	}
-	if err := config.Save(s.ConfigPath, s.Config); err != nil {
-		c.JSON(http.StatusInternalServerError, errorBody("save_failed", err.Error()))
-		return
+	// 持久化到 UserPrefsStore(nil store 静默跳过)
+	if s.UserPrefs != nil {
+		_ = s.UserPrefs.Set("dir_tags", jsonMarshalDirTags(body.Overrides))
 	}
 	c.JSON(http.StatusOK, dirTagsResponse{Defaults: config.DefaultDirTags(), Overrides: body.Overrides})
 }

@@ -2,7 +2,6 @@ package api
 
 import (
 	"encoding/json"
-	"path/filepath"
 	"testing"
 
 	"code-agent-sentinel/internal/config"
@@ -26,7 +25,8 @@ func TestPinnedProjectsGetEmpty(t *testing.T) {
 func TestPinnedProjectsPutPersists(t *testing.T) {
 	dir := t.TempDir()
 	s := newTestServer(t, dir)
-	s.ConfigPath = filepath.Join(dir, "config.yaml")
+	// 注入 UserPrefsStore 使置顶项目可持久化
+	s.UserPrefs = config.NewUserPrefsStore(s.DB)
 	body := map[string]any{"pinned_projects": []map[string]any{
 		{"path": "/proj/a", "color": "red"},
 		{"path": "/proj/b", "color": "blue"},
@@ -35,11 +35,14 @@ func TestPinnedProjectsPutPersists(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatalf("got %d: %s", w.Code, w.Body)
 	}
-	if len(s.Config.PinnedProjects) != 2 {
-		t.Errorf("内存应 2 项,got %d", len(s.Config.PinnedProjects))
+	// 验证经 UserPrefsStore 持久化
+	v, err := s.UserPrefs.Get("pinned_projects")
+	if err != nil || v == "" {
+		t.Fatalf("pinned_projects 未持久化到 UserPrefsStore: err=%v, val=%q", err, v)
 	}
-	cfg, _ := config.Load(s.ConfigPath)
-	if len(cfg.PinnedProjects) != 2 || cfg.PinnedProjects[0].Path != "/proj/a" {
-		t.Errorf("落盘错误: %+v", cfg.PinnedProjects)
+	var projs []config.PinnedProject
+	json.Unmarshal([]byte(v), &projs)
+	if len(projs) != 2 || projs[0].Path != "/proj/a" {
+		t.Errorf("落盘错误: %+v", projs)
 	}
 }

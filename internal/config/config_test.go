@@ -15,8 +15,8 @@ func TestLoadDefaultsWhenMissing(t *testing.T) {
 	if c.Bind != "127.0.0.1" {
 		t.Errorf("默认 bind: %s", c.Bind)
 	}
-	if c.Port != 0 {
-		t.Errorf("默认 port 应 0(随机): %d", c.Port)
+	if c.Port != 15921 {
+		t.Errorf("默认 port: %d", c.Port)
 	}
 }
 
@@ -58,46 +58,6 @@ func TestConfigBackupDefaults(t *testing.T) {
 	}
 }
 
-// Task 15:新字段默认值 + Resolve* helpers
-func TestConfigResolveDefaults(t *testing.T) {
-	c := DefaultConfig()
-	home := "/tmp/fake-home"
-
-	if got := c.ResolveSentinelRulesDir(home); got != filepath.Join(home, ".code-agent-sentinel", "rules") {
-		t.Errorf("ResolveSentinelRulesDir = %q", got)
-	}
-	if got := c.ResolveSuppressPath(home); got != filepath.Join(home, ".code-agent-sentinel", "suppressions.yaml") {
-		t.Errorf("ResolveSuppressPath = %q", got)
-	}
-	if got := c.ResolveBaselinePath(home); got != filepath.Join(home, ".code-agent-sentinel", "baseline.json") {
-		t.Errorf("ResolveBaselinePath = %q", got)
-	}
-	if got := c.ResolveSuppressionDiscount(); got != DefaultSuppressionDiscount {
-		t.Errorf("ResolveSuppressionDiscount = %v, want %v", got, DefaultSuppressionDiscount)
-	}
-}
-
-func TestConfigResolveOverrides(t *testing.T) {
-	c := DefaultConfig()
-	c.SentinelRulesDir = "/custom/rules"
-	c.SuppressPath = "/custom/suppr.yaml"
-	c.BaselinePath = "/custom/baseline.json"
-	c.SuppressionDiscount = 0.5
-
-	if got := c.ResolveSentinelRulesDir("/home"); got != "/custom/rules" {
-		t.Errorf("ResolveSentinelRulesDir override = %q", got)
-	}
-	if got := c.ResolveSuppressPath("/home"); got != "/custom/suppr.yaml" {
-		t.Errorf("ResolveSuppressPath override = %q", got)
-	}
-	if got := c.ResolveBaselinePath("/home"); got != "/custom/baseline.json" {
-		t.Errorf("ResolveBaselinePath override = %q", got)
-	}
-	if got := c.ResolveSuppressionDiscount(); got != 0.5 {
-		t.Errorf("ResolveSuppressionDiscount override = %v", got)
-	}
-}
-
 func TestConfigNewFieldsDefaults(t *testing.T) {
 	cfg := DefaultConfig()
 	if cfg.ClaudeDir != "" {
@@ -105,18 +65,6 @@ func TestConfigNewFieldsDefaults(t *testing.T) {
 	}
 	if cfg.Discovery != nil {
 		t.Error("Discovery 默认应 nil(全发现)")
-	}
-	if cfg.ScanInterval != "" {
-		t.Errorf("ScanInterval 默认应空(关),got %q", cfg.ScanInterval)
-	}
-	if cfg.ScanEnabled {
-		t.Error("ScanEnabled 默认应 false")
-	}
-	if cfg.Language != "" {
-		t.Errorf("Language 默认应空(前端回退 en),got %q", cfg.Language)
-	}
-	if cfg.PinnedProjects != nil {
-		t.Error("PinnedProjects 默认应 nil")
 	}
 }
 
@@ -134,19 +82,10 @@ func TestConfigResolveClaudeDir(t *testing.T) {
 	}
 }
 
-func TestConfigLoadDiscoveryAndPinned(t *testing.T) {
+func TestConfigLoadDiscovery(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
-	write := `claude_dir: /custom/.claude
-discovery:
-  disabled_asset_types: [skill, command]
-scan_interval: 30m
-scan_enabled: true
-language: en
-pinned_projects:
-  - path: /proj/a
-    color: red
-`
+	write := "claude_dir: /custom/.claude\ndiscovery:\n  disabled_asset_types: [skill, command]\n"
 	if err := os.WriteFile(path, []byte(write), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -162,18 +101,6 @@ pinned_projects:
 	}
 	if cfg.Discovery.DisabledAssetTypes[0] != "skill" {
 		t.Errorf("DisabledAssetTypes[0]: %q", cfg.Discovery.DisabledAssetTypes[0])
-	}
-	if cfg.ScanInterval != "30m" {
-		t.Errorf("ScanInterval: %q", cfg.ScanInterval)
-	}
-	if !cfg.ScanEnabled {
-		t.Error("ScanEnabled 应 true")
-	}
-	if cfg.Language != "en" {
-		t.Errorf("Language: %q", cfg.Language)
-	}
-	if len(cfg.PinnedProjects) != 1 || cfg.PinnedProjects[0].Path != "/proj/a" || cfg.PinnedProjects[0].Color != "red" {
-		t.Errorf("PinnedProjects: %+v", cfg.PinnedProjects)
 	}
 }
 
@@ -263,80 +190,40 @@ func TestResolveAgentsUnknownIDFallsBackToClaude(t *testing.T) {
 	}
 }
 
-func TestResolveSchedulesUsesSchedulesWhenNonEmpty(t *testing.T) {
-	c := &Config{Schedules: []ScheduleCfg{{AgentID: "claude-code", Enabled: true, Interval: "30m"}}}
-	got := c.ResolveSchedules(nil)
-	if len(got) != 1 || got[0].AgentID != "claude-code" || got[0].Interval != "30m" {
-		t.Fatalf("ResolveSchedules 应直用 schedules: %+v", got)
+func TestResolveSchedulesReturnsNil(t *testing.T) {
+	// ResolveSchedules 简化后始终返回 nil(调度配置迁移到 SQLite ScheduleRepo)。
+	got := (&Config{}).ResolveSchedules(nil)
+	if got != nil {
+		t.Fatalf("ResolveSchedules 应返回 nil, got %+v", got)
 	}
 }
 
-func TestResolveSchedulesFallsBackToScanEnabled(t *testing.T) {
-	c := &Config{ScanEnabled: true, ScanInterval: "1h"}
-	agents := []AgentCfg{{ID: "claude-code", Enabled: true}}
-	got := c.ResolveSchedules(agents)
-	if len(got) != 1 || got[0].AgentID != "claude-code" || got[0].Interval != "1h" || !got[0].Enabled {
-		t.Fatalf("Schedules 空应回退 scan_* 造首 agent 任务: %+v", got)
-	}
-}
-
-func TestResolveSchedulesEmptyWhenScanDisabled(t *testing.T) {
-	c := &Config{ScanEnabled: false, ScanInterval: ""}
-	got := c.ResolveSchedules([]AgentCfg{{ID: "claude-code", Enabled: true}})
-	if len(got) != 0 {
-		t.Fatalf("scan 关闭且回退时应返回空: %+v", got)
-	}
-}
-
-// Task 1:AgentCfg.ScanEnabled 三态 + ResolveScanAgents
-func TestScanEnabledTriState(t *testing.T) {
-	// nil → true(旧配置向后兼容)
-	var nilPtr *bool
-	a := AgentCfg{ID: "test", Enabled: true, ScanEnabled: nilPtr}
-	if !a.ScanEnabledEffective() {
-		t.Error("nil ScanEnabled 应视为 true")
-	}
-	// 显式 false
-	f := false
-	a.ScanEnabled = &f
-	if a.ScanEnabledEffective() {
-		t.Error("false ScanEnabled 应视为 false")
-	}
-	// 显式 true
-	tr := true
-	a.ScanEnabled = &tr
-	if !a.ScanEnabledEffective() {
-		t.Error("true ScanEnabled 应视为 true")
-	}
-}
-
-func TestResolveScanAgents_FiltersDisabled(t *testing.T) {
+func TestResolveScanAgents_OnlyEnabled(t *testing.T) {
 	home := t.TempDir()
-	tr, f := true, false
 	c := &Config{
 		Agents: []AgentCfg{
-			{ID: "a", Enabled: true, ScanEnabled: &tr},
-			{ID: "b", Enabled: true, ScanEnabled: &f},  // 扫描关闭
-			{ID: "c", Enabled: false, ScanEnabled: &tr}, // setup 未启用
+			{ID: "a", Enabled: true},
+			{ID: "b", Enabled: false},
+			{ID: "c", Enabled: true},
 		},
 	}
 	got := c.ResolveScanAgents(home)
-	if len(got) != 1 || got[0].ID != "a" {
-		t.Errorf("应只返回 a: got %v", got)
+	if len(got) != 2 || got[0].ID != "a" || got[1].ID != "c" {
+		t.Errorf("应只返回 enabled agents: got %v", got)
 	}
 }
 
-func TestResolveScanAgents_NilMeansAll(t *testing.T) {
+func TestResolveScanAgents_AllEnabled(t *testing.T) {
 	home := t.TempDir()
 	c := &Config{
 		Agents: []AgentCfg{
-			{ID: "x", Enabled: true}, // ScanEnabled nil → true
+			{ID: "x", Enabled: true},
 			{ID: "y", Enabled: true},
 		},
 	}
 	got := c.ResolveScanAgents(home)
 	if len(got) != 2 {
-		t.Errorf("nil ScanEnabled 应全保留: got %d", len(got))
+		t.Errorf("全部 enabled 应全保留: got %d", len(got))
 	}
 }
 
@@ -344,7 +231,7 @@ func TestResolveScanAgents_NilMeansAll(t *testing.T) {
 func TestTokenFieldRoundTrip(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "config.yaml")
-	cfg := &Config{Token: "abc123", Language: "en"}
+	cfg := &Config{Token: "abc123"}
 	if err := Save(p, cfg); err != nil {
 		t.Fatal(err)
 	}

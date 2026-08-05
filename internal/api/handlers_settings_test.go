@@ -14,7 +14,9 @@ func TestGetSettings(t *testing.T) {
 	dir := t.TempDir()
 	s := newTestServer(t, dir)
 	s.ConfigPath = filepath.Join(dir, "config.yaml")
-	s.Config.Language = "en"
+	// 注入 UserPrefsStore 预置 language
+	s.UserPrefs = config.NewUserPrefsStore(s.DB)
+	_ = s.UserPrefs.Set("language", "en")
 	s.Config.ClaudeDir = "/custom/.claude"
 	s.Config.Discovery = &config.DiscoveryCfg{DisabledAssetTypes: []string{"mcp_server"}}
 	w := reqScheduler(t, s, "GET", "/api/settings", nil)
@@ -26,8 +28,7 @@ func TestGetSettings(t *testing.T) {
 	if st["language"] != "en" || st["claude_dir"] != "/custom/.claude" {
 		t.Errorf("settings: %+v", st)
 	}
-	// DiscoveryCfg 必须以 snake_case json tag 序列化(与 PinnedProject 同类约束,防 gin
-	// 默认大写驼峰 DisabledAssetTypes 污染 /api/settings 响应)。
+	// DiscoveryCfg 必须以 snake_case json tag 序列化
 	disc, ok := st["discovery"].(map[string]any)
 	if !ok {
 		t.Fatalf("discovery 缺失或类型错误: %+v", st["discovery"])
@@ -44,16 +45,16 @@ func TestPutSettingsLanguagePersists(t *testing.T) {
 	dir := t.TempDir()
 	s := newTestServer(t, dir)
 	s.ConfigPath = filepath.Join(dir, "config.yaml")
+	// 注入 UserPrefsStore
+	s.UserPrefs = config.NewUserPrefsStore(s.DB)
 	w := reqScheduler(t, s, "PUT", "/api/settings", map[string]any{"language": "en"})
 	if w.Code != 200 {
 		t.Fatalf("got %d: %s", w.Code, w.Body)
 	}
-	if s.Config.Language != "en" {
-		t.Error("未更新内存")
-	}
-	cfg, _ := config.Load(s.ConfigPath)
-	if cfg.Language != "en" {
-		t.Error("未落盘")
+	// 验证经 UserPrefsStore 持久化
+	v, err := s.UserPrefs.Get("language")
+	if err != nil || v != "en" {
+		t.Errorf("language 未持久化: err=%v, val=%q", err, v)
 	}
 }
 
@@ -78,14 +79,11 @@ func TestPutSettingsIgnoresRestartFieldsWithWarning(t *testing.T) {
 }
 
 // TestPutSettingsScanToggle 覆盖 scan_enabled 总开关经 PUT /api/settings
-// 传播到 ScheduleManager.Paused(而非 dead s.Scheduler.Reconfigure)。
-// 旧 TestPutSettingsScanReconfigure 断言 s.Scheduler.Status(),但 putSettings
-// 的 scanChanged 分支已改为调 applyScanToggle(只动 ScheduleManager.Paused,
-// 不再触 s.Scheduler.Reconfigure),旧测试的断言路径已消失——故以本测试取代之。
-// s.Scheduler 字段本身由 Task 3 连同 handlers_scheduler.go 的 dead 分支删除。
+// 传播到 ScheduleManager.Paused。
 func TestPutSettingsScanToggle(t *testing.T) {
 	dir := t.TempDir()
 	s := newTestServer(t, dir)
+	s.SchedRepo = config.NewScheduleRepo(s.DB)
 	s.ScheduleManager = scheduler.NewManager(func(string) func(context.Context) error {
 		return func(context.Context) error { return nil }
 	})
@@ -105,13 +103,9 @@ func TestPutSettingsScanToggle(t *testing.T) {
 	if s.ScheduleManager.Paused() {
 		t.Error("scan_enabled=true 应令 ScheduleManager.Paused()=false")
 	}
-	if !s.Config.ScanEnabled {
-		t.Error("config.ScanEnabled 应已更新为 true")
-	}
 }
 
-// TestPutSettingsRejectsBadScanInterval 覆盖 Minor gap (d):PUT /api/settings
-// 拒绝坏的 scan_interval(此前只测了 /api/scheduler 的坏间隔)。
+// TestPutSettingsRejectsBadScanInterval 覆盖 Minor gap:PUT /api/settings 拒绝坏的 scan_interval。
 func TestPutSettingsRejectsBadScanInterval(t *testing.T) {
 	dir := t.TempDir()
 	s := newTestServer(t, dir)
@@ -125,30 +119,17 @@ func TestPutSettingsRejectsBadScanInterval(t *testing.T) {
 	}
 }
 
-// TestPutSettingsZeroIntervalPersists 覆盖 Minor #2/#3:scan_interval <= 0 时
-// 即使 scan_enabled=true,putSettings 也不应崩溃且 config 应如实落盘。
-//
-// Task 3 重构注记:旧版本断言 s.Scheduler.Status().Enabled 被强制为 false——
-// 那依赖已删除的 s.Scheduler.Reconfigure(interval<=0 → enabled=false)路径。
-// 现 putSettings 不再做 interval<=0 → 强制禁用 的等价处理(该语义只在
-// /api/scheduler 与 /api/schedules 的 validateInterval 里;scan_interval 是
-// /api/settings 总开关级别,仅作 ResolveSchedules 回退默认)。applyScanToggle
-// 只传播 ScanEnabled → ScheduleManager.Paused,与 scan_interval 正负无关。
-//
-// 故本测试改为验证真实行为:scan_interval="0s" + scan_enabled=true → 200 OK,
-// config 落盘如实(ScanEnabled=true / ScanInterval="0s"),ScheduleManager.Paused=false
-// (总开关开),且不 panic。对 interval<=0 强制禁用的语义覆盖由 /api/scheduler
-// 与 /api/schedules 的测试(TestPutSchedulerEnablesAndPersists 零间隔分支、
-// TestPostScheduleRejectsBadInterval)承担。
+// TestPutSettingsZeroIntervalPersists 覆盖 Minor:scan_interval="0s" + scan_enabled=true 应 200 OK。
+// putSettings 不做 interval<=0 强制禁用(该语义在 /api/scheduler 与 /api/schedules 的 validateInterval 里)。
 func TestPutSettingsZeroIntervalPersists(t *testing.T) {
 	dir := t.TempDir()
 	s := newTestServer(t, dir)
 	s.ConfigPath = filepath.Join(dir, "config.yaml")
+	s.SchedRepo = config.NewScheduleRepo(s.DB)
 	s.ScheduleManager = scheduler.NewManager(func(string) func(context.Context) error {
 		return func(context.Context) error { return nil }
 	})
-	// scan_interval="0s" + scan_enabled=true → putSettings 接受(0s 是合法 duration),
-	// 总开关开 → ScheduleManager.Paused=false,config 如实落盘。
+	// scan_interval="0s" + scan_enabled=true → putSettings 接受
 	w := reqScheduler(t, s, "PUT", "/api/settings", map[string]any{
 		"scan_enabled":  true,
 		"scan_interval": "0s",
@@ -156,18 +137,13 @@ func TestPutSettingsZeroIntervalPersists(t *testing.T) {
 	if w.Code != 200 {
 		t.Fatalf("got %d: %s", w.Code, w.Body)
 	}
-	if !s.Config.ScanEnabled {
-		t.Error("ScanEnabled 应为 true(如实落盘)")
-	}
-	if s.Config.ScanInterval != "0s" {
-		t.Errorf("ScanInterval 应为 \"0s\",got %q", s.Config.ScanInterval)
-	}
+	// 验证 ScheduleManager.Paused 状态(request scan_enabled=true → Paused=false)
 	if s.ScheduleManager.Paused() {
 		t.Error("scan_enabled=true 应令 Paused=false,无关 scan_interval 正负")
 	}
-	// 落盘校验
-	cfg, _ := config.Load(s.ConfigPath)
-	if !cfg.ScanEnabled || cfg.ScanInterval != "0s" {
-		t.Errorf("文件未如实落盘: enabled=%v interval=%q", cfg.ScanEnabled, cfg.ScanInterval)
+	// 验证 ScheduleRepo 持久化
+	interval, enabled := s.schedPrefs("claude-code")
+	if !enabled || interval != "0s" {
+		t.Errorf("SchedRepo: enabled=%v interval=%q", enabled, interval)
 	}
 }

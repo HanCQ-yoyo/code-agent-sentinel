@@ -3,7 +3,6 @@ package api
 import (
 	"encoding/json"
 	"net/http/httptest"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -43,13 +42,11 @@ func TestGetFavoritesEmpty(t *testing.T) {
 	}
 }
 
-// TestPutFavoritesPersistsToFile 验证 PUT 整体替换并持久化到配置文件,
-// 重新 Load 后收藏仍在(跨重启/跨端口的核心场景)。
-func TestPutFavoritesPersistsToFile(t *testing.T) {
+// TestPutFavoritesPersists 验证 PUT 整体替换并持久化到 SQLite UserPrefsStore。
+func TestPutFavoritesPersists(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, ".code-agent-sentinel", "config.yaml")
 	s := newTestServer(t, dir)
-	s.ConfigPath = cfgPath
+	s.UserPrefs = config.NewUserPrefsStore(s.DB)
 
 	body := `{"favorites":["a1","b2","c3"]}`
 	code, resp := reqFavorites(t, s, "PUT", body)
@@ -59,22 +56,23 @@ func TestPutFavoritesPersistsToFile(t *testing.T) {
 	if len(resp.Favorites) != 3 || resp.Favorites[0] != "a1" {
 		t.Errorf("回写未返回: %v", resp.Favorites)
 	}
-	// 持久化:重新 Load 配置文件应见收藏。
-	c2, err := config.Load(cfgPath)
-	if err != nil {
-		t.Fatal(err)
+	// 验证经 UserPrefsStore 持久化
+	v, err := s.UserPrefs.Get("favorites")
+	if err != nil || v == "" {
+		t.Fatalf("favorites 未持久化到 UserPrefsStore: err=%v, val=%q", err, v)
 	}
-	if len(c2.Favorites) != 3 || c2.Favorites[0] != "a1" {
-		t.Errorf("持久化丢失: %v", c2.Favorites)
+	var favs []string
+	json.Unmarshal([]byte(v), &favs)
+	if len(favs) != 3 || favs[0] != "a1" {
+		t.Errorf("持久化丢失: %v", favs)
 	}
 }
 
 // TestPutFavoritesReplacesNotMerges 验证整体替换语义:第二次 PUT 不含的 id 被移除。
 func TestPutFavoritesReplacesNotMerges(t *testing.T) {
 	dir := t.TempDir()
-	cfgPath := filepath.Join(dir, ".code-agent-sentinel", "config.yaml")
 	s := newTestServer(t, dir)
-	s.ConfigPath = cfgPath
+	s.UserPrefs = config.NewUserPrefsStore(s.DB)
 
 	reqFavorites(t, s, "PUT", `{"favorites":["a1","b2"]}`)
 	code, resp := reqFavorites(t, s, "PUT", `{"favorites":["c3"]}`)

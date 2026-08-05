@@ -76,13 +76,10 @@ func TestMergeSetupSelectionIntoConfig(t *testing.T) {
 	selection := []config.AgentCfg{
 		{ID: "claude-code", Enabled: true, RootDir: "/x/.claude", ClaudeJSON: "/x/.claude.json"},
 	}
-	cfg := &config.Config{Language: "en"} // 其他字段应保留
+	cfg := &config.Config{} // 空初始配置
 	mergeAgents(cfg, selection)
 	if len(cfg.Agents) != 1 || cfg.Agents[0].RootDir != "/x/.claude" {
 		t.Errorf("merge 错: %+v", cfg.Agents)
-	}
-	if cfg.Language != "en" {
-		t.Error("merge 不应破坏其他字段")
 	}
 }
 

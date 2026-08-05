@@ -42,6 +42,13 @@ type Server struct {
 	// Task 12 起 NewServer 直接注入(main.go Task 10 曾用构造后赋值 srv.DB=db)。
 	DB *storage.DB
 
+	// UserPrefs 持久化用户偏好(语言、dir-tags、收藏、置顶项目)。nil=不可用(SQLite 故障).
+	// Task 4 由 main.go 注入,当前 nil 时各 handler 回退空值。
+	UserPrefs *config.UserPrefsStore
+	// Schedules 持久化定时扫描调度。nil=不可用(SQLite 故障).
+	// Task 4 由 main.go 注入,当前 nil 时 ScheduleManager 无调度。
+	SchedRepo *config.ScheduleRepo
+
 	// 异步扫描任务追踪(内存态,key=batchID)。重启丢失,符合本地工具预期。
 	scanTasks sync.Map
 }

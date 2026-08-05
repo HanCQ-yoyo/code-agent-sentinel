@@ -3,7 +3,6 @@ package config
 import (
 	"os"
 	"path/filepath"
-	"time"
 
 	"gopkg.in/yaml.v3"
 
@@ -21,19 +20,8 @@ type Config struct {
 	AllowedCIDRs []string   `yaml:"allowed_cidrs"`
 	BasicAuth    *BasicAuth `yaml:"basic_auth"`
 	HomeDir      string     `yaml:"home_dir"` // 覆盖 ~/.claude 的 home
-	// DirTags 用户对「目录标签」的显式覆盖:key=相对 .claude 根的路径,value=标签。
-	// 默认标签见 DefaultDirTags();生效标签由 ResolveDirTag 合并。
-	// 空表示用户未自定义,全用默认。见 dir_tags.go。
-	DirTags    DirTags  `yaml:"dir_tags"`
-	Favorites  []string `yaml:"favorites"`   // 资产收藏/置顶 id 列表(跨会话保留;localStorage 受端口影响故改存配置)
 	BackupDir  string   `yaml:"backup_dir"`  // 空=默认 ~/.code-agent-sentinel/backups
 	MaxBackups int      `yaml:"max_backups"` // 0=默认 20
-
-	// Task 15:安全检测增强配置字段。空值=用默认路径/值,Resolve* 方法统一解析。
-	SentinelRulesDir    string  `yaml:"sentinel_rules_dir"`   // 空=默认 ~/.code-agent-sentinel/rules
-	SuppressPath        string  `yaml:"suppress_path"`        // 空=默认 ~/.code-agent-sentinel/suppressions.yaml
-	BaselinePath        string  `yaml:"baseline_path"`        // 空=默认 ~/.code-agent-sentinel/baseline.json
-	SuppressionDiscount float64 `yaml:"suppression_discount"` // 空/0=默认 0.3
 
 	// 检测器运行期配置(启用开关 + 二进制路径)。nil=全启用默认(向后兼容)。
 	// main.go 启动时 EnsureDetectors 确保非 nil,使 API 写能原地被检测器读到。
@@ -47,12 +35,6 @@ type Config struct {
 	ClaudeDir string `yaml:"claude_dir"`
 	// #2:发现范围开关;nil = 全发现
 	Discovery *DiscoveryCfg `yaml:"discovery"`
-	// #1:定时扫描间隔(如 "30m"/"1h");空/0/无效 = 关
-	ScanInterval string `yaml:"scan_interval"`
-	// #1:定时扫描总开关
-	ScanEnabled bool `yaml:"scan_enabled"`
-	// #5:"zh"/"en";空 = 前端默认英文(用户可用 localStorage 覆盖,或在此显式配置)
-	Language string `yaml:"language"`
 	// Token 是服务模式预置的访问 token。空=前台交互场景随机生成(见 main.go)。
 	// service install 写入,使后台进程无需经 banner 展示即可拼接 #token= URL。
 	Token string `yaml:"token"`
@@ -61,16 +43,11 @@ type Config struct {
 	// service install 生成的单元文件带 --log-path 指向 <home>/.code-agent-sentinel/code-agent-sentinel.log,
 	// 亦允许用户在此显式配置自定义路径覆盖单元默认。
 	LogPath string `yaml:"log_path" json:"log_path"`
-	// #4:置顶项目列表
-	PinnedProjects []PinnedProject `yaml:"pinned_projects"`
 	// 已知项目清单(独立于 agent 机器文件;setup 可从 ~/.claude.json 导入初始值)。
 	// 供 Codex 项目级发现使用(替代 ~/.claude.json projects),Claude 各项目读 .claude/ 亦可用。
-	// 与 PinnedProjects 并列(语义不同:已知清单 vs Assets 页置顶标识)。
 	KnownProjects []KnownProject `yaml:"known_projects" json:"known_projects"`
 	// 多 agent 配置(setup 写入)。空 → ResolveAgents 回退到 ClaudeDir。
 	Agents []AgentCfg `yaml:"agents" json:"agents"`
-	// 多任务调度:每个 agent 一个定时扫描任务。空 → ResolveSchedules 回退到 ScanEnabled/ScanInterval。
-	Schedules []ScheduleCfg `yaml:"schedules" json:"schedules"`
 }
 
 // DiscoveryCfg 控制资产发现范围(按资产类型开关)。configengine 不导入本包,
@@ -80,9 +57,10 @@ type DiscoveryCfg struct {
 }
 
 // PinnedProject 是 Assets 页置顶的项目(右键置顶 + 颜色标识)。
+// yaml tag 已移除:置顶项目迁移到 SQLite user_prefs 表,不再从 config.yaml 序列化。
 type PinnedProject struct {
-	Path  string `yaml:"path" json:"path"`
-	Color string `yaml:"color" json:"color"`
+	Path  string `json:"path"`
+	Color string `json:"color"`
 }
 
 // KnownProject 是 sentinel 独立维护的已知项目清单(不依赖任何 agent 的机器文件)。
@@ -111,24 +89,16 @@ func (c *Config) ResolveKnownProjects() []KnownProject {
 type AgentCfg struct {
 	ID          string `yaml:"id"            json:"id"`
 	Enabled     bool   `yaml:"enabled"       json:"enabled"`               // setup 勾选结果
-	ScanEnabled *bool  `yaml:"scan_enabled,omitempty" json:"scan_enabled"` // 运行期扫描覆盖开关。nil→默认 true(向后兼容旧配置)
 	RootDir     string `yaml:"root_dir"      json:"root_dir"`              // 配置根:~/.claude;空=默认
 	ClaudeJSON  string `yaml:"claude_json"   json:"claude_json"`           // 机器管理文件:~/.claude.json;空=默认
 }
 
-// ScanEnabledEffective 展开 ScanEnabled 三态:nil→true(向后兼容旧配置)。
-func (a *AgentCfg) ScanEnabledEffective() bool {
-	if a.ScanEnabled == nil {
-		return true
-	}
-	return *a.ScanEnabled
-}
-
 // ScheduleCfg 是单个 agent 的定时扫描任务配置。
+// yaml tag 已移除:调度配置迁移到 SQLite schedules 表,不再从 config.yaml 序列化。
 type ScheduleCfg struct {
-	AgentID  string `yaml:"agent_id" json:"agent_id"` // "claude-code"
-	Enabled  bool   `yaml:"enabled"  json:"enabled"`
-	Interval string `yaml:"interval" json:"interval"` // "30m"/"1h";空/0/无效=关
+	AgentID  string `json:"agent_id"` // "claude-code"
+	Enabled  bool   `json:"enabled"`
+	Interval string `json:"interval"` // "30m"/"1h";空/0/无效=关
 }
 
 func DefaultConfig() *Config {
@@ -173,16 +143,12 @@ func Save(path string, c *Config) error {
 	return os.WriteFile(path, data, 0o600)
 }
 
-// DefaultSuppressionDiscount 是抑制 finding 的残值扣分因子(决策 #12:残值 30% 扣分)。
-// SuppressionDiscount 为 0 或负值时用此默认。
-const DefaultSuppressionDiscount = 0.3
-
-// ResolveSentinelRulesDir 返回全局规则目录路径。空=默认 <home>/.code-agent-sentinel/rules。
-func (c *Config) ResolveSentinelRulesDir(home string) string {
-	if c.SentinelRulesDir != "" {
-		return c.SentinelRulesDir
+// resolveDefault 空串返回 def,否则返回 v。供 ResolveAgents 填默认路径用。
+func resolveDefault(v, def string) string {
+	if v == "" {
+		return def
 	}
-	return filepath.Join(home, ".code-agent-sentinel", "rules")
+	return v
 }
 
 // ResolveClaudeDir 解析 .claude 目录绝对路径:非空用配置值,空回退 home/.claude。
@@ -224,74 +190,21 @@ func (c *Config) ResolveAgents(home string) []AgentCfg {
 	}}
 }
 
-// ResolveScanAgents 返回「Enabled(加载)且 ScanEnabledEffective(扫描)」的 agent 子集。
+// ResolveScanAgents 返回所有 Enabled 的 agent 子集(不再按 ScanEnabled 过滤,该职责迁移到 ScheduleRepo)。
 func (c *Config) ResolveScanAgents(home string) []AgentCfg {
 	all := c.ResolveAgents(home)
 	out := make([]AgentCfg, 0, len(all))
 	for _, a := range all {
-		if a.Enabled && a.ScanEnabledEffective() {
+		if a.Enabled {
 			out = append(out, a)
 		}
 	}
 	return out
 }
 
-// ResolveSchedules 解析定时任务列表。
-// Schedules 非空 → 直用;为空且旧 ScanEnabled+ScanInterval 有效 → 回退造首 agent 单任务。
+// ResolveSchedules 返回 nil(调度配置从 SQLite ScheduleRepo 读取,不再从 config.yaml 反序列化)。
 func (c *Config) ResolveSchedules(agents []AgentCfg) []ScheduleCfg {
-	if len(c.Schedules) > 0 {
-		return c.Schedules
-	}
-	if !c.ScanEnabled || c.ScanInterval == "" {
-		return nil
-	}
-	if d, err := time.ParseDuration(c.ScanInterval); err != nil || d <= 0 {
-		return nil
-	}
-	firstAgent := "claude-code"
-	if len(agents) > 0 {
-		firstAgent = agents[0].ID
-	}
-	return []ScheduleCfg{{AgentID: firstAgent, Enabled: true, Interval: c.ScanInterval}}
-}
-
-// resolveDefault 空串返回 def,否则返回 v。供 ResolveAgents 填默认路径用。
-func resolveDefault(v, def string) string {
-	if v == "" {
-		return def
-	}
-	return v
-}
-
-// ResolveSuppressPath 返回 suppressions 文件路径。空=默认 <home>/.code-agent-sentinel/suppressions.yaml。
-func (c *Config) ResolveSuppressPath(home string) string {
-	if c.SuppressPath != "" {
-		return c.SuppressPath
-	}
-	return filepath.Join(home, ".code-agent-sentinel", "suppressions.yaml")
-}
-
-// ResolveBaselinePath 返回 baseline 文件路径。空=默认 <home>/.code-agent-sentinel/baseline.json。
-func (c *Config) ResolveBaselinePath(home string) string {
-	if c.BaselinePath != "" {
-		return c.BaselinePath
-	}
-	return filepath.Join(home, ".code-agent-sentinel", "baseline.json")
-}
-
-// ResolveStatesPath 返回 finding_states.yaml 路径。统一默认 <home>/.code-agent-sentinel/finding_states.yaml。
-// 注:finding_states.yaml 暂不接 config 覆盖(与 baseline/suppressions 不同),统一默认路径
-// 简化迁移与多路径一致性问题。
-func (c *Config) ResolveStatesPath(home string) string {
-	return filepath.Join(home, ".code-agent-sentinel", "finding_states.yaml")
-}
-
-// ResolveSuppressionDiscount 返回抑制折扣因子。0 或负值=默认 0.3。
-func (c *Config) ResolveSuppressionDiscount() float64 {
-	if c.SuppressionDiscount > 0 {
-		return c.SuppressionDiscount
-	}
-	return DefaultSuppressionDiscount
+	return nil
 }
 
 // EnsureDetectors 确保 c.Detectors 非 nil(分配全启用默认)。已存在则不覆盖。

@@ -5,8 +5,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-
-	"code-agent-sentinel/internal/config"
 )
 
 // schedulerResponse 是 GET /api/scheduler 的响应。
@@ -21,13 +19,8 @@ type schedulerResponse struct {
 // schedulerStatusResponse 构造 scheduler 响应,nil-safe。
 //
 // Task 7 起 /api/scheduler 标记 deprecated:新前端用 /api/schedules,旧端点保留
-// 转发到 schedules。响应构造:
-//   - ScheduleManager 非 nil:取 Status() 中 AgentID==SelectedAgentID 的任务
-//     (无则取第一个,再无则返回零值),Interval 用 config.Schedules 的原始字符串
-//     (避免 time.Duration.String() 把 "30m" 漂移成 "30m0s")。
-//   - Manager 为 nil:退化用 config.ScanEnabled/ScanInterval(向后兼容)。
-//
-// Task 3 起旧 s.Scheduler 单任务路径已随字段一并删除,所有同步统一走 ScheduleManager。
+// 转发到 schedules。ScheduleManager 非 nil 时取 Status() 中对应 agent 的任务。
+// Manager 为 nil 时退化使用 ScheduleRepo(nil store → 零值)。
 func (s *Server) schedulerStatusResponse() schedulerResponse {
 	if s.ScheduleManager != nil {
 		st := s.ScheduleManager.Status()
@@ -57,23 +50,27 @@ func (s *Server) schedulerStatusResponse() schedulerResponse {
 		// 无任务
 		return schedulerResponse{Enabled: false, Interval: "0s"}
 	}
-	// 退化:基于 config 构造。ScanInterval 空串时用 "0s"(duration 零值的 String())。
-	interval := s.Config.ScanInterval
+	// 退化:基于 ScheduleRepo(nil → 零值)
+	interval, enabled := s.schedPrefs(s.SelectedAgentID)
 	if interval == "" {
 		interval = "0s"
 	}
 	return schedulerResponse{
-		Enabled:  s.Config.ScanEnabled,
+		Enabled:  enabled,
 		Interval: interval,
 		LastRun:  "",
 		NextRun:  "",
 	}
 }
 
-// scheduleIntervalString 返回 agentID 对应任务的原始 interval 字符串(与 degrade 分支一致,
-// 避免 "30m" 经 Duration.String() 漂移成 "30m0s")。找不到则回退 "0s"。
+// scheduleIntervalString 返回 agentID 对应任务的原始 interval 字符串。
+// 从 ScheduleRepo 查找，找不到则回退 "0s"。
 func (s *Server) scheduleIntervalString(agentID string) string {
-	for _, sc := range s.Config.Schedules {
+	if s.SchedRepo == nil {
+		return "0s"
+	}
+	scs, _ := s.SchedRepo.List()
+	for _, sc := range scs {
 		if sc.AgentID == agentID {
 			return sc.Interval
 		}
@@ -102,47 +99,24 @@ func (s *Server) putScheduler(c *gin.Context) {
 		return
 	}
 	enabled := body.Enabled != nil && *body.Enabled
-	// interval<=0 视为关闭(Task 7 语义:Start 对 interval<=0 no-op)。
-	// 与 putSettings 行为一致:零/负 interval 强制 enabled=false 再 Reconfigure。
+	// interval<=0 视为关闭
 	if interval <= 0 {
 		enabled = false
 	}
-	// 旧字段同步写(向后兼容读 ScanEnabled/ScanInterval 的代码)。
-	s.Config.ScanEnabled = enabled
-	s.Config.ScanInterval = body.Interval
-	// Task 7:旧端点 deprecated 转发到 schedules——更新 SelectedAgentID 对应任务,
-	// 不存在则追加。新前端应用 /api/schedules,这里仅为兼容旧调用方。
+	// 持久化到 ScheduleRepo
 	agentID := s.SelectedAgentID
 	if agentID == "" {
 		agentID = "claude-code"
 	}
-	found := false
-	for i := range s.Config.Schedules {
-		if s.Config.Schedules[i].AgentID == agentID {
-			s.Config.Schedules[i].Enabled = enabled
-			s.Config.Schedules[i].Interval = body.Interval
-			found = true
-			break
-		}
+	if s.SchedRepo != nil {
+		_ = s.SchedRepo.Upsert(agentID, enabled, body.Interval)
 	}
-	if !found {
-		s.Config.Schedules = append(s.Config.Schedules, config.ScheduleCfg{
-			AgentID: agentID, Enabled: enabled, Interval: body.Interval,
-		})
-	}
-	if s.ConfigPath != "" {
-		if err := config.Save(s.ConfigPath, s.Config); err != nil {
-			c.JSON(http.StatusInternalServerError, errorBody("save_failed", err.Error()))
-			return
-		}
-	}
-	// Task 7:同步到多任务 ScheduleManager(若非 nil),与新 /api/schedules 一致。
+	// 同步到多任务 ScheduleManager
 	s.applySchedules()
-	c.JSON(http.StatusOK, s.schedulerStatusResponse()) // 返回最新状态(nil-safe)
+	c.JSON(http.StatusOK, s.schedulerStatusResponse())
 }
 
 // formatTime 把 time.Time 格式化为 RFC3339;零值返回 ""。
-// 供 scheduler 响应的 last_run/next_run 使用(零值=尚未运行/未调度)。
 func formatTime(t time.Time) string {
 	if t.IsZero() {
 		return ""

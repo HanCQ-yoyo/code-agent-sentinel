@@ -5,11 +5,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"code-agent-sentinel/internal/config"
 	"code-agent-sentinel/internal/configengine"
 )
 
-// getAgents 返回所有 agent + scan_enabled(默认 true)。
+// getAgents 返回所有 agent + scan_enabled(从 ScheduleRepo 读取,默认 true)。
 func (s *Server) getAgents(c *gin.Context) {
 	type agentResp struct {
 		configengine.Agent
@@ -18,13 +17,13 @@ func (s *Server) getAgents(c *gin.Context) {
 	agents := make([]agentResp, 0, len(s.Agents))
 	for _, a := range s.Agents {
 		se := true // 默认
-		// 从 config 查对应 AgentCfg 取 ScanEnabled
-		for _, ac := range s.Config.Agents {
-			if ac.ID == a.ID {
-				if ac.ScanEnabled != nil {
-					se = *ac.ScanEnabled
+		if s.SchedRepo != nil {
+			scs, _ := s.SchedRepo.List()
+			for _, sc := range scs {
+				if sc.AgentID == a.ID {
+					se = sc.Enabled
+					break
 				}
-				break
 			}
 		}
 		agents = append(agents, agentResp{Agent: a, ScanEnabled: se})
@@ -32,7 +31,7 @@ func (s *Server) getAgents(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"agents": agents, "current": s.SelectedAgentID})
 }
 
-// putAgentScanEnabled 改 per-agent 扫描开关,写 config 持久化。
+// putAgentScanEnabled 改 per-agent 扫描开关,持久化到 SQLite ScheduleRepo。
 func (s *Server) putAgentScanEnabled(c *gin.Context) {
 	agentID := c.Param("agent_id")
 	if !s.agentExists(agentID) {
@@ -46,45 +45,16 @@ func (s *Server) putAgentScanEnabled(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, errorBody("bad_request", err.Error()))
 		return
 	}
-	// 更新 s.Config.Agents 对应项
-	found := false
-	for i := range s.Config.Agents {
-		if s.Config.Agents[i].ID == agentID {
-			s.Config.Agents[i].ScanEnabled = &body.ScanEnabled
-			found = true
-			break
+	// 持久化到 ScheduleRepo(nil 则跳过,仅内存生效)
+	if s.SchedRepo != nil {
+		// scan_enabled 通过 schedule 的 enabled/interval 表达:开=有默认 interval,关=清空
+		if body.ScanEnabled {
+			_ = s.SchedRepo.Upsert(agentID, true, "30m")
+		} else {
+			_ = s.SchedRepo.Upsert(agentID, false, "0s")
 		}
 	}
-	if !found {
-		// 回退 agent 场景:用户没跑过 sentinel setup(config.yaml 是 agents: []),
-		// ResolveAgents 走回退路径合成 claude-code 但不写回 Config.Agents →
-		// s.Agents 含该 agent(开关显示),Config.Agents 为空(更新循环 no-op,开关弹回「开」)。
-		// 此时从 s.Agents 补一条 AgentCfg 进 Config.Agents 再更新,使开关对回退用户生效,
-		// 顺带把回退 agent 落盘(下次启动 Config.Agents 非空,不再走回退)。
-		for _, a := range s.Agents {
-			if a.ID == agentID {
-				se := body.ScanEnabled
-				s.Config.Agents = append(s.Config.Agents, config.AgentCfg{
-					ID:          a.ID,
-					Enabled:     true,
-					ScanEnabled: &se,
-					RootDir:     a.RootDir,
-					ClaudeJSON:  a.ClaudeJSON,
-				})
-				found = true
-				break
-			}
-		}
-	}
-	if !found {
-		// 不应到达:agentExists 已校验。防御性:agentExists 与 s.Agents 一致,此分支不可达。
-		c.JSON(http.StatusInternalServerError, errorBody("internal_error", "agent 不在 Config.Agents 且无法同步: "+agentID))
-		return
-	}
-	// 持久化
-	if err := config.Save(s.ConfigPath, s.Config); err != nil {
-		c.JSON(http.StatusInternalServerError, errorBody("save_failed", err.Error()))
-		return
-	}
+	// 同步到 ScheduleManager
+	s.applySchedules()
 	c.JSON(http.StatusOK, gin.H{"agent_id": agentID, "scan_enabled": body.ScanEnabled})
 }

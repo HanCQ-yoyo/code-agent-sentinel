@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
@@ -9,12 +10,11 @@ import (
 )
 
 // pinnedResponse 是 GET/PUT /api/pinned-projects 的响应体:置顶项目列表。
-// 空列表返回 [] 而非 null(前端可直接 .length / 遍历)。
 type pinnedResponse struct {
 	PinnedProjects []config.PinnedProject `json:"pinned_projects"`
 }
 
-// getPinnedProjects 返回当前置顶的项目列表。
+// getPinnedProjects 返回当前置顶的项目列表(从 SQLite UserPrefsStore 读取)。
 func (s *Server) getPinnedProjects(c *gin.Context) {
 	c.JSON(http.StatusOK, pinnedResponse{PinnedProjects: s.pinnedList()})
 }
@@ -22,11 +22,19 @@ func (s *Server) getPinnedProjects(c *gin.Context) {
 // pinnedList 返回置顶项目切片(空则为 []config.PinnedProject{},非 nil),
 // 并过滤 path 为空的损坏条目。
 func (s *Server) pinnedList() []config.PinnedProject {
-	if s.Config.PinnedProjects == nil {
+	if s.UserPrefs == nil {
 		return []config.PinnedProject{}
 	}
-	out := make([]config.PinnedProject, 0, len(s.Config.PinnedProjects))
-	for _, p := range s.Config.PinnedProjects {
+	v, err := s.UserPrefs.Get("pinned_projects")
+	if err != nil || v == "" {
+		return []config.PinnedProject{}
+	}
+	var projs []config.PinnedProject
+	if err := json.Unmarshal([]byte(v), &projs); err != nil {
+		return []config.PinnedProject{}
+	}
+	out := make([]config.PinnedProject, 0, len(projs))
+	for _, p := range projs {
 		if p.Path != "" {
 			out = append(out, p)
 		}
@@ -39,11 +47,7 @@ type putPinnedBody struct {
 	PinnedProjects []config.PinnedProject `json:"pinned_projects"`
 }
 
-// putPinnedProjects 用请求体整体替换置顶列表并持久化到配置文件。
-//
-// 整体替换(非增量)语义与 favorites / dir-tags 一致:前端持有完整列表,
-// 增删后整体回写。校验:颜色限定预设 6 色(防任意值),path 为空的条目跳过。
-// 持久化到 ~/.code-agent-sentinel/config.yaml。
+// putPinnedProjects 用请求体整体替换置顶列表并持久化到 SQLite UserPrefsStore。
 func (s *Server) putPinnedProjects(c *gin.Context) {
 	var body putPinnedBody
 	if err := c.ShouldBindJSON(&body); err != nil {
@@ -63,12 +67,9 @@ func (s *Server) putPinnedProjects(c *gin.Context) {
 		}
 		clean = append(clean, p)
 	}
-	s.Config.PinnedProjects = clean
-	if s.ConfigPath != "" {
-		if err := config.Save(s.ConfigPath, s.Config); err != nil {
-			c.JSON(http.StatusInternalServerError, errorBody("save_failed", err.Error()))
-			return
-		}
+	if s.UserPrefs != nil {
+		b, _ := json.Marshal(clean)
+		_ = s.UserPrefs.Set("pinned_projects", string(b))
 	}
-	c.JSON(http.StatusOK, pinnedResponse{PinnedProjects: s.pinnedList()})
+	c.JSON(http.StatusOK, pinnedResponse{PinnedProjects: clean})
 }

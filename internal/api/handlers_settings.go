@@ -18,19 +18,19 @@ type settingsResponse struct {
 }
 
 func (s *Server) getSettings(c *gin.Context) {
+	lang := s.userPrefLanguage()
+	interval, enabled := s.schedPrefs("claude-code")
 	c.JSON(http.StatusOK, settingsResponse{
-		Language:     s.Config.Language,
-		ScanInterval: s.Config.ScanInterval,
-		ScanEnabled:  s.Config.ScanEnabled,
+		Language:     lang,
+		ScanInterval: interval,
+		ScanEnabled:  enabled,
 		ClaudeDir:    s.Config.ClaudeDir,
 		Discovery:    s.Config.Discovery,
 	})
 }
 
-// putSettings 更新运行期可改字段(language/scan_interval/scan_enabled)并落盘。
+// putSettings 更新运行期可改字段(language/scan_interval/scan_enabled)并持久化到 SQLite。
 // claude_dir/discovery/home_dir 需重启生效,运行期忽略并在 warnings 中说明。
-// body 用 raw map 读取一次(c.ShouldBindJSON 只能读一次 body):
-// 先读原始 map,再按类型断言逐字段取值。
 func (s *Server) putSettings(c *gin.Context) {
 	var raw map[string]any
 	if err := c.ShouldBindJSON(&raw); err != nil {
@@ -38,9 +38,10 @@ func (s *Server) putSettings(c *gin.Context) {
 		return
 	}
 	var warnings []string
-	scanChanged := false
 	if v, ok := raw["language"].(string); ok {
-		s.Config.Language = v
+		if s.UserPrefs != nil {
+			_ = s.UserPrefs.Set("language", v)
+		}
 	}
 	if v, ok := raw["scan_interval"].(string); ok {
 		if v != "" {
@@ -49,20 +50,19 @@ func (s *Server) putSettings(c *gin.Context) {
 				return
 			}
 		}
-		s.Config.ScanInterval = v
-		scanChanged = true
-	}
-	if v, ok := raw["scan_enabled"].(bool); ok {
-		s.Config.ScanEnabled = v
-		scanChanged = true
-	}
-	if s.ConfigPath != "" {
-		if err := config.Save(s.ConfigPath, s.Config); err != nil {
-			c.JSON(http.StatusInternalServerError, errorBody("save_failed", err.Error()))
-			return
+		if s.SchedRepo != nil {
+			_, enabled := s.schedPrefs("claude-code")
+			_ = s.SchedRepo.Upsert("claude-code", enabled, v)
 		}
 	}
-	if scanChanged {
+	if v, ok := raw["scan_enabled"].(bool); ok {
+		if s.SchedRepo != nil {
+			interval, _ := s.schedPrefs("claude-code")
+			if interval == "" {
+				interval = "30m"
+			}
+			_ = s.SchedRepo.Upsert("claude-code", v, interval)
+		}
 		s.applyScanToggle()
 	}
 	for _, k := range []string{"claude_dir", "discovery", "home_dir"} {
@@ -71,11 +71,15 @@ func (s *Server) putSettings(c *gin.Context) {
 		}
 	}
 	resp := map[string]any{
-		"language":      s.Config.Language,
-		"scan_interval": s.Config.ScanInterval,
-		"scan_enabled":  s.Config.ScanEnabled,
+		"language":      s.userPrefLanguage(),
+		"scan_interval": "",
+		"scan_enabled":  false,
 		"claude_dir":    s.Config.ClaudeDir,
 		"discovery":     s.Config.Discovery,
+	}
+	if interval, enabled := s.schedPrefs("claude-code"); true {
+		resp["scan_interval"] = interval
+		resp["scan_enabled"] = enabled
 	}
 	if len(warnings) > 0 {
 		resp["warnings"] = warnings
@@ -83,15 +87,34 @@ func (s *Server) putSettings(c *gin.Context) {
 	c.JSON(http.StatusOK, resp)
 }
 
-// applyScanToggle 把 scan_enabled 总开关状态传播到 ScheduleManager.Paused。
-// 总开关关 → Paused=true,所有 per-agent 定时任务 tick 跳过(Status 仍报各自 enabled/interval);
-// 总开关开 → Paused=false,各任务按自身 schedule.enabled 跑。
-// scan_interval 不在此处强行覆盖 per-agent schedule.interval(后者以 /api/schedules 为准,
-// scan_interval 仅作无 schedule 时的回退默认,见 ResolveSchedules)。
-// 注:Task 3 已删除 dead 的 s.Scheduler 字段与 Reconfigure 调用,本方法唯一落点即 ScheduleManager。
+// userPrefLanguage 从 UserPrefsStore 读 language 偏好(nil store → 空串)。
+func (s *Server) userPrefLanguage() string {
+	if s.UserPrefs == nil {
+		return ""
+	}
+	v, _ := s.UserPrefs.Get("language")
+	return v
+}
+
+// schedPrefs 从 ScheduleRepo 读取 agentID 的 interval/enabled(nil store → "0s", false)。
+func (s *Server) schedPrefs(agentID string) (interval string, enabled bool) {
+	if s.SchedRepo == nil {
+		return "0s", false
+	}
+	scs, _ := s.SchedRepo.List()
+	for _, sc := range scs {
+		if sc.AgentID == agentID {
+			return sc.Interval, sc.Enabled
+		}
+	}
+	return "0s", false
+}
+
+// applyScanToggle 传播 ScheduleManager 暂停状态(nil store → 全开)。
 func (s *Server) applyScanToggle() {
 	if s.ScheduleManager == nil {
 		return
 	}
-	s.ScheduleManager.SetPaused(!s.Config.ScanEnabled)
+	_, enabled := s.schedPrefs("claude-code")
+	s.ScheduleManager.SetPaused(!enabled)
 }

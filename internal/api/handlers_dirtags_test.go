@@ -43,13 +43,14 @@ func TestGetDirTagsReturnsDefaults(t *testing.T) {
 	}
 }
 
-// TestPutDirTagsPersistsToFile 验证 PUT 写入覆盖并持久化到配置文件,
-// 重新 Load 后覆盖仍在。
-func TestPutDirTagsPersistsToFile(t *testing.T) {
+// TestPutDirTagsPersists 验证 PUT 写入覆盖并持久化到 SQLite UserPrefsStore。
+func TestPutDirTagsPersists(t *testing.T) {
 	dir := t.TempDir()
 	cfgPath := filepath.Join(dir, ".code-agent-sentinel", "config.yaml")
 	s := newTestServer(t, dir)
 	s.ConfigPath = cfgPath
+	// 注入 UserPrefsStore 使持久化可用
+	s.UserPrefs = config.NewUserPrefsStore(s.DB)
 
 	body := `{"overrides":{"sessions":"config","foo":"runtime"}}`
 	code, resp := reqDirTags(t, s, "PUT", body)
@@ -59,13 +60,15 @@ func TestPutDirTagsPersistsToFile(t *testing.T) {
 	if resp.Overrides["sessions"] != "config" {
 		t.Errorf("覆盖未返回: %v", resp.Overrides)
 	}
-	// 持久化:重新 Load 配置文件应见覆盖。
-	c2, err := config.Load(cfgPath)
-	if err != nil {
-		t.Fatal(err)
+	// 验证经 UserPrefsStore 持久化
+	v, err := s.UserPrefs.Get("dir_tags")
+	if err != nil || v == "" {
+		t.Fatalf("dir_tags 未持久化到 UserPrefsStore: err=%v, val=%q", err, v)
 	}
-	if c2.DirTags["sessions"] != "config" || c2.DirTags["foo"] != "runtime" {
-		t.Errorf("持久化丢失: %v", c2.DirTags)
+	var tags config.DirTags
+	json.Unmarshal([]byte(v), &tags)
+	if tags["sessions"] != "config" || tags["foo"] != "runtime" {
+		t.Errorf("持久化丢失: %v", tags)
 	}
 }
 
@@ -84,6 +87,7 @@ func TestPutDirTagsReplacesNotMerges(t *testing.T) {
 	cfgPath := filepath.Join(dir, ".code-agent-sentinel", "config.yaml")
 	s := newTestServer(t, dir)
 	s.ConfigPath = cfgPath
+	s.UserPrefs = config.NewUserPrefsStore(s.DB)
 
 	reqDirTags(t, s, "PUT", `{"overrides":{"sessions":"config","foo":"runtime"}}`)
 	// 第二次只留 foo:sessions 应消失。

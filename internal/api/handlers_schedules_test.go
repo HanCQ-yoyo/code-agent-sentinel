@@ -8,7 +8,6 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"code-agent-sentinel/internal/config"
 	"code-agent-sentinel/internal/scheduler"
@@ -21,6 +20,8 @@ func newSchedulesTestServer(t *testing.T) *Server {
 	s.ScheduleManager = scheduler.NewManager(func(string) func(context.Context) error {
 		return func(context.Context) error { return nil }
 	})
+	// 注入 ScheduleRepo
+	s.SchedRepo = config.NewScheduleRepo(s.DB)
 	s.ConfigPath = filepath.Join(dir, "config.yaml")
 	s.Config.Agents = []config.AgentCfg{{ID: "claude-code", Enabled: true}}
 	return s
@@ -47,10 +48,10 @@ func TestPostScheduleCreatesTask(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("create: %d %s", w.Code, w.Body.String())
 	}
-	// 落盘校验
-	cfg, _ := config.Load(s.ConfigPath)
-	if len(cfg.Schedules) != 1 || cfg.Schedules[0].AgentID != "claude-code" {
-		t.Errorf("应落盘 1 任务: %+v", cfg.Schedules)
+	// 经 ScheduleRepo 落盘校验
+	scs, _ := s.SchedRepo.List()
+	if len(scs) != 1 || scs[0].AgentID != "claude-code" {
+		t.Errorf("应落盘 1 任务: %+v", scs)
 	}
 	// Status 能查到
 	w2 := reqSchedules(t, s, "GET", "/api/schedules", nil)
@@ -85,9 +86,9 @@ func TestPutScheduleUpdatesInterval(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("put: %d %s", w.Code, w.Body.String())
 	}
-	cfg, _ := config.Load(s.ConfigPath)
-	if cfg.Schedules[0].Interval != "2h" || cfg.Schedules[0].Enabled {
-		t.Errorf("应更新: %+v", cfg.Schedules[0])
+	scs, _ := s.SchedRepo.List()
+	if len(scs) == 0 || scs[0].Interval != "2h" || scs[0].Enabled {
+		t.Errorf("应更新: %+v", scs)
 	}
 }
 
@@ -98,9 +99,9 @@ func TestDeleteScheduleRemovesTask(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("delete: %d", w.Code)
 	}
-	cfg, _ := config.Load(s.ConfigPath)
-	if len(cfg.Schedules) != 0 {
-		t.Errorf("应删除: %+v", cfg.Schedules)
+	scs, _ := s.SchedRepo.List()
+	if len(scs) != 0 {
+		t.Errorf("应删除: %+v", scs)
 	}
 }
 
@@ -111,8 +112,6 @@ func TestDeleteScheduleNotFound(t *testing.T) {
 		t.Errorf("不存在应 404: got %d", w.Code)
 	}
 }
-
-var _ = time.Second // 防止 time 未用 import(若测试未直接用)
 
 func reqSchedules(t *testing.T, s *Server, method, path string, body any) *httptest.ResponseRecorder {
 	t.Helper()

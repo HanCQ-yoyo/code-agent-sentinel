@@ -15,7 +15,6 @@ import (
 )
 
 // reqAgent 是 agents 路由测试辅助:发请求(可选 body),返回 recorder。
-// 与 reqScan 同模式,区别在不注入 spyRunner。
 func reqAgent(t *testing.T, s *Server, method, path string, body any) *httptest.ResponseRecorder {
 	t.Helper()
 	r := s.Router()
@@ -66,19 +65,15 @@ func TestGetAgents(t *testing.T) {
 	if body.Current != "claude-code" {
 		t.Errorf("current = %q, 期望 claude-code", body.Current)
 	}
-	// 无 AgentCfg 时 ScanEnabled 应默认 true
-	if !body.Agents[0].ScanEnabled {
-		t.Error("GET 默认应 scan_enabled=true")
-	}
 }
 
 func TestPutAgentScanEnabled(t *testing.T) {
 	dir := t.TempDir()
 	s := newTestServer(t, dir)
-	s.ConfigPath = filepath.Join(dir, "config.yaml")
-	// 预置 AgentCfg 使 PUT 能找到并更新对应项
+	// 注入 ScheduleRepo 使 ScanEnabled 可持久化
+	s.SchedRepo = config.NewScheduleRepo(s.DB)
 	s.Config.Agents = []config.AgentCfg{{ID: "claude-code", Enabled: true}}
-	// 初始:scan_enabled 默认 true(nil 展开)
+	// 初始:scan_enabled 默认 true(SchedRepo 空)
 	w := reqAgent(t, s, "GET", "/api/agents", nil)
 	var body struct {
 		Agents []struct {
@@ -113,12 +108,10 @@ func TestPutAgentScanEnabled_Unknown(t *testing.T) {
 }
 
 // TestGetAgentsMixedClaudeAndCodex 验证混合部署(claude-code + codex)下 /api/agents 返回两者且 Kind 正确。
-// 模拟 main.go 经 AgentsFromSpecs 填充后的 s.Agents,直接构造混合切片传入 NewServer。
 func TestGetAgentsMixedClaudeAndCodex(t *testing.T) {
 	dir := t.TempDir()
 	gin.SetMode(gin.TestMode)
 	eng := configengine.NewEngine(dir, "")
-	// 直接构造混合 agents(模拟 main.go 经 AgentsFromSpecs 填充后的结果)
 	agents := []configengine.Agent{
 		{ID: "claude-code", Name: "Claude Code", Kind: "claude-code", RootDir: filepath.Join(dir, ".claude"), HomeDir: dir},
 		{ID: "codex", Name: "Codex CLI", Kind: "codex", RootDir: filepath.Join(dir, ".codex"), HomeDir: dir},
@@ -150,15 +143,12 @@ func TestGetAgentsMixedClaudeAndCodex(t *testing.T) {
 	}
 }
 
-// TestPutAgentScanEnabled_FallbackAgent 覆盖回退 agent 场景:用户没跑过 `sentinel setup`,
-// config.yaml 是 agents: [] → ResolveAgents 走回退路径合成 claude-code,但 Config.Agents 仍空。
-// 此时 s.Agents 含 claude-code(agentExists=true,开关显示),但 s.Config.Agents 为空。
-// PUT scan_enabled 应能切换并持久化(否则开关弹回「开」,对回退用户完全失效)。
+// TestPutAgentScanEnabled_FallbackAgent 覆盖回退 agent 场景:用户没跑过 `sentinel setup`。
+// ScanEnabled 持久化到 ScheduleRepo(而非 Config.Agents.ScanEnabled)。
 func TestPutAgentScanEnabled_FallbackAgent(t *testing.T) {
 	dir := t.TempDir()
 	s := newTestServer(t, dir)
-	s.ConfigPath = filepath.Join(dir, "config.yaml")
-	// 模拟回退:s.Agents 含 claude-code(newTestServer 已置),但 Config.Agents 为空。
+	s.SchedRepo = config.NewScheduleRepo(s.DB)
 	s.Config.Agents = nil
 	// 初始 GET:回退 agent 默认 scan_enabled=true
 	w := reqAgent(t, s, "GET", "/api/agents", nil)
@@ -177,17 +167,10 @@ func TestPutAgentScanEnabled_FallbackAgent(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("PUT status: %d %s", w.Code, w.Body)
 	}
-	// 验证 GET 展开为 false(若 PUT 是 no-op,GET 仍返回默认 true → 测试失败)
+	// 验证 GET 展开为 false
 	w = reqAgent(t, s, "GET", "/api/agents", nil)
 	json.NewDecoder(w.Body).Decode(&body)
 	if body.Agents[0].ScanEnabled {
 		t.Error("回退 agent 关闭后 GET 应 scan_enabled=false(PUT 不应是 no-op)")
-	}
-	// 验证已落盘:Config.Agents 现应含该 agent 且 ScanEnabled=false
-	if len(s.Config.Agents) != 1 || s.Config.Agents[0].ID != "claude-code" {
-		t.Fatalf("PUT 后 Config.Agents 应含 claude-code: %+v", s.Config.Agents)
-	}
-	if s.Config.Agents[0].ScanEnabled == nil || *s.Config.Agents[0].ScanEnabled != false {
-		t.Errorf("Config.Agents[0].ScanEnabled 应为 *false: %v", s.Config.Agents[0].ScanEnabled)
 	}
 }

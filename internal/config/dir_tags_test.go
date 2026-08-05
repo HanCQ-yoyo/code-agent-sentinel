@@ -66,21 +66,3 @@ func TestSegHasPrefix(t *testing.T) {
 		}
 	}
 }
-
-// TestConfigRoundTripDirTags 验证 DirTags 字段经 yaml 存取保留。
-func TestConfigRoundTripDirTags(t *testing.T) {
-	dir := t.TempDir()
-	p := dir + "/config.yaml"
-	c := DefaultConfig()
-	c.DirTags = DirTags{"sessions": "config", "foo": "runtime"}
-	if err := Save(p, c); err != nil {
-		t.Fatal(err)
-	}
-	c2, err := Load(p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if c2.DirTags["sessions"] != "config" || c2.DirTags["foo"] != "runtime" {
-		t.Errorf("DirTags 往返丢失: %v", c2.DirTags)
-	}
-}

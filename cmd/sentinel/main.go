@@ -302,7 +302,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 		}
 	})
 	srv.ScheduleManager = mgr
-	mgr.Apply(cfg.ResolveSchedules(agentCfgs))
+	mgr.Apply(nil)
 	// defer mgr.Stop 作为所有返回路径(Listen 失败 / Serve 返回)的兜底。
 	// serveHTTP 的 stop 回调也调 mgr.Stop——双重调用安全:Manager.Stop 幂等
 	// (遍历 runners 后置空 map,二次调用遍历空 map = no-op;Scheduler.Stop 亦由
