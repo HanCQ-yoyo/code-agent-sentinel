@@ -126,8 +126,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 		if err != nil {
 			return fmt.Errorf("无法定位二进制: %w", err)
 		}
-		// syscall.Exec 替换当前进程为 setup 子命令（保留 TTY 交互）
-		return syscall.Exec(exe, []string{exe, "setup"}, os.Environ())
+		return execSetup(exe)
 	}
 
 	cfg, err := config.Load(cfgPath)
