@@ -109,7 +109,7 @@ export const tokens: Record<Mode, TokenSet> = {
     dim: 'oklch(62% 0.008 175)',
     ink: 'oklch(92% 0.006 175)',
     accent: 'oklch(72% 0.110 195)',
-    accentSoft: 'oklch(72% 0.110 195 / 0.14)',
+    accentSoft: 'oklch(72% 0.110 195 / 0.20)',
     focus: 'oklch(72% 0.110 195)',
     onAccent: 'oklch(16% 0.008 175)',
     sevCritical: 'oklch(70% 0.180 27)',

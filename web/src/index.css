@@ -103,7 +103,7 @@
   --color-dim:     oklch(62% 0.008 175);   /* 三级文字:ΔL=42 vs paper-2(20),过 large/icon */
   --color-ink:     oklch(92% 0.006 175);
   --color-accent:  oklch(72% 0.110 195);
-  --color-accent-soft: oklch(72% 0.110 195 / 0.14);
+  --color-accent-soft: oklch(72% 0.110 195 / 0.20);
   --color-focus:   oklch(72% 0.110 195);
   --color-on-accent: oklch(16% 0.008 175);
 
