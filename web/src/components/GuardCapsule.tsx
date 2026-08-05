@@ -20,7 +20,7 @@ export function GuardCapsule() {
   const onStyle: React.CSSProperties = {
     color: 'var(--sev-low-solid)',
     borderColor: 'var(--sev-low-solid)',
-    background: 'oklch(62% 0.15 145 / 0.12)',
+    background: 'color-mix(in oklch, var(--sev-low-solid) 12%, transparent)',
     fontWeight: 500,
     fontSize: 'var(--fs-sm)',
     padding: '0 12px',
@@ -35,7 +35,7 @@ export function GuardCapsule() {
   const offStyle: React.CSSProperties = {
     color: 'var(--sev-high-solid)',
     borderColor: 'var(--sev-high-solid)',
-    background: 'oklch(63% 0.15 55 / 0.10)',
+    background: 'color-mix(in oklch, var(--sev-high-solid) 10%, transparent)',
     fontWeight: 500,
     fontSize: 'var(--fs-sm)',
     padding: '0 12px',

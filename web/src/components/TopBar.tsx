@@ -52,7 +52,7 @@ export function TopBar() {
   // 扫描按钮:边框参考拦截胶囊风格,主题自适应
   const scanBtnStyle: React.CSSProperties = {
     whiteSpace: 'nowrap',
-    borderColor: 'var(--color-rule)',
+    borderColor: 'var(--color-rule-2)',
     borderRadius: 'var(--radius-input)',
   }
 
