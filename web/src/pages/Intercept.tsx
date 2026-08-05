@@ -188,7 +188,7 @@ export default function Intercept() {
           placeholder={t('intercept.filterOutcome')}
           style={{ width: 180 }}
           value={outcome || undefined}
-          options={['deny', 'warn', 'ask', 'allow'].map((o) => ({ label: o, value: o }))}
+          options={['deny', 'warn', 'ask', 'allow'].map((o) => ({ label: t(`intercept.outcome${o.charAt(0).toUpperCase() + o.slice(1)}`, { defaultValue: o }), value: o }))}
           onChange={(v) => setOutcome(v ?? '')}
         />
         <Button icon={<ReloadOutlined />} onClick={() => fetchIntercepts(outcome || undefined)}>
