@@ -23,9 +23,9 @@ var editableAssetTypes = map[configengine.AssetType]bool{
 	configengine.AssetScript:      true,
 }
 
-// findAsset 按 ID 在最新 Discover 结果中查资产。
-func (e *Editor) findAsset(id string) (configengine.Asset, bool) {
-	inv, err := e.Engine.Discover()
+// findAsset 按 ID 在指定 Engine 的最新 Discover 结果中查资产。
+func (e *Editor) findAsset(id string, eng *configengine.Engine) (configengine.Asset, bool) {
+	inv, err := eng.Discover()
 	if err != nil {
 		return configengine.Asset{}, false
 	}

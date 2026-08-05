@@ -20,14 +20,14 @@ import (
 func newServiceCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "service",
-		Short: "管理系统服务(install/uninstall/status)",
+		Short: "Manage system service (install/uninstall/status)",
 	}
 	var userMode bool
 	var dryRun bool
 
 	install := &cobra.Command{
 		Use:   "install",
-		Short: "安装 code-agent-sentinel 为系统服务并启动",
+		Short: "Install code-agent-sentinel as a system service and start it",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			home, _ := os.UserHomeDir()
 			cfgPath, _ := config.DefaultPath()
@@ -42,26 +42,26 @@ func newServiceCmd() *cobra.Command {
 			return nil
 		},
 	}
-	install.Flags().BoolVar(&userMode, "user", true, "用户级服务(无需 root)")
-	install.Flags().BoolVar(&dryRun, "dry-run", false, "只生成单元文件,不执行 systemctl/launchctl")
+	install.Flags().BoolVar(&userMode, "user", true, "User-level service (no root required)")
+	install.Flags().BoolVar(&dryRun, "dry-run", false, "Generate unit file only, skip systemctl/launchctl")
 
 	uninstall := &cobra.Command{
 		Use:   "uninstall",
-		Short: "停止并移除 code-agent-sentinel 系统服务",
+		Short: "Stop and remove code-agent-sentinel system service",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runServiceUninstall(userMode)
 		},
 	}
-	uninstall.Flags().BoolVar(&userMode, "user", true, "用户级服务")
+	uninstall.Flags().BoolVar(&userMode, "user", true, "User-level service")
 
 	status := &cobra.Command{
 		Use:   "status",
-		Short: "查看 code-agent-sentinel 服务状态",
+		Short: "Show code-agent-sentinel service status",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runServiceStatus(userMode)
 		},
 	}
-	status.Flags().BoolVar(&userMode, "user", true, "用户级服务")
+	status.Flags().BoolVar(&userMode, "user", true, "User-level service")
 
 	cmd.AddCommand(install, uninstall, status)
 	return cmd
@@ -92,7 +92,7 @@ func runServiceInstall(opts serviceInstallOpts) (string, error) {
 		tok = genToken()
 		cfg.Token = tok
 		if err := config.Save(opts.CfgPath, cfg); err != nil {
-			return "", fmt.Errorf("写 config token 失败: %w", err)
+			return "", fmt.Errorf("write config token failed: %w", err)
 		}
 	}
 	spec := service.UnitSpec{

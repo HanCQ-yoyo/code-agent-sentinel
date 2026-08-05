@@ -33,6 +33,7 @@ func (s *Server) previewAsset(c *gin.Context) {
 	}
 	pr, err := s.Editor.Preview(c.Request.Context(), editor.EditRequest{
 		AssetID:    c.Param("id"),
+		AgentID:    s.agentIDForRequest(c),
 		NewContent: body.NewContent,
 		BaseHash:   body.BaseHash,
 	})
@@ -60,6 +61,7 @@ func (s *Server) commitAsset(c *gin.Context) {
 	}
 	res, err := s.Editor.Commit(c.Request.Context(), editor.EditRequest{
 		AssetID:    c.Param("id"),
+		AgentID:    s.agentIDForRequest(c),
 		NewContent: body.NewContent,
 		BaseHash:   body.BaseHash,
 	})

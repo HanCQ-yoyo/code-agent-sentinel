@@ -52,30 +52,30 @@ func newRootCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "code-agent-sentinel",
-		Short: "Code Agent 配置安全态势看板(P1 只读)",
+		Short: "Code Agent config security posture dashboard",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return run(cmd.Context(), cfgPath, bindFlag, portFlag, noBrowser, risky, homeFlag, tokenFlag, claudeDirFlag, logPathFlag, daemonFlag)
 		},
 	}
-	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.code-agent-sentinel/config.yaml)")
-	cmd.Flags().StringVar(&bindFlag, "bind", "", "覆盖 bind 地址")
-	cmd.Flags().IntVar(&portFlag, "port", 15921, "监听端口")
-	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "不自动打开浏览器")
-	cmd.Flags().BoolVar(&risky, "i-know-its-risky", false, "非 loopback 且无白名单时强制启动(危险)")
-	cmd.Flags().StringVar(&homeFlag, "home", "", "覆盖 home 目录(调试)")
+	cmd.Flags().StringVar(&cfgPath, "config", "", "Config file path (default ~/.code-agent-sentinel/config.yaml)")
+	cmd.Flags().StringVar(&bindFlag, "bind", "", "Override bind address")
+	cmd.Flags().IntVar(&portFlag, "port", 15921, "Listen port")
+	cmd.Flags().BoolVar(&noBrowser, "no-browser", false, "Do not auto-open browser")
+	cmd.Flags().BoolVar(&risky, "i-know-its-risky", false, "Force start on non-loopback without allowlist (dangerous)")
+	cmd.Flags().StringVar(&homeFlag, "home", "", "Override home directory (debug)")
 	// C-BUILD-1: 调试/测试用固定 token,覆盖随机 genToken()。生产场景应留空走随机。
-	cmd.Flags().StringVar(&tokenFlag, "token", "", "覆盖随机生成的 token(调试/测试用,生产场景留空)")
+	cmd.Flags().StringVar(&tokenFlag, "token", "", "Override random token (debug/test only, leave empty in production)")
 	// Task 3:--claude-dir 覆盖 cfg.ResolveClaudeDir(home);空走配置/默认回退。
-	cmd.Flags().StringVar(&claudeDirFlag, "claude-dir", "", ".claude 目录绝对路径(默认 home/.claude)")
+	cmd.Flags().StringVar(&claudeDirFlag, "claude-dir", "", "Absolute path to .claude directory (default home/.claude)")
 	// Task 14:--log-path 覆盖 cfg.LogPath;空走配置/默认 stderr。
 	// service install 生成的单元文件带此 flag 指向 code-agent-sentinel.log。
-	cmd.Flags().StringVar(&logPathFlag, "log-path", "", "日志文件路径(默认 stderr)")
+	cmd.Flags().StringVar(&logPathFlag, "log-path", "", "Log file path (default stderr)")
 	// Task 15:--daemon 后台启动(脱离终端)。父进程 fork 子进程后立即退出,
 	// 子进程继续服务(--daemon-child 标记,防重复 fork)。
-	cmd.Flags().BoolVar(&daemonFlag, "daemon", false, "后台启动(脱离终端)")
+	cmd.Flags().BoolVar(&daemonFlag, "daemon", false, "Start in background (detach from terminal)")
 	// --daemon-child 是内部标记(daemonize() 检查 os.Args),不对用户暴露。
 	// 必须 hidden 注册,否则 cobra 解析 --daemon-child 时报 unknown flag。
-	cmd.Flags().BoolVar(&daemonChild, "daemon-child", false, "内部标记:已是 daemon 子进程")
+	cmd.Flags().BoolVar(&daemonChild, "daemon-child", false, "internal: already daemon child process")
 	if err := cmd.Flags().MarkHidden("daemon-child"); err != nil {
 		// MarkHidden 仅在 flag 不存在时报错;此处刚注册,不会失败。
 		log.Fatal(err)
@@ -103,7 +103,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	if daemonFlag {
 		isChild, err := daemonize()
 		if err != nil {
-			return fmt.Errorf("后台启动失败: %w", err)
+			return fmt.Errorf("daemon start failed: %w", err)
 		}
 		if !isChild {
 			return nil // 父进程 fork 成功后退出
@@ -121,10 +121,10 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 
 	// 配置目录不存在 → 自动拉起 setup TUI
 	if needsSetup(filepath.Dir(cfgPath)) {
-		fmt.Println("首次运行：配置目录不存在，自动进入交互式配置...")
+		fmt.Println("First run: config directory not found, launching interactive setup...")
 		exe, err := os.Executable()
 		if err != nil {
-			return fmt.Errorf("无法定位二进制: %w", err)
+			return fmt.Errorf("cannot locate binary: %w", err)
 		}
 		return execSetup(exe)
 	}
@@ -170,7 +170,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	if lp != "" {
 		f, err := os.OpenFile(lp, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o600)
 		if err != nil {
-			return fmt.Errorf("打开日志文件失败: %w", err)
+			return fmt.Errorf("failed to open log file: %w", err)
 		}
 		defer f.Close()
 		log.SetOutput(f)
@@ -199,7 +199,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	}
 	engAgents := configengine.AgentsFromSpecs(home, agentItems)
 	if len(engAgents) == 0 {
-		return fmt.Errorf("无启用的 code agent,运行 code-agent-sentinel setup 配置")
+		return fmt.Errorf("no enabled code agent, run code-agent-sentinel setup to configure")
 	}
 	// 本轮 Engine 仍取首个(Runner 内部按 agentID 池化,扫描时选)
 	eng := configengine.NewEngineFromAgent(engAgents[0])
@@ -227,19 +227,19 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	db, dbErr := storage.Open(dbPath)
 	if dbErr != nil {
 		// fail-open:db 打不开不阻断启动,检测器/guard 回退文件路径。
-		fmt.Fprintf(os.Stderr, "警告:打开规则库 %s 失败,检测器回退文件规则: %v\n", dbPath, dbErr)
+		fmt.Fprintf(os.Stderr, "WARNING: failed to open rule DB %s, detector falls back to file rules: %v\n", dbPath, dbErr)
 		db = nil
 	}
 	if db != nil {
 		defer db.Close()
 		initialized, initErr := storage.SchemaInitialized(db)
 		if initErr != nil {
-			fmt.Fprintf(os.Stderr, "警告:检查规则库 schema 失败,跳过迁移: %v\n", initErr)
+			fmt.Fprintf(os.Stderr, "WARNING: rule DB schema check failed, skipping migration: %v\n", initErr)
 		}
 		if !initialized {
 			if migErr := storage.RunMigrations(db); migErr != nil {
 				// 建表失败:db 不可用,回退 nil-db(检测器/guard fail-open)。
-				fmt.Fprintf(os.Stderr, "警告:规则库建表失败,检测器回退文件规则: %v\n", migErr)
+				fmt.Fprintf(os.Stderr, "WARNING: rule DB migration failed, detector falls back to file rules: %v\n", migErr)
 				db.Close()
 				db = nil
 			} else {
@@ -252,7 +252,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 		// 目录已由上方 MkdirAll(0o700)收紧。Open/RunMigrations 会创建/触碰文件,此处统一收紧。
 		if db != nil {
 			if cerr := os.Chmod(dbPath, 0o600); cerr != nil {
-				fmt.Fprintf(os.Stderr, "警告:收紧 db 文件权限失败: %v\n", cerr)
+				fmt.Fprintf(os.Stderr, "WARNING: failed to tighten DB file permissions: %v\n", cerr)
 			}
 		}
 		// 同步 builtin 两域(embed → source=builtin 行)。每次启动都跑(SyncBuiltin 幂等):
@@ -281,12 +281,10 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	// Stage R3:运行时拦截放行清单(sqlite allowlist_entries 表)。
 	allowlist := config.NewAllowlistStore(db)
 
-	// editor 绑定到首个 agent 的 Engine(engAgents[0]):P2 写编辑仅针对 Claude 建模,
-	// editable.go 的 findAsset/preview/commit 走 e.Engine.Discover()。在 Codex 排首位的混合
-	// 部署里,编辑 Claude 资产会因 Engine 指向 Codex 清单而 ErrNotFound——用户可经
-	// `sentinel setup` 把 claude-code 排首位规避。扫描/看板/健康分走 Runner.EngineFor(agentID)
-	// 按 agent 多路复用,不受此限。后续若加 Codex 编辑,需把 editor 也接到 EngineFor。
-	ed := editor.New(eng, cfg.BackupDir, cfg.MaxBackups)
+	// editor 绑定到 engAgents 清单(支持多 agent)。edit 请求通过 ?agent= query 路由到
+	// 对应 agent engine(engineFor),与扫描/看板/健康分走同一 EngineFor 模式。
+	// 旧注释(P2 写编辑仅针对 Claude 建模)的局限已消除。
+	ed := editor.New(eng, engAgents, cfg.BackupDir, cfg.MaxBackups)
 	srv := api.NewServer(eng, orch, cfg, token, hist, engAgents, ed, db)
 	srv.ConfigPath = cfgPath
 	srv.Intercept = istore
@@ -327,18 +325,18 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 	port := ln.Addr().(*net.TCPAddr).Port
 	am := resolveAccessMethod(cfg.Bind, port, home)
 	fmt.Println("==================================================")
-	fmt.Printf("code-agent-sentinel 已启动 | token: %s\n", token)
-	fmt.Printf("本地访问:   %s#token=%s\n", am.URL, token)
+	fmt.Printf("code-agent-sentinel started | token: %s\n", token)
+	fmt.Printf("Local access:  %s#token=%s\n", am.URL, token)
 	if am.TunnelCmd != "" {
-		fmt.Printf("远程访问(SSH 隧道): %s\n", am.TunnelCmd)
+		fmt.Printf("Remote access (SSH tunnel): %s\n", am.TunnelCmd)
 	}
 	// I-SEC-3: 仅在确有可解析白名单时提示"已启用";--i-know-its-risky 旁路空白名单时
 	// 明确警告无白名单,避免误导。
 	if !isLoopback(cfg.Bind) {
 		if len(cfg.AllowedCIDRs) > 0 {
-			fmt.Println("⚠ bind 非 loopback,已启用 IP 白名单。请确认访问来源。")
+			fmt.Println("⚠ Non-loopback bind, IP allowlist enabled. Verify access source.")
 		} else {
-			fmt.Println("⚠ 无 IP 白名单 —— 所有网络均可访问,请确认访问来源。")
+			fmt.Println("⚠ No IP allowlist — all networks can access. Verify access source.")
 		}
 	}
 	fmt.Println("==================================================")
@@ -350,13 +348,13 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 		if isLoopback(cfg.Bind) {
 			openBrowser(am.URL + "#token=" + token)
 		} else {
-			fmt.Printf("非 loopback 绑定未自动打开浏览器;请手动复制访问: %s#token=%s\n", am.URL, token)
+			fmt.Printf("Non-loopback bind, browser not auto-opened. Copy this URL: %s#token=%s\n", am.URL, token)
 		}
 	}
 	// Task 8:首次无配置提示。Agents 空 且 ClaudeDir 空 且 默认 ~/.claude 不存在时,
 	// 提示用户运行 setup(ResolveAgents 会回退到默认 home/.claude,服务仍可启动)。
 	if shouldPromptSetup(cfg, filepath.Join(home, ".claude")) {
-		fmt.Println("提示:尚未配置 code agent。运行 `code-agent-sentinel setup` 进行交互式配置。")
+		fmt.Println("Hint: no code agent configured. Run `code-agent-sentinel setup` to configure interactively.")
 	}
 	// Task 18:SIGINT/SIGTERM 触发 http.Shutdown + mgr.Stop graceful 退出。
 	// sigCh 适配为 trigger chan(struct{}),让 serveHTTP 与测试共签名(<-chan struct{})。
@@ -385,7 +383,7 @@ func run(ctx context.Context, cfgPath, bindFlag string, portFlag int, noBrowser,
 func serveHTTP(ln net.Listener, srv *http.Server, stop func(), shutdownTrigger <-chan struct{}) error {
 	go func() {
 		<-shutdownTrigger
-		fmt.Println("code-agent-sentinel 正在关闭...")
+		fmt.Println("code-agent-sentinel shutting down...")
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(ctx) // 在途请求给 10s 缓冲;超时强切(history 已在 scan 完成时落盘)
@@ -428,7 +426,7 @@ func resolveAccessMethod(bind string, port int, home string) accessMethod {
 	var tunnel string
 	if isLoopback(bind) {
 		// 远程:ssh -L <port>:127.0.0.1:<port> <devhost>
-		tunnel = fmt.Sprintf("ssh -L %d:127.0.0.1:%d <你的开发机>", port, port)
+		tunnel = fmt.Sprintf("ssh -L %d:127.0.0.1:%d <your-dev-host>", port, port)
 	} else {
 		url = fmt.Sprintf("http://%s:%d/", bind, port)
 	}

@@ -126,7 +126,7 @@ func loadSettings(path string) (map[string]any, error) {
 	}
 	var s map[string]any
 	if err := json.Unmarshal(data, &s); err != nil {
-		return nil, fmt.Errorf("settings.json 解析失败: %w", err)
+		return nil, fmt.Errorf("settings.json parse failed: %w", err)
 	}
 	if s == nil {
 		s = map[string]any{}

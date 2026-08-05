@@ -25,14 +25,14 @@ func newSetupCmd() *cobra.Command {
 	var allowMissing bool
 	cmd := &cobra.Command{
 		Use:   "setup",
-		Short: "交互式配置 code agent(选择启用的 agent + 确认路径)",
+		Short: "Interactive code agent configuration (select agents + confirm paths)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return runSetup(homeFlag, cfgPath, allowMissing, cmd.InOrStdin(), cmd.OutOrStdout())
 		},
 	}
-	cmd.Flags().StringVar(&homeFlag, "home", "", "覆盖 home 目录(调试)")
-	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.code-agent-sentinel/config.yaml)")
-	cmd.Flags().BoolVar(&allowMissing, "allow-missing", false, "允许配置路径不存在的 agent(预配置未安装的 agent)")
+	cmd.Flags().StringVar(&homeFlag, "home", "", "Override home directory (debug)")
+	cmd.Flags().StringVar(&cfgPath, "config", "", "Config file path (default ~/.code-agent-sentinel/config.yaml)")
+	cmd.Flags().BoolVar(&allowMissing, "allow-missing", false, "Allow configuring agents with missing paths (pre-configure not-yet-installed agents)")
 	return cmd
 }
 
@@ -104,7 +104,7 @@ func runSetup(homeFlag, cfgPath string, allowMissing bool, in io.Reader, out io.
 	}
 	// 非 TTY 拒绝(管道/CI 无法交互)。放在读 config 之前:失败不应有副作用。
 	if !isTerminal(in) {
-		return fmt.Errorf("setup 需交互式终端(当前 stdin 非 TTY);请在真实终端运行")
+		return fmt.Errorf("setup requires an interactive terminal (stdin is not a TTY); run in a real terminal")
 	}
 	if cfgPath == "" {
 		p, err := config.DefaultPath()
@@ -132,14 +132,14 @@ func runSetup(homeFlag, cfgPath string, allowMissing bool, in io.Reader, out io.
 		options[i] = huh.NewOption(s.Name+" ("+s.ID+")", s.ID)
 	}
 	multi := huh.NewMultiSelect[string]().
-		Title("选择要安全管控的 code agent").
+		Title("Select code agents to monitor").
 		Options(options...).
 		Value(&selectedIDs)
 	if err := huh.NewForm(huh.NewGroup(multi)).Run(); err != nil {
 		return err
 	}
 	if len(selectedIDs) == 0 {
-		return fmt.Errorf("至少选择一个 agent")
+		return fmt.Errorf("select at least one agent")
 	}
 
 	// 第 2 屏起:逐个确认路径。
@@ -155,9 +155,9 @@ func runSetup(homeFlag, cfgPath string, allowMissing bool, in io.Reader, out io.
 		claudeJSON := spec.DefaultClaudeJSON(home)
 		// NewGroup 接受 ...Field;构造 []huh.Field 以便变长展开。
 		// *huh.Input 实现了 huh.Field 接口。
-		fields := []huh.Field{huh.NewInput().Title(spec.Name + " 配置根目录").Value(&rootDir)}
+		fields := []huh.Field{huh.NewInput().Title(spec.Name + " config root directory").Value(&rootDir)}
 		if spec.HasClaudeJSON {
-			fields = append(fields, huh.NewInput().Title(spec.Name+" 机器管理文件").Value(&claudeJSON))
+			fields = append(fields, huh.NewInput().Title(spec.Name+" machine management file").Value(&claudeJSON))
 		}
 		form := huh.NewForm(huh.NewGroup(fields...))
 		if err := form.Run(); err != nil {
@@ -167,12 +167,12 @@ func runSetup(homeFlag, cfgPath string, allowMissing bool, in io.Reader, out io.
 		if !allowMissing {
 			if rootDir != "" {
 				if _, err := os.Stat(rootDir); err != nil {
-					return fmt.Errorf("%s 路径不存在: %s(用 --allow-missing 旁路)", spec.ID, rootDir)
+					return fmt.Errorf("%s path does not exist: %s (use --allow-missing to bypass)", spec.ID, rootDir)
 				}
 			}
 			if spec.HasClaudeJSON && claudeJSON != "" {
 				if _, err := os.Stat(claudeJSON); err != nil {
-					return fmt.Errorf("%s 路径不存在: %s(用 --allow-missing 旁路)", spec.ID, claudeJSON)
+					return fmt.Errorf("%s path does not exist: %s (use --allow-missing to bypass)", spec.ID, claudeJSON)
 				}
 			}
 		}
@@ -183,18 +183,18 @@ func runSetup(homeFlag, cfgPath string, allowMissing bool, in io.Reader, out io.
 
 	// 预览 + 确认。
 	var sb strings.Builder
-	sb.WriteString("将写入 agents:\n")
+	sb.WriteString("Will write agents:\n")
 	for _, a := range selection {
 		fmt.Fprintf(&sb, "  - id: %s\n    enabled: true\n    root_dir: %s\n    claude_json: %s\n",
 			a.ID, a.RootDir, a.ClaudeJSON)
 	}
 	confirm := true
-	cf := huh.NewConfirm().Title(sb.String() + "\n确认写入?").Value(&confirm)
+	cf := huh.NewConfirm().Title(sb.String() + "\nConfirm write?").Value(&confirm)
 	if err := huh.NewForm(huh.NewGroup(cf)).Run(); err != nil {
 		return err
 	}
 	if !confirm {
-		return fmt.Errorf("用户取消")
+		return fmt.Errorf("user cancelled")
 	}
 	mergeAgents(cfg, selection)
 	// Task 11:从 ~/.claude.json projects 导入 known_projects 作项目清单初始值。
@@ -204,7 +204,7 @@ func runSetup(homeFlag, cfgPath string, allowMissing bool, in io.Reader, out io.
 	if err := config.Save(cfgPath, cfg); err != nil {
 		return err
 	}
-	fmt.Fprintf(out, "已写入 %s,重启 code-agent-sentinel 生效\n", cfgPath)
+	fmt.Fprintf(out, "Written to %s, restart code-agent-sentinel to apply\n", cfgPath)
 
 	// Stage R2:安装运行时拦截 hook 到 ~/.claude/settings.json
 	// best-effort:失败不阻塞 setup(os.Executable 理论上极少失败,但避免在此引入新失败路径)。
@@ -212,9 +212,9 @@ func runSetup(homeFlag, cfgPath string, allowMissing bool, in io.Reader, out io.
 		claudeDir := cfg.ResolveClaudeDir(home)
 		settingsPath := filepath.Join(claudeDir, "settings.json")
 		if changed, err := InstallGuardHook(settingsPath, sentinelPath); err != nil {
-			fmt.Fprintf(os.Stderr, "安装拦截 hook 失败(不阻塞): %v\n", err)
+			fmt.Fprintf(os.Stderr, "Failed to install intercept hook (non-blocking): %v\n", err)
 		} else if changed {
-			fmt.Println("已安装运行时拦截 hook(~/.claude/settings.json PreToolUse Bash → code-agent-sentinel guard)")
+			fmt.Println("Installed runtime intercept hook (~/.claude/settings.json PreToolUse Bash → code-agent-sentinel guard)")
 		}
 
 		// Stage R3:Codex hook 安装(仅当 ~/.codex 存在时,不强制创建空目录,避免给不用 codex 的用户留垃圾)。
@@ -223,9 +223,9 @@ func runSetup(homeFlag, cfgPath string, allowMissing bool, in io.Reader, out io.
 		if _, err := os.Stat(codexDir); err == nil {
 			codexHooksPath := filepath.Join(codexDir, "hooks.json")
 			if changed, err := InstallCodexHook(codexHooksPath, sentinelPath); err != nil {
-				fmt.Fprintf(os.Stderr, "安装 Codex 拦截 hook 失败(不阻塞): %v\n", err)
+				fmt.Fprintf(os.Stderr, "Failed to install Codex intercept hook (non-blocking): %v\n", err)
 			} else if changed {
-				fmt.Println("已安装 Codex 运行时拦截 hook(~/.codex/hooks.json PreToolUse Bash → code-agent-sentinel guard)")
+				fmt.Println("Installed Codex runtime intercept hook (~/.codex/hooks.json PreToolUse Bash → code-agent-sentinel guard)")
 			}
 		}
 	}

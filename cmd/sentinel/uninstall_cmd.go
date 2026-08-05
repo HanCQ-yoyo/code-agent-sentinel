@@ -15,7 +15,7 @@ func newUninstallCmd() *cobra.Command {
 	var homeFlag string
 	cmd := &cobra.Command{
 		Use:   "uninstall",
-		Short: "清理 code-agent-sentinel 历史数据与配置(不删 ~/.claude 与二进制)",
+		Short: "Clean up code-agent-sentinel data and config (does not delete ~/.claude or binary)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			home := homeFlag
 			if home == "" {
@@ -28,9 +28,9 @@ func newUninstallCmd() *cobra.Command {
 			return runUninstall(home, yes, keepConfig, cmd.OutOrStdout())
 		},
 	}
-	cmd.Flags().BoolVar(&yes, "yes", false, "跳过交互确认")
-	cmd.Flags().BoolVar(&keepConfig, "keep-config", false, "保留 config.yaml,仅删 history/backups/baseline/suppressions")
-	cmd.Flags().StringVar(&homeFlag, "home", "", "覆盖 home 目录(调试用)")
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip interactive confirmation")
+	cmd.Flags().BoolVar(&keepConfig, "keep-config", false, "Keep config.yaml, only delete history/backups/baseline/suppressions")
+	cmd.Flags().StringVar(&homeFlag, "home", "", "Override home directory (debug)")
 	return cmd
 }
 
@@ -42,27 +42,27 @@ func runUninstall(home string, yes, keepConfig bool, out io.Writer) error {
 	dataDir := filepath.Clean(filepath.Join(home, ".code-agent-sentinel"))
 	// 路径安全校验
 	if dataDir == "/" || dataDir == "" {
-		return fmt.Errorf("拒绝:数据目录解析为根或空(%q)", dataDir)
+		return fmt.Errorf("refused: data directory resolves to root or empty (%q)", dataDir)
 	}
 	if filepath.Base(dataDir) != ".code-agent-sentinel" {
-		return fmt.Errorf("拒绝:数据目录名不是 .code-agent-sentinel(%q)", dataDir)
+		return fmt.Errorf("refused: data directory name is not .code-agent-sentinel (%q)", dataDir)
 	}
 	// 强化:拒绝根的直接子目录(如 home="/" → dataDir="/.code-agent-sentinel")。
 	// 否则当该路径不存在时会落入下面的"目录不存在"分支静默返回 nil,
 	// 违背"home 指向根 → 应拒绝"的测试意图。
 	if filepath.Dir(dataDir) == "/" {
-		return fmt.Errorf("拒绝:数据目录是根的直接子目录,疑似 home 指向根(%q)", dataDir)
+		return fmt.Errorf("refused: data directory is direct child of root, suspicious home pointing to root (%q)", dataDir)
 	}
 	info, err := os.Stat(dataDir)
 	if os.IsNotExist(err) {
-		fmt.Fprintf(out, "目录不存在,无需清理:%s\n", dataDir)
+		fmt.Fprintf(out, "Directory does not exist, nothing to clean: %s\n", dataDir)
 		return nil
 	}
 	if err != nil {
 		return err
 	}
 	if !info.IsDir() {
-		return fmt.Errorf("拒绝:%s 不是目录", dataDir)
+		return fmt.Errorf("refused: %s is not a directory", dataDir)
 	}
 
 	// 整目录删除需 --yes 确认;keepConfig 路径只删子项(保留 config.yaml),同样实际删数据。
@@ -85,26 +85,26 @@ func runUninstall(home string, yes, keepConfig bool, out io.Writer) error {
 			p := filepath.Join(dataDir, name)
 			if _, err := os.Stat(p); err == nil {
 				if err := os.RemoveAll(p); err != nil {
-					fmt.Fprintf(out, "警告:删除 %s 失败: %v\n", p, err)
+					fmt.Fprintf(out, "Warning: failed to delete %s: %v\n", p, err)
 				} else {
-					fmt.Fprintf(out, "已删除:%s\n", p)
+					fmt.Fprintf(out, "Deleted: %s\n", p)
 				}
 			}
 		}
-		fmt.Fprintf(out, "已保留 config.yaml(keep-config)\n")
+		fmt.Fprintf(out, "Kept config.yaml (keep-config)\n")
 		return nil
 	}
 
 	// 整目录删除
 	if !yes {
-		fmt.Fprintf(out, "将删除:%s\n", dataDir)
-		fmt.Fprintf(out, "~/.claude 与二进制不会被删。添加 --yes 确认执行。\n")
+		fmt.Fprintf(out, "Will delete: %s\n", dataDir)
+		fmt.Fprintf(out, "~/.claude and binary will not be deleted. Add --yes to confirm.\n")
 		return nil
 	}
 	if err := os.RemoveAll(dataDir); err != nil {
-		return fmt.Errorf("删除失败: %w", err)
+		return fmt.Errorf("delete failed: %w", err)
 	}
-	fmt.Fprintf(out, "已删除:%s\n", dataDir)
-	fmt.Fprintf(out, "如需删除二进制,请手动 rm code-agent-sentinel 可执行文件。\n")
+	fmt.Fprintf(out, "Deleted: %s\n", dataDir)
+	fmt.Fprintf(out, "To remove the binary, manually delete the code-agent-sentinel executable.\n")
 	return nil
 }

@@ -68,7 +68,7 @@ function AssetSection({ assetId, locations, agentId }: { assetId: string, locati
     setLoading(true)
     setErr(null)
     setAsset(null)
-    apiGet<Asset>(`/api/assets/${encodeURIComponent(assetId)}`)
+    apiGet<Asset>(`/api/assets/${encodeURIComponent(assetId)}${agentId ? `?agent=${encodeURIComponent(agentId)}` : ''}`)
       .then((a) => { if (!stale) setAsset(a) })
       .catch((e) => { if (!stale) setErr(String(e)) })
       .finally(() => { if (!stale) setLoading(false) })

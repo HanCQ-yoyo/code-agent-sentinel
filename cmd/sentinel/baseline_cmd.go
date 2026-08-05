@@ -32,10 +32,10 @@ func newBaselineCmd() *cobra.Command {
 	)
 	cmd := &cobra.Command{
 		Use:   "baseline",
-		Short: "baseline 管理:--create 批量接受 / --prune 清理孤儿状态",
+		Short: "Manage baselines: --create bulk accept / --prune clean orphan states",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if !create && !prune {
-				return fmt.Errorf("请指定 --create 或 --prune")
+				return fmt.Errorf("specify --create or --prune")
 			}
 			cfg, home, err := loadCfgAndHome(cfgPath)
 			if err != nil {
@@ -47,9 +47,9 @@ func newBaselineCmd() *cobra.Command {
 			return runBaselinePruneCmd(cmd, cfg, home)
 		},
 	}
-	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.code-agent-sentinel/config.yaml)")
-	cmd.Flags().BoolVar(&create, "create", false, "跑全量扫描并把指纹批量接受到 finding_states (sqlite)")
-	cmd.Flags().BoolVar(&prune, "prune", false, "重新扫描并删除 finding_states 表中已不复现的孤儿状态")
+	cmd.Flags().StringVar(&cfgPath, "config", "", "Config file path (default ~/.code-agent-sentinel/config.yaml)")
+	cmd.Flags().BoolVar(&create, "create", false, "Run full scan and bulk accept fingerprints into finding_states (sqlite)")
+	cmd.Flags().BoolVar(&prune, "prune", false, "Re-scan and remove orphan states no longer present in finding_states")
 	return cmd
 }
 
@@ -67,7 +67,7 @@ func runFullScan(cfg *config.Config, home string, db *storage.DB) (*security.Sca
 	}
 	inv, err := eng.Discover()
 	if err != nil {
-		return nil, fmt.Errorf("发现资产失败: %w", err)
+		return nil, fmt.Errorf("asset discovery failed: %w", err)
 	}
 	cfg.EnsureDetectors() // 与 main.go 一致:检测器持 cfg.Detectors 指针
 	r := security.NewRegistry()
@@ -77,7 +77,7 @@ func runFullScan(cfg *config.Config, home string, db *storage.DB) (*security.Sca
 	orch := &security.Orchestrator{Registry: r}
 	res, err := orch.Scan(context.Background(), inv.Assets, nil)
 	if err != nil {
-		return nil, fmt.Errorf("扫描失败: %w", err)
+		return nil, fmt.Errorf("scan failed: %w", err)
 	}
 	return res, nil
 }
@@ -125,7 +125,7 @@ func runBaselineCreate(cfg *config.Config, home string) (string, error) {
 	st.BulkAccept(fps, findingstate.SourceBulkAccept, time.Now().UTC().Format(time.RFC3339))
 	// BulkAccept 内部调 Set 已实时写 db,无需额外 Save
 
-	return fmt.Sprintf("处置状态已批量接受: finding_states (sqlite)\n  扫描产出 %d 条 finding, 批量接受 %d 条指纹\n",
+	return fmt.Sprintf("Disposition states bulk accepted: finding_states (sqlite)\n  Scanned %d findings, bulk accepted %d fingerprints\n",
 		len(res.Findings), len(fps)), nil
 }
 
@@ -147,7 +147,7 @@ func runBaselinePrune(cfg *config.Config, home string) (string, error) {
 
 	st := findingstate.NewStates(db)
 	if len(st.Items) == 0 {
-		return "", fmt.Errorf("finding_states 表为空(请先 --create)")
+		return "", fmt.Errorf("finding_states table is empty (run --create first)")
 	}
 	res, err := runFullScan(cfg, home, db)
 	if err != nil {
@@ -163,7 +163,7 @@ func runBaselinePrune(cfg *config.Config, home string) (string, error) {
 	// Remove 已实时写 db,无需额外 Save
 
 	remain := len(st.Items)
-	return fmt.Sprintf("处置状态已清理: finding_states (sqlite)\n  保留 %d 条, 删除 %d 条已不复现\n",
+	return fmt.Sprintf("Disposition states cleaned: finding_states (sqlite)\n  Kept %d, removed %d no longer present\n",
 		remain, len(orphans)), nil
 }
 
@@ -172,21 +172,21 @@ func runBaselinePrune(cfg *config.Config, home string) (string, error) {
 func openBaselineDB(home string) (*storage.DB, error) {
 	dbPath := filepath.Join(home, ".code-agent-sentinel", "sentinel.db")
 	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
-		return nil, fmt.Errorf("创建 db 目录: %w", err)
+		return nil, fmt.Errorf("create db dir: %w", err)
 	}
 	db, err := storage.Open(dbPath)
 	if err != nil {
-		return nil, fmt.Errorf("打开规则库: %w", err)
+		return nil, fmt.Errorf("open rule DB: %w", err)
 	}
 	initialized, initErr := storage.SchemaInitialized(db)
 	if initErr != nil {
 		db.Close()
-		return nil, fmt.Errorf("检查规则库 schema: %w", initErr)
+		return nil, fmt.Errorf("check rule DB schema: %w", initErr)
 	}
 	if !initialized {
 		if err := storage.RunMigrations(db); err != nil {
 			db.Close()
-			return nil, fmt.Errorf("建表: %w", err)
+			return nil, fmt.Errorf("run migrations: %w", err)
 		}
 	}
 	syncBuiltinRules(db)

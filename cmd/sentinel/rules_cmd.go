@@ -28,7 +28,7 @@ import (
 func newRulesCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "rules",
-		Short: "规则管理:list / validate",
+		Short: "Manage rules: list / validate",
 	}
 	cmd.AddCommand(newRulesListCmd())
 	cmd.AddCommand(newRulesValidateCmd())
@@ -68,7 +68,7 @@ func newRulesListCmd() *cobra.Command {
 	var cfgPath string
 	cmd := &cobra.Command{
 		Use:   "list",
-		Short: "列出所有已加载规则(id/severity/source/valid)",
+		Short: "List all loaded rules (id/severity/source/valid)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			cfg, home, err := loadCfgAndHome(cfgPath)
 			if err != nil {
@@ -77,9 +77,9 @@ func newRulesListCmd() *cobra.Command {
 			rules, loadErrs := loadRulesForCLI(cfg, home)
 			out := cmd.OutOrStdout()
 
-			fmt.Fprintf(out, "已加载 %d 条有效规则", len(rules))
+			fmt.Fprintf(out, "Loaded %d valid rules", len(rules))
 			if len(loadErrs) > 0 {
-				fmt.Fprintf(out, "(%d 条加载/校验错误)", len(loadErrs))
+				fmt.Fprintf(out, " (%d load/validation errors)", len(loadErrs))
 			}
 			fmt.Fprintln(out)
 			fmt.Fprintln(out)
@@ -98,7 +98,7 @@ func newRulesListCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.code-agent-sentinel/config.yaml)")
+	cmd.Flags().StringVar(&cfgPath, "config", "", "Config file path (default ~/.code-agent-sentinel/config.yaml)")
 	return cmd
 }
 
@@ -106,7 +106,7 @@ func newRulesValidateCmd() *cobra.Command {
 	var cfgPath string
 	cmd := &cobra.Command{
 		Use:   "validate [file]",
-		Short: "校验规则文件(无参数则校验全部已加载规则)",
+		Short: "Validate rule files (no args = validate all loaded rules)",
 		Args:  cobra.MaximumNArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			out := cmd.OutOrStdout()
@@ -118,7 +118,7 @@ func newRulesValidateCmd() *cobra.Command {
 				file := args[0]
 				data, err := os.ReadFile(file)
 				if err != nil {
-					return fmt.Errorf("读取文件 %s: %w", file, err)
+					return fmt.Errorf("read file %s: %w", file, err)
 				}
 				tmpDir, err := os.MkdirTemp("", "code-agent-sentinel-validate-")
 				if err != nil {
@@ -142,33 +142,33 @@ func newRulesValidateCmd() *cobra.Command {
 				return err
 			}
 			rules, loadErrs := loadRulesForCLI(cfg, home)
-			return reportValidate(out, rules, loadErrs, "检测域全局规则(db)")
+			return reportValidate(out, rules, loadErrs, "detect domain global rules (db)")
 		},
 	}
-	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.code-agent-sentinel/config.yaml)")
+	cmd.Flags().StringVar(&cfgPath, "config", "", "Config file path (default ~/.code-agent-sentinel/config.yaml)")
 	return cmd
 }
 
 // reportValidate 打印校验结果。有 invalid 规则时返回 error(非零退出码)。
 func reportValidate(out interface{ Write([]byte) (int, error) }, rules []ruleengine.Rule, loadErrs []ruleengine.RuleLoadError, scope string) error {
-	fmt.Fprintf(out, "校验范围:%s\n", scope)
-	fmt.Fprintf(out, "有效规则:%d 条\n", len(rules))
+	fmt.Fprintf(out, "Scope: %s\n", scope)
+	fmt.Fprintf(out, "Valid rules: %d\n", len(rules))
 	for _, r := range rules {
 		fmt.Fprintf(out, "  [valid] %s (severity=%s, source=%s)\n", r.ID, r.Severity, r.Source)
 	}
 	if len(loadErrs) == 0 {
-		fmt.Fprintln(out, "校验通过:无错误。")
+		fmt.Fprintln(out, "Validation passed: no errors.")
 		return nil
 	}
-	fmt.Fprintf(out, "错误:%d 条:\n\n", len(loadErrs))
+	fmt.Fprintf(out, "Errors: %d:\n\n", len(loadErrs))
 	for _, e := range loadErrs {
 		id := e.RuleID
 		if id == "" {
-			id = "(未知规则)"
+			id = "(unknown rule)"
 		}
 		fmt.Fprintf(out, "  [%s] %s: %s\n", e.Source, id, e.Reason)
 	}
-	return fmt.Errorf("校验失败:%d 条规则有错误", len(loadErrs))
+	return fmt.Errorf("validation failed: %d rules have errors", len(loadErrs))
 }
 
 // loadCfgAndHome 加载配置与 home 目录(复用 run() 的逻辑,但不含 server 启动)。

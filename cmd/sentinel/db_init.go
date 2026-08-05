@@ -30,22 +30,22 @@ func syncBuiltinRules(db *storage.DB) {
 	}
 	builtin, builtinCombos, loadErrs := ruleengine.LoadBuiltin()
 	for _, e := range loadErrs {
-		fmt.Fprintf(os.Stderr, "加载 builtin 规则错误: %s: %s\n", e.Source, e.Reason)
+		fmt.Fprintf(os.Stderr, "builtin rule load error: %s: %s\n", e.Source, e.Reason)
 	}
 
 	builtinStored, err := rulesToStoredRules(builtin, ruleEngineVersion)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "转换 builtin 规则失败,跳过同步: %v\n", err)
+		fmt.Fprintf(os.Stderr, "convert builtin rules failed, skipping sync: %v\n", err)
 		return
 	}
 	builtinComboStored, err := combosToStoredRules(builtinCombos, ruleEngineVersion)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "转换 builtin combos 失败,跳过 combos 同步: %v\n", err)
+		fmt.Fprintf(os.Stderr, "convert builtin combos failed, skipping combo sync: %v\n", err)
 		builtinComboStored = nil // combos 失败不阻断 rules 同步
 	}
 
 	if _, err := storage.SyncBuiltin(db, storage.DomainDetect, builtinStored, builtinComboStored, ruleEngineVersion); err != nil {
-		fmt.Fprintf(os.Stderr, "同步 builtin 检测规则失败: %v\n", err)
+		fmt.Fprintf(os.Stderr, "sync builtin detect rules failed: %v\n", err)
 	}
 	// intercept 域:只同步 destructive_commands.yaml 的规则(运行时拦截只用破坏性命令规则)。
 	// baseline/injection/skill 等检测规则不进拦截表。combos 传 nil(guard 不消费 combo)。
@@ -54,11 +54,11 @@ func syncBuiltinRules(db *storage.DB) {
 	interceptBuiltin, _, _ := ruleengine.LoadInterceptBuiltin()
 	interceptStored, err := rulesToStoredRules(interceptBuiltin, ruleEngineVersion)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "转换 intercept builtin 规则失败,跳过同步: %v\n", err)
+		fmt.Fprintf(os.Stderr, "convert intercept builtin rules failed, skipping sync: %v\n", err)
 		return
 	}
 	if _, err := storage.SyncBuiltin(db, storage.DomainIntercept, interceptStored, nil, ruleEngineVersion); err != nil {
-		fmt.Fprintf(os.Stderr, "同步 builtin 拦截规则失败: %v\n", err)
+		fmt.Fprintf(os.Stderr, "sync builtin intercept rules failed: %v\n", err)
 	}
 }
 
@@ -111,7 +111,7 @@ func migrateLegacyRulesFiles(home string, db *storage.DB) {
 	oldDir := filepath.Join(home, ".code-agent-sentinel", "rules")
 	rules, _, loadErrs := ruleengine.LoadDir(oldDir, "global")
 	for _, e := range loadErrs {
-		fmt.Fprintf(os.Stderr, "迁移旧规则:加载错误 %s: %s\n", e.Source, e.Reason)
+		fmt.Fprintf(os.Stderr, "migrate legacy rules: load error %s: %s\n", e.Source, e.Reason)
 	}
 	if len(rules) == 0 {
 		return // 无旧规则(目录不存在/空/全解析失败)→ 无操作
@@ -121,7 +121,7 @@ func migrateLegacyRulesFiles(home string, db *storage.DB) {
 	for _, r := range rules {
 		s, err := ruleengine.RuleToStoredRule(r, "custom", "")
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "迁移旧规则:转换 %s 失败: %v\n", r.ID, err)
+			fmt.Fprintf(os.Stderr, "migrate legacy rules: convert %s 失败: %v\n", r.ID, err)
 			continue
 		}
 		stored = append(stored, s)
@@ -130,12 +130,12 @@ func migrateLegacyRulesFiles(home string, db *storage.DB) {
 	if len(stored) > 0 {
 		rep, migErr := storage.MigrateLegacyRules(db, storage.DomainDetect, stored)
 		if migErr != nil {
-			fmt.Fprintf(os.Stderr, "迁移旧规则到 db 失败: %v\n", migErr)
+			fmt.Fprintf(os.Stderr, "migrate legacy rules to db failed: %v\n", migErr)
 		} else if rep.Imported > 0 {
-			fmt.Printf("已迁移 %d 条自定义规则到规则库\n", rep.Imported)
+			fmt.Printf("Migrated %d custom rules to rule DB\n", rep.Imported)
 		}
 		for _, e := range rep.Errors {
-			fmt.Fprintf(os.Stderr, "迁移旧规则: %s\n", e)
+			fmt.Fprintf(os.Stderr, "migrate legacy rules: %s\n", e)
 		}
 	}
 
@@ -156,7 +156,7 @@ func migrateLegacyRulesFiles(home string, db *storage.DB) {
 		}
 		p := filepath.Join(oldDir, e.Name())
 		if err := os.Rename(p, p+".legacy"); err != nil {
-			fmt.Fprintf(os.Stderr, "迁移旧规则:重命名 %s 失败: %v\n", p, err)
+			fmt.Fprintf(os.Stderr, "migrate legacy rules: rename %s 失败: %v\n", p, err)
 		}
 	}
 }

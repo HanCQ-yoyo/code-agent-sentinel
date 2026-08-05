@@ -32,7 +32,7 @@ func daemonize() (child bool, err error) {
 	}
 	childArgs = append(childArgs, "--daemon-child")
 	if err := forkChild(childArgs); err != nil {
-		return false, fmt.Errorf("fork 子进程失败: %w", err)
+		return false, fmt.Errorf("fork child process failed: %w", err)
 	}
 	return false, nil
 }

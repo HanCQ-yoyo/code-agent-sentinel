@@ -80,7 +80,7 @@ func newTestServer(t *testing.T, home string) *Server {
 	r.Register(security.NewRulesDetector(home, nil, db))
 	orch := &security.Orchestrator{Registry: r}
 	hist := history.NewStore(db)
-	ed := editor.New(eng, "", 0)
+	ed := editor.New(eng, nil, "", 0)
 	return NewServer(eng, orch, config.DefaultConfig(), "tok", hist, configengine.DefaultAgents(home, ""), ed, db)
 }
 
@@ -98,7 +98,7 @@ func newTestServerWithAgents(t *testing.T, eng *configengine.Engine, agents []co
 	r.Register(security.NewRulesDetector(eng.HomeDir, nil, db))
 	orch := &security.Orchestrator{Registry: r}
 	hist := history.NewStore(db)
-	ed := editor.New(eng, "", 0)
+	ed := editor.New(eng, nil, "", 0)
 	return NewServer(eng, orch, config.DefaultConfig(), "tok", hist, agents, ed, db)
 }
 

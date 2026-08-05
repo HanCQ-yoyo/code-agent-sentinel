@@ -105,12 +105,13 @@ func parseCodexConfig(path string, scope Scope) ([]Asset, error) {
 	out = append(out, base)
 
 	// mcp_server 逐条:transport 由 command/url 推断(与 mcpAssets 一致)。
+	// Content 设为原文(与 settings 同为 config.toml),UI 展示原文件文本。
 	for name, e := range cfg.MCPServers {
 		transport := "stdio"
 		if e.URL != "" {
 			transport = "http"
 		}
-		a := Asset{Type: AssetMCPServer, Scope: scope, SourcePath: path, Name: name}
+		a := Asset{Type: AssetMCPServer, Scope: scope, SourcePath: path, Name: name, Content: string(data)}
 		a.Fields = map[string]any{
 			"name":      name,
 			"transport": transport,
@@ -123,9 +124,10 @@ func parseCodexConfig(path string, scope Scope) ([]Asset, error) {
 		out = append(out, a)
 	}
 
-	// profile 逐条(轻量)。
+	// profile 逐条(轻量)。Content 设为原文(与 settings 同为 config.toml),
+	// UI 展示原文件文本。
 	for name, pr := range cfg.Profiles {
-		a := Asset{Type: AssetSettings, Scope: scope, SourcePath: path, Name: "profile:" + name}
+		a := Asset{Type: AssetSettings, Scope: scope, SourcePath: path, Name: "profile:" + name, Content: string(data)}
 		a.Fields = map[string]any{
 			"profile":         name,
 			"model":           pr.Model,

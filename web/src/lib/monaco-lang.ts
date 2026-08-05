@@ -20,6 +20,7 @@ export function langByExt(sourcePath: string): string {
     md: 'markdown',
     yaml: 'yaml',
     yml: 'yaml',
+    toml: 'ini',     // Monaco 无原生 TOML;ini 语法近似(节+键值)
   }
   return map[ext] ?? 'plaintext'
 }

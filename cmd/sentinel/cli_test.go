@@ -44,7 +44,7 @@ func TestRulesValidateValidFile(t *testing.T) {
 	if !strings.Contains(out, "good-rule") {
 		t.Fatalf("validate 输出应含规则 id: %s", out)
 	}
-	if !strings.Contains(out, "有效规则") {
+	if !strings.Contains(out, "Valid rules") {
 		t.Fatalf("validate 输出应标记有效规则数: %s", out)
 	}
 }

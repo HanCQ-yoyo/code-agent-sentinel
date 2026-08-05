@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"code-agent-sentinel/internal/configengine"
 )
@@ -19,6 +20,7 @@ type Danger struct {
 // EditRequest 是 Preview 与 Commit 的共同输入。
 type EditRequest struct {
 	AssetID    string `json:"asset_id"`
+	AgentID    string `json:"agent_id"`    // 资产所属 agent ID,空则回退 Editor.Engine(首 agent)
 	NewContent string `json:"new_content"`
 	BaseHash   string `json:"base_hash"` // 编辑开始时资产 hash(乐观锁)
 }
@@ -47,22 +49,51 @@ type EditResult struct {
 	Dangerous  []Danger           `json:"dangerous"`
 }
 
-// Editor 是配置资产写层。Engine 只读;BackupDir/MaxBackups 注入。
+// Editor 是配置资产写层。Engine 是首 agent 的回退引擎;Agents + engines 支持多 agent 编辑。
 type Editor struct {
 	Engine     *configengine.Engine
+	Agents     []configengine.Agent
+	engines    map[string]*configengine.Engine
+	mu         sync.Mutex
 	BackupDir  string
 	MaxBackups int
 }
 
 // New 构造 Editor。backupDir 空则默认 <home>/.code-agent-sentinel/backups;maxBackups<=0 则 20。
-func New(engine *configengine.Engine, backupDir string, maxBackups int) *Editor {
+// engine 是首 agent 回退引擎;agents 是多 agent 清单(用于按 agentID 发现对应资产)。
+func New(engine *configengine.Engine, agents []configengine.Agent, backupDir string, maxBackups int) *Editor {
 	if backupDir == "" {
 		backupDir = filepath.Join(engine.HomeDir, ".code-agent-sentinel", "backups")
 	}
 	if maxBackups <= 0 {
 		maxBackups = 20
 	}
-	return &Editor{Engine: engine, BackupDir: backupDir, MaxBackups: maxBackups}
+	return &Editor{Engine: engine, Agents: agents, engines: map[string]*configengine.Engine{}, BackupDir: backupDir, MaxBackups: maxBackups}
+}
+
+// engineFor 返回 agentID 的 Engine(懒构造)。空 agentID/find 不到则回退至首 agent Engine。
+func (e *Editor) engineFor(agentID string) *configengine.Engine {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	if agentID == "" && len(e.Agents) > 0 {
+		agentID = e.Agents[0].ID
+	}
+	if eng, ok := e.engines[agentID]; ok {
+		return eng
+	}
+	var a configengine.Agent
+	for _, x := range e.Agents {
+		if x.ID == agentID {
+			a = x
+			break
+		}
+	}
+	if a.ID == "" {
+		return e.Engine // 找不到该 agent,回退首 agent 引擎
+	}
+	eng := configengine.NewEngineFromAgent(a)
+	e.engines[agentID] = eng
+	return eng
 }
 
 // validateContent 校验新内容语法。JSON 资产须可解析,其余不校验语法。
@@ -81,7 +112,8 @@ func (e *Editor) validateContent(a configengine.Asset, content string) error {
 // Preview 只读:算 diff + 危险检测 + 乐观锁校验,不写盘。
 // 资产不存在 → 返回 (nil, ErrNotFound);不可编辑 → PreviewResult{Editable:false}。
 func (e *Editor) Preview(ctx context.Context, req EditRequest) (*PreviewResult, error) {
-	a, ok := e.findAsset(req.AssetID)
+	eng := e.engineFor(req.AgentID)
+	a, ok := e.findAsset(req.AssetID, eng)
 	if !ok {
 		return nil, ErrNotFound
 	}
@@ -106,7 +138,8 @@ func (e *Editor) Preview(ctx context.Context, req EditRequest) (*PreviewResult, 
 
 // Commit 写盘:可编辑校验 + 乐观锁 + 内容校验 + 备份 + 原子写 + 重算。
 func (e *Editor) Commit(ctx context.Context, req EditRequest) (*EditResult, error) {
-	a, ok := e.findAsset(req.AssetID)
+	eng := e.engineFor(req.AgentID)
+	a, ok := e.findAsset(req.AssetID, eng)
 	if !ok {
 		return nil, ErrNotFound
 	}

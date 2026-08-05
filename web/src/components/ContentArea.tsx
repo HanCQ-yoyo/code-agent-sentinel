@@ -177,7 +177,7 @@ export function ContentArea({
     if (value !== '') {
       return wrap(
         <Suspense fallback={<Spin style={{ display: 'block', margin: '40px auto' }} />}>
-          <MonacoViewer value={value} language="json" theme={theme} readOnly={readOnly} onChange={onChange} highlights={highlights} height={fill ? '100%' : undefined} />
+          <MonacoViewer value={value} language={langByExt(asset.source_path) || 'plaintext'} theme={theme} readOnly={readOnly} onChange={onChange} highlights={highlights} height={fill ? '100%' : undefined} />
         </Suspense>,
         { bodyStyle: { padding: 12, overflow: 'hidden' } },
       )

@@ -72,6 +72,15 @@ sandbox_mode = "danger-full-access"
 	if profileCount != 1 {
 		t.Fatalf("profile 数 = %d, want 1", profileCount)
 	}
+	// MCP server 与 profile 资产也应有 Content(config.toml 原文)
+	for i := range assets {
+		if assets[i].Type == AssetMCPServer && assets[i].Content != content {
+			t.Fatalf("mcp_server %q Content 应为 config.toml 原文", assets[i].Name)
+		}
+		if assets[i].Type == AssetSettings && assets[i].Name == "profile:fast" && assets[i].Content != content {
+			t.Fatalf("profile Content 应为 config.toml 原文")
+		}
+	}
 }
 
 func TestParseCodexConfigCorruptTOML(t *testing.T) {

@@ -29,15 +29,15 @@ func newGuardCmd() *cobra.Command {
 	var debug bool
 	cmd := &cobra.Command{
 		Use:    "guard",
-		Short:  "运行时拦截 hook(被 Claude Code PreToolUse 调用)",
+		Short:  "Runtime intercept hook (called by Claude Code PreToolUse)",
 		Hidden: true, // 内部 hook 命令,不对用户暴露
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return guardMain(os.Stdin, os.Stdout, os.Stderr, cfgPath, deadlineFlag, debug)
 		},
 	}
-	cmd.Flags().StringVar(&cfgPath, "config", "", "配置文件路径(默认 ~/.code-agent-sentinel/config.yaml)")
-	cmd.Flags().StringVar(&deadlineFlag, "deadline", "", "覆盖评估预算(调试)")
-	cmd.Flags().BoolVar(&debug, "debug", false, "stderr 输出评估 trace")
+	cmd.Flags().StringVar(&cfgPath, "config", "", "Config file path (default ~/.code-agent-sentinel/config.yaml)")
+	cmd.Flags().StringVar(&deadlineFlag, "deadline", "", "Override evaluation budget (debug)")
+	cmd.Flags().BoolVar(&debug, "debug", false, "Output evaluation trace to stderr")
 	return cmd
 }
 
@@ -62,7 +62,7 @@ func guardMain(stdin io.Reader, stdout, stderr io.Writer, cfgPath, deadlineFlag 
 	cfg, err := config.Load(cfgPath)
 	if err != nil {
 		// 配置读失败 → 用默认配置(fail-open,不阻断)
-		fmt.Fprintf(stderr, "guard 配置加载失败(用默认): %v\n", err)
+		fmt.Fprintf(stderr, "guard config load failed (using defaults): %v\n", err)
 		cfg = config.DefaultConfig()
 	}
 	cfg.EnsureGuard()
@@ -72,7 +72,7 @@ func guardMain(stdin io.Reader, stdout, stderr io.Writer, cfgPath, deadlineFlag 
 		if ms, err := strconv.Atoi(deadlineFlag); err == nil {
 			cfg.Guard.DeadlineMS = ms
 		} else {
-			fmt.Fprintf(stderr, "guard --deadline %q 解析失败(用配置默认): %v\n", deadlineFlag, err)
+			fmt.Fprintf(stderr, "guard --deadline %q parse failed (using config default): %v\n", deadlineFlag, err)
 		}
 	}
 	home, _ := os.UserHomeDir()
@@ -227,7 +227,7 @@ func runGuard(stdin io.Reader, stdout, stderr io.Writer, cfg *config.Config, hom
 	// 发 ask + 写 warn 记录(Codex 下 ask 在 WriteDecision 内退化为 deny,见 protocol.go)。
 	if ctx.Err() != nil && decision != intercept.DecisionDeny {
 		intercept.WriteDecision(stdout, proto, intercept.DecisionAsk,
-			fmt.Sprintf("评估超时(%dms)", deadline), "", "", "")
+			fmt.Sprintf("evaluation timeout (%dms)", deadline), "", "", "")
 		writeRecord(store, makeRecordWithConfidence(input, proto, "warn", "", "", "", "", "", start))
 		return nil
 	}
@@ -289,7 +289,7 @@ func evaluateSegment(ctx context.Context, seg string, rules []ruleengine.Rule, m
 				denied:      true,
 				confidence:  ruleengine.ConfUnknown, // 交 aggregate/ForMode 按 Mode 解释
 				matchedSpan: seg,                    // seg 是入参,闭包可捕获
-				reason:      "评估异常(panic),保守拦截",
+				reason:      "evaluation panic, conservative block",
 				// ruleID/severity/remediation 留空:panic 时无法确定命中哪条规则
 			}
 		}
