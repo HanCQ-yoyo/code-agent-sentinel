@@ -35,3 +35,4 @@ design.md
 # Playwright e2e 产物
 test-results/
 web/test-results/
+RELEASE.md
